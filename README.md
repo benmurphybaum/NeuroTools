@@ -8,3 +8,5 @@ While NeuroTools provides a suite of built in basic functions, an 'External Func
 
 TO INSTALL:
 Put the .ipf files in the 'User Procedures' folder, and put the NT_Loader.ipf in the 'Igor Procedures' folder. To open NeuroTools, navigate to the 'Analysis:Packages' menu, and select Load_NeuroTools. 
+
+*To access available functions, click the vertical bar in the center of the GUI to collapse and expand the Parameters panel.
