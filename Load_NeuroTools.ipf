@@ -143,12 +143,12 @@ Function LoadNT([left,top])
 	SetDrawEnv/W=NT#navigatorPanel xcoord= abs,ycoord= abs, fsize=14, textxjust= 1,textyjust= 1,fname=$LIGHT
 	DrawText/W=NT#navigatorPanel 143,15,"Navigator"
 	
-	SetDrawEnv/W=NT xcoord= abs,ycoord= abs, fsize=14, textxjust= 1,textyjust= 1,fname=$LIGHT,gstart,gname=parameterText
+	SetDrawEnv/W=NT xcoord= abs,ycoord= abs, fsize=14, textxjust= 1,textyjust= 1, textrgb= (0,0,0),fname=$LIGHT,gstart,gname=parameterText
 	DrawText/W=NT 554,15,"Parameters"
 	SetDrawEnv/W=NT gstop
 	
 	
-	SetDrawEnv/W=NT xcoord= abs,ycoord= abs, fsize=12, textxjust= 1,textyjust= 1,fname=$LIGHT,gname=waveSelectorTitle,gstart
+	SetDrawEnv/W=NT xcoord= abs,ycoord= abs, fsize=12, textxjust= 1, textrgb= (0,0,0),textyjust= 1,fname=$LIGHT,gname=waveSelectorTitle,gstart
 	DrawText/W=NT 483,85,"Waves:"
 	SetDrawEnv/W=NT gstop
 	
@@ -286,6 +286,11 @@ Function MakePackageFolders()
 	//Data Set Names List Box
 	Wave/Z/T DSNamesLB_ListWave = NTD:DSNamesLB_ListWave
 	
+	//Data Set Names List for the External Functions pop up menus
+	String/G NTD:DSNameList
+	SVAR DSNameList = NTD:DSNameList
+	DSNameList = textWaveToStringList(DSNamesLB_ListWave,";",layer=0)
+	
 	//Tests for existence to avoid overwriting saved data sets
 	If(!WaveExists(DSNamesLB_ListWave))
 		//2nd layer dimension will be the filter settings for each data set name
@@ -310,6 +315,10 @@ Function MakePackageFolders()
 	DataSetWaves = "" 
 	
 	Make/WAVE/O/N=0 NTD:DataSetWaveRefs
+	
+	//This will hold the interim data set structure binary data,
+	//so it can be retrieved by external functions
+	Make/O/N=1 root:Packages:NT:ds
 	
 	//Folder list box
 	Make/O/N=1 NTF:FolderLB_SelWave
@@ -440,6 +449,13 @@ Function MakePackageFolders()
 	SVAR isOptional = NTF:isOptional
 	isOptional = ""
 	
+	If(!WaveExists(NTF:ExtFunc_Parameters))
+		Make/T/O/N=(6,1) NTF:ExtFunc_Parameters
+	EndIf
+	
+	Wave/T ExtFunc_Parameters = NTF:ExtFunc_Parameters
+	Wave/T param = GetExternalFunctionData(ExtFunc_Parameters)
+	
 	Variable/G NTF:numExtParams
 	String/G  NTF:extParamTypes
 	String/G NTF:extParamNames
@@ -487,6 +503,84 @@ Function MakePackageFolders()
 	return 1
 End
 
+//Initializes the external functions module, and fills out a text wave with the data for each 
+//main function in NT_ExternalFunctions.ipf'
+Function/Wave GetExternalFunctionData(param)
+	Wave/T param
+	Variable i,j
+	
+	//function list
+	String funcs = GetExternalFunctions()
+	String keys = "NAME;TYPE;THREADSAFE;RETURNTYPE;N_PARAMS;N_OPT_PARAMS;"
+	
+	//Wave to hold all the function parameter data
+	Redimension/N=(-1,ItemsInList(funcs,";")) param
+	
+	//Will keep track if there are empty variables in the text wave across all functions
+	Variable isEmpty = 0
+	Variable emptySlots = 100
+	
+	//function data
+	For(i=0;i<ItemsInList(funcs,";");i+=1)
+		String theFunction = StringFromList(i,funcs,";")
+		
+		//Function info
+		String info = FunctionInfo("NT_" + theFunction)
+		
+		//Gets the actual code for the beginning of the function to extract parameter names
+		String functionStr = ProcedureText("NT_" + theFunction,0)
+		Variable pos = strsearch(functionStr,")",0)
+		functionStr = functionStr[0,pos]
+		functionStr = RemoveEnding(StringFromList(1,functionStr,"("),")")
+		
+		//Resize according to the parameter number
+		Variable numParams = str2num(StringByKey("N_PARAMS",info,":",";"))
+		If(numtype(numParams) == 2)
+			numParams = 0
+		EndIf
+		
+		If(6 + numParams*3 > DimSize(param,0))
+			Redimension/N=(6 + numParams * 3,-1) param
+		EndIf
+			
+		For(j=0;j<numParams*3;j+=1)
+			keys += "PARAM_" + num2str(j) + "_TYPE;PARAM_" + num2str(j) + "_NAME;PARAM_" + num2str(j) + "_VALUE;"
+		EndFor
+		
+		Variable whichParam = 0
+		For(j=0;j < 6 + numParams*3;j+=1)
+			String theKey = StringFromList(j,keys,";")
+			
+			//Label the dimension
+			SetDimLabel 0,j,$theKey,param
+			SetDimLabel 1,i,$theFunction,param
+			
+			//Add the function data to the wave
+			If(stringmatch(theKey,"*PARAM*VALUE*"))
+				continue
+			EndIf
+			
+			If(stringmatch(theKey,"*PARAM*NAME*"))
+				param[j][i] = StringFromList(whichParam,functionStr,",")
+				whichParam += 1
+			Else
+				param[j][i] = StringByKey(theKey,info,":",";")
+			EndIf	
+		EndFor
+		
+		Variable diff = DimSize(param,0) - (6 + numParams * 3)
+		If(diff)
+			param[6 + numParams * 3,DimSize(param,0)-1][i] = ""
+		EndIf
+		
+		If(diff < emptySlots)
+			emptySlots = diff
+		EndIf
+	EndFor
+	
+	Redimension/N=(DimSize(param,0) - emptySlots,-1) param
+	return param
+End
 
 //Makes wave and string lists for the command list
 Function MakeCommandList()
@@ -728,7 +822,7 @@ Function CreateControlLists()
 	controlAssignments[6][2] = "300"
 	
 	controlAssignments[7][0] = "External Function"
-	controlAssignments[7][1] = "extFuncPopUp;WaveListSelector;extFuncHelp;goToProcButton;"
+	controlAssignments[7][1] = "extFuncPopUp;extFuncHelp;goToProcButton;"
 	controlAssignments[7][2] = "210"
 	
 	controlAssignments[8][0] = "Run Cmd Line"
@@ -803,10 +897,10 @@ Function CreateControls()
 	
 	//EXTERNAL FUNCTION
 	String currentExtCmd = "Write Your Own"
-	Button extFuncPopUp win=NT,pos={460,100},size={125,20},fsize=12,font=$LIGHT,proc=ntButtonProc,title="\\JL▼   " + currentExtCmd,disable=1
+	Button extFuncPopUp win=NT,pos={460,75},size={125,20},fsize=12,font=$LIGHT,proc=ntButtonProc,title="\\JL▼   " + currentExtCmd,disable=1
 //	DrawText/W=NT 23,84,"Functions:"
 	
-	Button goToProcButton win=NT,pos={587,100},size={40,20},title="GoTo",proc=ntButtonProc,disable=1
+	Button goToProcButton win=NT,pos={587,75},size={40,20},title="GoTo",proc=ntButtonProc,disable=1
 	
 	//NEW DATA FOLDER
 	SetVariable NDF_RelFolder win=NT,size={120,20},fSize=12,font=$LIGHT,bodywidth=120,pos={525,100},title="Rel. Folder:",value=_STR:"",disable=1

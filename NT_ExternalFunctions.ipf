@@ -8,10 +8,12 @@ Function ArrangeProcWindows()
 	
 End
 
-Function NT_function1(param1,param2,param3,theWave)
+Function NT_function1(param1,param2,param3,theWave,ds_myDS)
 	Variable param1,param3
 	String param2
 	Wave theWave
+	String ds_myDS //this is a data set
+
 End
 
 Function NT_function2()

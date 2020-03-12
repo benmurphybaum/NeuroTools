@@ -63,6 +63,9 @@ Function NT_Imaging_CreateControls()
 	SetVariable filterSize win=NT,size={120,20},bodywidth=40,pos={461,pos},limits={5,inf,2},title="Filter Size",value=_NUM:9,disable=1
 	pos += 20
 	
+	//Some IMAGING structure SVARs that are needed
+	String/G NTI:measure
+	SVAR measure = NTI:measure 
 	
 	//Assign the controls to the Commands
 	NT_Imaging_CreateControlLists()
@@ -275,18 +278,44 @@ Function/WAVE NT_dFMap()
 			case 1: //channel 1 only
 				Wave theScan = img.scan.ch1[i] //signal fluorescence
 				Wave theBgnd = img.scan.ch1[i] //background fluorescence
+				String suffix = "_dF"
+				String type = "∆F/F" //for the wave note at the end
 				break
 			case 2: //channel 2 only
 				Wave theScan = img.scan.ch2[i]
 				Wave theBgnd = img.scan.ch2[i]
+				suffix = "_dG"
+				type = "∆F/F"
 				break
 			case 3: // ch1 / ch2
 				Wave theScan = img.scan.ch1[i]
 				Wave theBgnd = img.scan.ch2[i]
+				suffix = "_dGR"
+				type = "∆G/R"
 				break
 			case 4: // ch2 / ch1
 				Wave theScan = img.scan.ch2[i]
 				Wave theBgnd = img.scan.ch1[i] 
+				suffix = "_dRG"
+				type = "∆R/G"
+				break
+		endswitch
+		
+		strswitch(img.measure)
+			case "Peak":
+				String param = "_pk"
+				break
+			case "Peak Location":
+				 param = "_loc"
+				break
+			case "Area":
+				 param = "_area"
+				break
+			case "Area/Peak":
+				 param = "_areaPk"
+				break
+			case "Peak/Area":
+				param = "_pkArea"
 				break
 		endswitch
 		
@@ -295,10 +324,171 @@ Function/WAVE NT_dFMap()
 		cols = DimSize(theScan,1)
 		frames = DimSize(theScan,2)
 		
+		//Make time-varying dF Map Wave
+		SetDataFolder GetWavesDataFolder(theScan,1)
+		Make/O/N=(rows,cols,frames) $(NameOfWave(theScan) + suffix)/Wave = dF
+		Make/O/N=(rows,cols) $(NameOfWave(theScan) + suffix + param)/Wave = dFMeasure
 		
+		//Remove extreme fluorescence values
+		Variable cleanNoiseThresh = 2
+		Wave theWave = CleanUpNoise(theScan,cleanNoiseThresh)	//threshold is in sdevs above the mean
+		
+		//Get dendritic mask
+		Wave mask = GetDendriticMask(theBgnd)
+		Redimension/B/U mask
+			
+		//Find average dark value
+		ImageStats/R=mask/P=1 theWave
+		Variable darkValue = 0.9*V_avg  //estimate dark value slightly low to avoid it accidentally surpassing the dendrite baseline fluorescence.
+		
+		//Operate on temporary waves so raw data is never altered.
+		Duplicate/FREE/O theScan,theScanTemp
+		Duplicate/FREE/O theBgnd,theBgndTemp
+		
+		//Spatial filter for each layer of the scan and bgnd channels.
+		For(k=0;k<frames;k+=1)
+			MatrixOP/O/FREE theLayer = layer(theScanTemp,k)
+			MatrixFilter/N=(img.preFilter) median theLayer
+			Multithread theScanTemp[][][k] = theLayer[p][q][0]
+			
+			MatrixOP/O/FREE theLayer = layer(theBgndTemp,k)
+			MatrixFilter/N=(img.preFilter) median theLayer
+			Multithread theBgndTemp[][][k] = theLayer[p][q][0]
+		EndFor
+		
+		//Get baseline fluorescence maps
+		Make/FREE/O/N=(rows,cols) scanBaseline,bgndBaseline
+		Multithread scanBaseline = 0
+		Multithread bgndBaseline = 0
+		
+		//Get the frame range for finding the peak dF
+		Variable startLayer,endLayer
+		startLayer = ScaleToIndex(theScanTemp,img.bsSt,2)
+		endLayer = ScaleToIndex(theScanTemp,img.bsEnd,2)
+		
+		//Get the mean over the baseline region for the scan channel
+		MatrixOP scanBaseline = sumBeams(theScanTemp[][][startLayer,endLayer])
+		Multithread scanBaseline /= (endLayer - startLayer)
+		
+		//Get the mean over the baseline region for the background channel
+		MatrixOP bgndBaseline = sumBeams(theBgndTemp[][][startLayer,endLayer])
+		Multithread bgndBaseline /= (endLayer - startLayer)
+		
+		//Eliminates the possibility of zero values in the dataset for dendrites in the mask, which all get converted to NaN at the end.
+		Multithread theScanTemp = (theScanTemp[p][q][r] == scanBaseline[p][q][0]) ? theScanTemp[p][q][r] + 1 : theScanTemp[p][q][r]
+		
+		//Calculate the ∆F map
+		MultiThread dF = (theScanTemp[p][q][r] - scanBaseline[p][q][0]) / (bgndBaseline[p][q][0] - darkValue)
+		
+		//Temporal smoothing via Solgay-Gavitsky
+		Smooth/S=2/DIM=2 img.filter,dF
+		
+		//Calculate the specified ∆F map measurement
+		For(j=0;j<rows;j+=1)
+			For(k=0;k<cols;k+=1)
+							
+				//only operates if the data is within the mask region to save time.
+				If(mask[i][j] != 1)
+					continue
+				EndIf
+				
+				//Get the beam for each x/y pixel
+				MatrixOP/FREE/O/S theBeam = Beam(dF,i,j)
+				WaveStats/Q/R=(img.pkSt,img.pkEnd) theBeam
+				
+				strswitch(img.measure)
+					case "Peak":
+						Multithread dFMeasure[j][k] = V_max
+						break
+					case "Peak Location":
+						Multithread dFMeasure[j][k] = V_maxLoc
+						break
+					case "Mean":
+						Multithread dFMeasure[j][k] = V_avg
+						break
+					case "Median":
+						Multithread dFMeasure[j][k] = median(theBeam,img.pkSt,img.pkEnd)
+						break
+					case "Area":
+						Multithread dFMeasure[j][k] = area(theBeam,img.pkSt,img.pkEnd)
+						break
+					case "Area/Peak":
+						Multithread dFMeasure[j][k] = area(theBeam,img.pkSt,img.pkEnd) / V_max
+						break
+					case "Peak/Area":
+						Multithread dFMeasure[j][k] = V_max / area(theBeam,img.pkSt,img.pkEnd)
+						break
+				endswitch		
+			EndFor
+		EndFor
+		
+		CopyScales/I theScan,dF,dFMeasure
+		
+		//Masking and final filtering
+		MatrixFilter/N=(img.postFilter)/R=mask median dF
+		MatrixFilter/N=(img.postFilter)/R=mask median dFMeasure
+		Multithread dF *= mask[p][q][0]
+		Multithread dFMeasure *= mask
+		
+		Variable m
+		For(m=0;m<2;m+=1)
+			If(m)
+				Wave notedWave = dF
+			Else
+				Wave notedWave = dFMeasure
+			EndIf
+			
+			Note/K notedWave,"TYPE:" + type
+			Note notedWave,"MEASURE:" + img.measure
+			Note notedWave,"BSL_START:" + num2str(img.bsSt)
+			Note notedWave,"BSL_END:" + num2str(img.bsEnd)
+			Note notedWave,"PK_START:" + num2str(img.pkSt)
+			Note notedWave,"PK_END:" + num2str(img.pkEnd)
+			Note notedWave,"SMOOTH:" + num2str(img.filter)
+			Note notedWave,"PRE-SPATIAL:" + num2str(img.preFilter)
+			Note notedWave,"POST-SPATIAL:" + num2str(img.postFilter)
+			Note notedWave,"MASK:" + GetWavesDataFolder(mask,2)
+		EndFor
 		
 		print StopMSTimer(ref)
 	EndFor
+End
+
+//Replaces extreme fluorescence values with the mean.
+Function/WAVE CleanUpNoise(theWave,threshold)
+	Wave theWave
+	Variable threshold
+	Variable i,j,rows,cols,frames
+	
+	//Get dimensions
+	rows = DimSize(theWave,0)
+	cols = DimSize(theWave,1)
+	frames = DimSize(theWave,2)
+	
+	//First make a variance map
+   Make/FREE/S/N=(rows,cols,0) varMap
+	varMap = 0
+	
+	//Calculate variance across frames
+	MatrixOP/FREE/O theMean = sumBeams(theWave)
+	MultiThread theMean /= frames
+	
+	For(i=0;i<frames;i+=1)
+		MultiThread varMap += (theWave[p][q][i] - theMean[p][q])^2
+	EndFor
+				
+	MultiThread varMap /= (frames - 1)	
+	MultiThread varMap = sqrt(varMap)
+				
+	//Use the variance map to identify pixels that have large outlier values
+	Duplicate/FREE theWave,theWaveNoise
+				
+	For(j=0;j<frames;j+=1)
+		MatrixOP/FREE theLayer = layer(theWave,j)
+		MultiThread theWaveNoise[][][j] = (theLayer[p][q][0] > theMean[p][q][0] + threshold*varMap[p][q][0]) ? theMean[p][q][0] : theLayer[p][q][0]
+	EndFor
+
+	return theWaveNoise	
 End
 
 //Returns a mask wave for the input scan
@@ -398,6 +588,11 @@ Function initParam(img)
 	ControlInfo/W=NT filterSize
 	img.filter = V_Value
 	
+	//holds the measurement string
+	ControlInfo/W=NT measurePopUp
+	SVAR img.measure = NTI:measure 
+	img.measure = S_Value
+	
 	//ROI ListBox list and select waves
 	Wave/T ROIListWave = NTI:ROIListWave
 	Wave ROISelWave =  NTI:ROISelWave
@@ -486,6 +681,9 @@ Structure IMAGING
 	uint16 pkSt
 	uint16 pkEnd
 	uint16 filter
+	uint16 preFilter
+	uint16 postFilter
+	SVAR measure
 	Wave/T rois
 EndStructure
 

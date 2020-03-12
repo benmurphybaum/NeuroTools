@@ -511,7 +511,7 @@ Function HandleButtonClick(ba)
 		case "extFuncPopUp":
 			//external functions drop down menu selection
 			SVAR selectedCmd = NTF:selectedCmd
-			PopUpContextualMenu/C=(460,120)/N "ExternalFuncMenu"
+			PopUpContextualMenu/C=(460,95)/N "ExternalFuncMenu"
 			
 			popStr = S_Selection
 			popNum = V_flag
@@ -732,13 +732,12 @@ Function ntSetVarProc(sva) : SetVariableControl
 End
 
 //Handles variable, string, and wave inputs to external function parameter inputs
-Function ntExtParamPopProc(sva) : SetVariableControl
+Function ntExtParamProc(sva) : SetVariableControl
 	STRUCT WMSetVariableAction &sva
 	DFREF NTF = root:Packages:NT
 	
-	//names of parameters and their types
-	SVAR extParamTypes = NTF:extParamTypes
-	SVAR extParamNames = NTF:extParamNames
+	//holds the parameters of the external functions
+	Wave/T param = NTF:ExtFunc_Parameters
 	
 	switch( sva.eventCode )
 		case 1: // mouse up
@@ -747,15 +746,21 @@ Function ntExtParamPopProc(sva) : SetVariableControl
 			String sval = sva.sval
 			
 			String name = sva.ctrlName
-			Variable paramIndex = str2num(name[strlen(name) - 1])
-			Variable type = str2num(StringFromList(paramIndex,extParamTypes,";"))
+			Variable paramIndex = ExtFuncParamIndex(name)
 			
-			switch(type)
-				case 4://variable
+			
+			String func = CurrentExtFunc()
+			String type = getParam("PARAM_" + num2str(paramIndex) + "_TYPE",func)
+			
+			strswitch(type)
+				case "4"://variable
+					setParam("PARAM_" + num2str(paramIndex) + "_VALUE",func,num2str(dval))
 					break
-				case 8192://string
+				case "8192"://string
+					setParam("PARAM_" + num2str(paramIndex) + "_VALUE",func,sval)
 					break
-				case 16386://wave
+				case "16386"://wave
+					setParam("PARAM_" + num2str(paramIndex) + "_VALUE",func,sval)
 					//confirm validity of the wave reference
 					validWaveText("",0,deleteText=1)
 					ControlInfo/W=NT $sva.ctrlName
@@ -782,9 +787,32 @@ Function ntPopMenuProc(pa) : PopupMenuControl
 			
 			strswitch(pa.ctrlName)
 				case "WaveListSelector":
-					
 					break
 			endswitch
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+Function ntExtParamPopProc(pa) : PopupMenuControl
+	STRUCT WMPopupAction &pa
+
+	switch( pa.eventCode )
+		case 2: // mouse up
+			Variable popNum = pa.popNum
+			String popStr = pa.popStr
+			
+			//Set the value of the external function parameter
+			DFREF NTF = root:Packages:NT
+			Wave/T param = NTF:ExtFunc_Parameters
+			
+			String func = CurrentExtFunc()
+			Variable index = ExtFuncParamIndex(pa.ctrlName)
+			
+			setParam("PARAM_" + num2str(index) + "_VALUE",func,popStr)
 			break
 		case -1: // control being killed
 			break
@@ -902,7 +930,7 @@ Function openParameterFold([size])
 	//shift text label
 	SetDrawEnv/W=NT  fstyle= 0
 	DrawAction/W=NT delete,getgroup=parameterText
-	SetDrawEnv/W=NT xcoord= abs,ycoord= abs, fsize=14, textxjust= 1,textyjust= 1,fname=$LIGHT,gstart,gname=parameterText
+	SetDrawEnv/W=NT xcoord= abs,ycoord= abs, fsize=14, textrgb= (0,0,0), textxjust= 1,textyjust= 1,fname=$LIGHT,gstart,gname=parameterText
 	DrawText/W=NT 455+(size/2)-6,15,"Parameters"
 	SetDrawEnv/W=NT gstop
 	
@@ -948,6 +976,7 @@ Function openParameterFold([size])
 		case "Run Cmd Line":
 		case "New Data Folder":
 		case "Kill Data Folder":
+		case "External Function":
 			Button WaveListSelector win=NT,disable=3
 			break
 		case "Get ROI":
@@ -988,13 +1017,13 @@ Function closeParameterFold([size])
 		//shift text label if there is a non-zero size
 		SetDrawEnv/W=NT  fstyle= 0
 		DrawAction/W=NT delete,getgroup=parameterText
-		SetDrawEnv/W=NT xcoord= abs,ycoord= abs, fsize=14, textxjust= 1,textyjust= 1,fname=$LIGHT,gstart,gname=parameterText
+		SetDrawEnv/W=NT xcoord= abs,ycoord= abs, textrgb= (0,0,0), fsize=14, textxjust= 1,textyjust= 1,fname=$LIGHT,gstart,gname=parameterText
 		DrawText/W=NT 455+(size/2)-6,15,"Parameters"
 		SetDrawEnv/W=NT gstop	
 	EndIf
 	
 	//hide the list selector menu unless the command is 'Run Cmd Line', in which case it is hidden
-	If(cmpstr(selectedCmd,"Run Cmd Line") || cmpstr(selectedCmd,"New Data Folder") || cmpstr(selectedCmd,"Kill Data Folder"))
+	If(cmpstr(selectedCmd,"Run Cmd Line") || cmpstr(selectedCmd,"New Data Folder") || cmpstr(selectedCmd,"Kill Data Folder") || cmpstr(selectedCmd,"External Function"))
 		Button WaveListSelector win=NT,disable=3
 	Else
 		Button WaveListSelector win=NT,disable=0

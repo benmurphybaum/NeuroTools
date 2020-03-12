@@ -7,6 +7,9 @@
 Function RunCmd(cmd)
 	String cmd
 	
+	//Initialize data set info structure
+	STRUCT ds ds
+	
 	//Special treatment for some functions that may not use any data sets
 	strswitch(cmd)
 		case "Run Cmd Line":
@@ -21,20 +24,23 @@ Function RunCmd(cmd)
 		case "Kill Data Folder":	
 			NT_KillDataFolder()
 			return 0
+		case "External Function":
+			//Get the data set info
+			Variable error = GetDataSetInfo(ds,extFunc=1)
+			break
 		//Imaging package commands
 		case "Get ROI":
 		case "dF Map":
 			//Executes this middle-man function from the command line to escape the .ipf,
 			//allowing me to reference potentially uncompiled functions in other packages.
 			Execute/Q/Z "RunCmd_ImagingPackage(\"" + cmd + "\"" + ")"
-			return 0
+			return 0	
+		default:
+			//Get the data set info
+			error = GetDataSetInfo(ds)
 	endswitch
 	
-	//Initialize data set info structure
-	STRUCT ds ds
-
-	//Get the data set info
-	Variable error = GetDataSetInfo(ds)
+	
 	
 	If(error == -1 || DimSize(ds.waves,0) == 0)
 		//reserved, doesn't break bc data sets aren't required necessarily
@@ -140,6 +146,8 @@ Function/WAVE ExecuteCommand(ds,cmd)
 			Wave/WAVE out = $""
 			break
 		case "External Function":
+			//Save the data set structure so the external function can retrieve it.
+			SaveStruct(ds)
 			ControlInfo/W=NT extFuncPopUp
 			String extCmd = TrimString(StringFromList(1,S_Title,"\u005cJL▼   "))
 			RunExternalFunction(extCmd)

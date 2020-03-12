@@ -5,8 +5,12 @@
 //Template code for writing your own functions in NeuroTools.
 //Copy and paste this into 'NT_ExternalProcedures.ipf', and add in your function to the loop.
 
-Function NT_MyFunction(ds)
-	STRUCT ds &ds //data set info structure
+Function NT_MyFunction()
+	//Data set info structure
+	STRUCT ds ds 
+	
+	//Fills the data set structure
+	GetStruct(ds)
 	
 	//Reset wave set index
 	ds.wsi = 0

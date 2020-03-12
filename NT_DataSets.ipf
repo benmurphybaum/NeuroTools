@@ -588,13 +588,14 @@ Function/WAVE GetWaveSetRefs(listWave,wsn)
 	
 	String list = GetWaveSetList(listWave,wsn,1)
 	
-	Wave/WAVE refs = ListToWaveRefWave(list);Variable err = GetRTError(1)
+	Make/WAVE/O root:Packages:NT:ds_waveRefs
+	Wave/WAVE ds_waveRefs = root:Packages:NT:ds_waveRefs
 	
-	If(err)
-		Make/FREE/WAVE/N=0 refs
-	EndIf
+	Wave/WAVE refs = ListToWaveRefWave(list)
 	
-	return refs
+	Redimension/N=(DimSize(refs,0)) ds_waveRefs
+	ds_waveRefs = refs[p]
+	return ds_waveRefs
 End
 
 //Returns 1 if the wave set is empty, 0 otherwise

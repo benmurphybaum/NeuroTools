@@ -252,6 +252,10 @@ Function switchControls(currentCmd,prevCmd)
 		
 		String invisibleList = controlAssignments[index][1]
 		
+		//Kill any external function parameters, in case that was the previous command selection
+		KillExtParams()
+		
+		
 		//Adjust the size of the parameters panel
 		//Do in between invisible/visible functions for better animation
 		//only makes adjustment if parameters panel is open
@@ -270,7 +274,7 @@ Function switchControls(currentCmd,prevCmd)
 		
 		
 		If(stringmatch(visibleList,"*WaveListSelector*"))
-			SetDrawEnv/W=NT xcoord= abs,ycoord= abs, fsize=12, textxjust= 1,textyjust= 1,fname=$LIGHT,gname=waveSelectorTitle,gstart
+			SetDrawEnv/W=NT xcoord= abs,ycoord= abs, fsize=12, textrgb= (0,0,0), textxjust= 1,textyjust= 1,fname=$LIGHT,gname=waveSelectorTitle,gstart
 			DrawText/W=NT 483,85,"Waves:"
 			SetDrawEnv/W=NT gstop
 		EndIf
@@ -307,7 +311,9 @@ Function switchControls(currentCmd,prevCmd)
 			break
 		case "External Function":
 			//refresh the external function list
-			
+			ControlInfo/W=NT extFuncPopUp
+			String func = CurrentExtFunc()
+			BuildExtFuncControls(func)
 			break
 	endswitch
 	
@@ -319,7 +325,7 @@ Function switchHelpMessage(cmd)
 	String helpMsg = ""
 	
 	//Reset the help message
-	SetDrawEnv/W=NT  fstyle= 0
+	SetDrawEnv/W=NT  fstyle= 0,textrgb= (0,0,0)
 	DrawAction/W=NT getgroup=helpMessage,delete
 	
 	If(!strlen(cmd))
@@ -358,11 +364,11 @@ Function switchHelpMessage(cmd)
 			helpMsg += "Use the syntax: <DataSet> to reference waves\n in a data set."
 			break
 		case "External Function":
-			helpMsg = "Run your own function within NeuroTools by \nputting the .ipf in the 'External Functions' \nfolder"
+			helpMsg = "Run your own function within NeuroTools by \nputting the code in the 'ExternalFunctions.ipf'\n procedure file"
 			break
 	endswitch
 	
-	SetDrawEnv/W=NT textyjust= 0,xcoord=abs,ycoord=abs,fname=$LIGHT,fstyle=2,fsize=10,gname=helpMessage,gstart
+	SetDrawEnv/W=NT textyjust= 0,xcoord=abs,ycoord=abs,fname=$LIGHT,fstyle=2,fsize=10,textrgb= (0,0,0),gname=helpMessage,gstart
 	DrawText/W=NT 456,495,helpMsg
 	SetDrawEnv/W=NT gstop
 	
@@ -2047,9 +2053,10 @@ End
 
 //Returns info about the data set
 //Automatically chooses whatever option is selected in the Wave Selector menu
-Function GetDataSetInfo(ds)
+Function GetDataSetInfo(ds[,extFunc])
 	STRUCT ds &ds 
-
+	Variable extFunc //is this an external function? We ignore the wavelistselector in this case
+	
 	DFREF NTF = root:Packages:NT
 	DFREF NTD = root:Packages:NT:DataSets
 	
@@ -2058,29 +2065,39 @@ Function GetDataSetInfo(ds)
 	SVAR cdf = NTF:currentDataFolder
 	
 	Variable i
-	strswitch(WaveSelectorStr)
-		case "Wave Match":
-			Wave/T listWave = NTF:MatchLB_ListWave
-			break
-		case "Navigator":
-			Wave/T WavesLB_ListWave = NTF:WavesLB_ListWave
-			Wave selWave = NTF:WavesLB_SelWave
+	
+	If(ParamIsDefault(extFunc))
+		extFunc = 0
+	EndIf
+	
+	If(!extFunc)
+		strswitch(WaveSelectorStr)
+			case "Wave Match":
+				Wave/T listWave = NTF:MatchLB_ListWave
+				break
+			case "Navigator":
+				Wave/T WavesLB_ListWave = NTF:WavesLB_ListWave
+				Wave selWave = NTF:WavesLB_SelWave
+					
+				Duplicate/FREE/T WavesLB_ListWave,listWave
+				For(i=DimSize(selWave,0) - 1;i > -1;i-=1) //go backwards
+					If(selWave[i] != 1)
+						DeletePoints/M=0 i,1,listWave
+					Else
+						listWave[i] = cdf + listWave[i]
+					EndIf
+				EndFor
+	
+				break
+			default:
+				//Data Set
+				Wave/T listWave = GetDataSetWave(WaveSelectorStr,"ORG")
 				
-			Duplicate/FREE/T WavesLB_ListWave,listWave
-			For(i=DimSize(selWave,0) - 1;i > -1;i-=1) //go backwards
-				If(selWave[i] != 1)
-					DeletePoints/M=0 i,1,listWave
-				Else
-					listWave[i] = cdf + listWave[i]
-				EndIf
-			EndFor
-
-			break
-		default:
-			//Data Set
-			Wave/T listWave = GetDataSetWave(WaveSelectorStr,"ORG")
-			break
-	endswitch
+		endswitch
+	Else
+		//external function call
+		Wave/T listWave = getExtFuncDataSet()
+	EndIf
 	
 	If(DimSize(listWave,0) == 0)
 		SVAR ds.paths = NTD:DataSetWaves
@@ -2098,8 +2115,34 @@ Function GetDataSetInfo(ds)
 	ds.numWaves = GetNumWaves(listWave,ds.wsn)
 	Wave/WAVE ds.waves = GetWaveSetRefs(listWave,ds.wsn)
 	ds.paths = GetWaveSetList(listWave,ds.wsn,1)
-
+	
+	If(extFunc)
+		ds.name = StringFromList(1,NameOfWave(ds.listWave),"_")
+	EndIf
+	
+	return 0
 End
+
+//For the selected external function, finds any data sets and returns their listwave
+Function/WAVE getExtFuncDataSet()
+	String func = CurrentExtFunc()
+	Variable i,numParams = str2num(getParam("N_PARAMS",func))
+	
+	For(i=0;i<numParams;i+=1)
+		String ctrlName = "param" + num2str(i)
+	
+		//check if it's a pop up menu
+		ControlInfo/W=NT $ctrlName
+		If(abs(V_flag) == 3) 
+			String dsName = getParam("PARAM_" + num2str(i) + "_VALUE",func)
+			Wave/T ds = GetDataSetWave(dsName,"ORG")
+			return ds
+		EndIf
+	EndFor	
+	
+	return $""
+End
+
 
 //Fills the structure with information about the current workflow
 Function GetWorkFlow(wf)
@@ -2631,6 +2674,40 @@ Function clearTraces()
 	EndFor	
 End
 
+//Saves the ds structure for later recall by an external function
+Function SaveStruct(ds)
+	STRUCT ds &ds
+	
+	//numeric data gets saved
+	StructPut ds,root:Packages:NT:ds
+	
+	//waves and strings get saved
+	DFREF NTF = root:Packages:NT
+		
+	Make/O/N=4/T NTF:ds_refs
+	Wave/T ds_refs = NTF:ds_refs
+	ds_refs[0] = GetWavesDataFolder(ds.listWave,2) //listwave
+	ds_refs[1] =  "root:Packages:NT:WaveSelectorStr" //name
+	ds_refs[2] =  "root:Packages:NT:DataSets:DataSetWaves" //paths
+	ds_refs[3] =  GetWavesDataFolder(ds.waves,2) //name
+End
+
+//fills out the ds structure with the save data
+Function GetStruct(ds)
+	STRUCT ds &ds
+	
+	DFREF NTF = root:Packages:NT
+	Wave/T ds_refs = NTF:ds_refs
+	
+	//fills numeric data
+	StructGet ds,root:Packages:NT:ds
+	
+	Wave/T ds.listWave = $ds_refs[0]
+	SVAR ds.name = $ds_refs[1]
+	SVAR ds.paths = $ds_refs[2]
+	Wave/WAVE ds.waves = $ds_refs[3]
+End
+
 //Runs the selected external function (user provided)
 Function RunExternalFunction(cmd)
 	String cmd
@@ -2642,8 +2719,8 @@ Function RunExternalFunction(cmd)
 			ArrangeProcWindows()
 			break
 		default:
-			cmd = "NT_" + cmd
-			Execute/Q/Z cmd
+			cmd = getExtFuncCmdStr(cmd)
+			Execute/Q cmd
 	endswitch
 	
 	return 1
@@ -2663,9 +2740,14 @@ Function SwitchExternalFunction(cmd)
 		cmdLen -= 1
 	While(cmdLen > 0)
 	
-	//Command Menu
-	Button extFuncPopUp win=NT,font=$LIGHT,pos={460,100},size={125,20},fsize=12,proc=ntButtonProc,title="\\JL▼   " + spacer + cmd,disable=0
-
+	//previous selection
+	KillExtParams()
+	
+	//switches text in the drop down menu
+	Button extFuncPopUp win=NT,font=$LIGHT,pos={460,75},size={125,20},fsize=12,proc=ntButtonProc,title="\\JL▼   " + spacer + cmd,disable=0
+	
+	//switches controls
+	BuildExtFuncControls(cmd)
 	
 End
 
@@ -2678,83 +2760,138 @@ Function/S GetExternalFunctions()
 	return theList
 End
 
-Function ResolveFunctionParameters(theFunction)
+//returns the current selection of the external functions drop down menu
+Function/S CurrentExtFunc()
+	ControlInfo/W=NT extFuncPopUp
+	String func = TrimString(StringFromList(1,S_Title,"\u005cJL▼"))
+	return func
+End
+
+//returns the parameter number for the provided control name for an external function
+Function ExtFuncParamIndex(ctrlName)
+	String ctrlName
+	Variable index = str2num(ctrlName[strlen(ctrlName)-1])
+	return index
+End
+
+//Builds the parameters for the selected external function
+Function BuildExtFuncControls(theFunction)
 	String theFunction
 	DFREF NTF = root:Packages:NT
+	DFREF NTD = root:Packages:NT:DataSets
 	
-	String info = FunctionInfo(theFunction)
+	//holds the parameters of the external functions
+	Wave/T param = NTF:ExtFunc_Parameters
 	
-	//control list will need updating when controls are added
-	SVAR ctrlList_extFunc = NTF:ctrlList_extFunc
-	ctrlList_extFunc = ""
-	NVAR numExtParams = NTF:numExtParams
-	SVAR extParamTypes = NTF:extParamTypes
-	SVAR extParamNames = NTF:extParamNames
-	
-	Variable numParams,i,pos
-	String paramType,functionStr
+	String info = FunctionInfo("NT_" + theFunction)
 
-	numParams = str2num(StringByKey("N_PARAMS",info,":",";"))
+	Variable i,pos
+	
+	Variable numParams,numOptParams
+	numParams = str2num(getParam("N_PARAMS",theFunction))
+	numOptParams = str2num(getParam("N_OPT_PARAMS",theFunction))
 	
 	//Function has no extra parameters declared
-	If(numParams == 0)
-		numExtParams = 0
+	If(numParams == 0 && numOptParams == 0)
 		KillExtParams()
-		return -1
+		return 1
 	EndIf
 	
-	
-	numExtParams = numParams
+	String paramType,functionStr
 	paramType = ""
 
 	//gets the type for each input parameter
-	Variable numOptionals = str2num(StringByKey("N_OPT_PARAMS",info,":",";"))
 	SVAR isOptional = NTF:isOptional
 	isOptional = ""
 	
-	For(i=0;i<numParams;i+=1)
-		paramType += StringByKey("PARAM_" + num2str(i) + "_TYPE",info,":",";") + ";"
-		If(i < numParams - numOptionals)
-			isOptional += "0" + ";"
-		Else
-			isOptional += "1" + ";"
-		EndIf
-	EndFor
-	extParamTypes = paramType
-	
 	//Gets the names of each inputs in the selected function
-	functionStr = ProcedureText(theFunction,0)
+	functionStr = ProcedureText("NT_" + theFunction,0)
 	pos = strsearch(functionStr,")",0)
 	functionStr = functionStr[0,pos]
 	functionStr = RemoveEnding(StringFromList(1,functionStr,"("),")")
 	
-	extParamNames = functionStr
-	Variable type,left=460,top=145
-	String name,paramName
+	String extParamNames = functionStr
+	Variable left=460,top=110
+	String type,name,ctrlName
 	
 	For(i=0;i<numParams;i+=1)
-		name = StringFromList(i,functionStr,",")
-		paramName = "param" + num2str(i)
-		type = str2num(StringFromList(i,paramType,";"))
-		switch(type)
-			case 4://variable
-				SetVariable/Z $paramName win=NT,pos={left,top},size={90,20},bodywidth=50,title=name,value=_NUM:0,disable=0,proc=ntExtParamPopProc
-				ctrlList_extFunc += paramName + ";"
+		name = getParam("PARAM_" + num2str(i) + "_NAME",theFunction)
+		ctrlName = "param" + num2str(i)
+		type = getParam("PARAM_" + num2str(i) + "_TYPE",theFunction)
+		strswitch(type)
+			case "4"://variable
+				Variable valueNum = str2num(getParam("PARAM_" + num2str(i) + "_VALUE",theFunction))
+				SetVariable/Z $ctrlName win=NT,pos={left,top},size={90,20},bodywidth=50,title=name,value=_NUM:valueNum,disable=0,proc=ntExtParamProc
 				break
-			case 8192://string
-				SetVariable/Z $paramName win=NT,pos={left,top},size={90,20},bodywidth=50,title=name,value=_STR:"",disable=0,proc=ntExtParamPopProc
-				ctrlList_extFunc += paramName + ";"
+			case "8192"://string
+				String valueStr = getParam("PARAM_" + num2str(i) + "_VALUE",theFunction)
+				
+				//test if the string is a data set reference, in which case make it a popup menu
+				If(stringmatch(name,"DS_*"))					
+					SVAR DSNameList = NTD:DSNameList
+					DSNameList = textWaveToStringList(NTD:DSNamesLB_ListWave,";")
+					String selection = getParam("PARAM_" + num2str(i) + "_VALUE",theFunction)
+					Variable selectionIndex = WhichListItem(selection,DSNameList,";")
+					
+					PopUpMenu/Z $ctrlName win=NT,pos={left,top},size={115,20},bodywidth=75,title=StringFromList(1,name,"_"),value=#"root:Packages:NT:DataSets:DSNameList",disable=0,mode=1,popValue=selection,proc=ntExtParamPopProc
+				Else
+					SetVariable/Z $ctrlName win=NT,pos={left,top},size={90,20},bodywidth=50,title=name,value=_STR:valueStr,disable=0,proc=ntExtParamProc
+				EndIf
 				break
-			case 16386://wave
+			case "16386"://wave
+				valueStr = getParam("PARAM_" + num2str(i) + "_VALUE",theFunction)
 				//this will convert a wave path to a wave reference pointer
-				SetVariable/Z $paramName win=NT,pos={left,top},size={140,20},bodywidth=100,title=name,value=_STR:"",disable=0,proc=ntExtParamPopProc
-				ctrlList_extFunc += paramName + ";"
+				SetVariable/Z $ctrlName win=NT,pos={left,top},size={140,20},bodywidth=100,title=name,value=_STR:valueStr,disable=0,proc=ntExtParamProc
+				
+				//confirm validity of the wave reference
+				validWaveText("",0,deleteText=1)
+				ControlInfo/W=NT $ctrlName
+				validWaveText(valueStr,V_top+13)
+				
 				break
 		endswitch
 		top += 25
 		
 	EndFor
 	
+End
+
+//Returns the named parameter from the external functions data wave
+Function/S getParam(key,func)
+	String key,func
+	DFREF NTF = root:Packages:NT
+	Wave/T param = NTF:ExtFunc_Parameters
+	
+	Variable row = FindDimLabel(param,0,key)
+	Variable col = FindDimLabel(param,1,func)
+	
+	return param[row][col]
+End
+
+
+//Sets the named parameter for an external function with the specified value
+Function setParam(key,func,value)
+	String key,func,value
+	
+	DFREF NTF = root:Packages:NT
+	Wave/T param = NTF:ExtFunc_Parameters
+	
+	Variable row = FindDimLabel(param,0,key)
+	Variable col = FindDimLabel(param,1,func)
+	
+	param[row][col] = value
+End
+
+//Returns a string list of the control names for the indicated external function
+Function/S getParamCtrlList(func)
+	String func	
+	String list = ""
+	Variable i,numParams = str2num(getParam("N_PARAMS",func))
+	
+	For(i=0;i<numParams;i+=1)
+		list += "param" + num2str(i) + ";"
+	EndFor 
+	return list
 End
 
 Function/S SetExtFuncCmd()
@@ -2820,97 +2957,53 @@ Function/S SetExtFuncCmd()
 	return runCmdStr
 End
 
-Function KillExtParams()
-	NVAR numExtParams = root:Packages:analysisTools:numExtParams
-	Variable i
-	For(i=0;i<numExtParams;i+=1)
-		KillControl/W=analysis_tools $("param" + num2str(i))
-	EndFor
-End
-
-Function updateExtFuncValues(theFunction)
-	String theFunction
-	SVAR extParamTypes = root:Packages:analysisTools:extParamTypes
-	SVAR extParamNames = root:Packages:analysisTools:extParamNames
-	Wave/T extFuncValues = root:Packages:analysisTools:extFuncValues
+Function/S getExtFuncCmdStr(func)
+	String func
+	Wave/T param = root:Packages:NT:ExtFunc_Parameters
+	Variable i,numParams = str2num(getParam("N_PARAMS",func))
 	
-	Variable cols,i,numParams,whichCol = -1
-	
-	cols = DimSize(extFuncValues,1)
-	numParams = ItemsInList(extParamNames,",")
-	
-	If(cols == 0)
-		whichCol = 0
-		cols +=1
-		Redimension/N=(1,cols) extFuncValues
-		If(numParams + 2 > DimSize(extFuncValues,0))
-			Redimension/N=(numParams + 2,-1) extFuncValues
-		EndIf
-	Else
-	
-		For(i=0;i<cols;i+=1)
-			If(stringmatch(extFuncValues[0][i],theFunction))
-				whichCol = i
-				break
-			EndIf
-		EndFor
-		
-		If(whichCol == -1)
-			whichCol = cols
-			cols += 1
-			Redimension/N=(-1,cols) extFuncValues
-			If(numParams + 2 > DimSize(extFuncValues,0))
-				Redimension/N=(numParams + 2,-1) extFuncValues
-			EndIf
-		EndIf
-	EndIf
-	
-	///Fill out the table
-	extFuncValues[0][whichCol] = theFunction
-	extFuncValues[1][whichCol] = num2str(numParams)
+	String cmdStr = "NT_" + func + "("
 	For(i=0;i<numParams;i+=1)
-		ControlInfo/W=analysis_tools $("param" + num2str(i))
-		If(numtype(V_Value) == 2 || strlen(S_Value))
-			//string or wave input
-			extFuncValues[i+2][whichCol] = S_Value
-		Else
-			//variable input
-			extFuncValues[i+2][whichCol] = num2str(V_Value)
-		EndIf
-	EndFor
-
-End
-
-Function recallExtFuncValues(theFunction)
-	String theFunction
-	Wave/T extFuncValues = root:Packages:analysisTools:extFuncValues
-	NVAR numExtParams = root:Packages:analysisTools:numExtParams
-	Variable i,whichCol,cols
-	
-	cols = DimSize(extFuncValues,1)
-	whichCol = -1
-	
-	For(i=0;i<cols;i+=1)
-		If(stringmatch(extFuncValues[0][i],theFunction))
-			whichCol = i
-			break
-		EndIf
+		String value = getParam("PARAM_" + num2str(i) + "_VALUE",func)
+		String type =  getParam("PARAM_" + num2str(i) + "_TYPE",func)
+		
+		strswitch(type)
+			case "4": //variable
+				cmdStr += value + "," 
+				break
+			case "8192": //string
+				cmdStr += "\"" + value + "\"" + "," 
+				break
+			case "16386": //wave
+				cmdStr += value + "," 
+				break
+		endswitch
+		
+		
 	EndFor
 	
-	If(whichCol != -1)
-		For(i=0;i<numExtParams;i+=1)
-			ControlInfo/W=analysis_tools $("param" + num2str(i))
-			If(numtype(V_Value) ==2)
-				//string or wave input
-				SetVariable $("param" + num2str(i)) win=analysis_tools,value=_STR:extFuncValues[i+2][whichCol]
-			Else
-				SetVariable $("param" + num2str(i)) win=analysis_tools,value=_NUM:str2num(extFuncValues[i+2][whichCol])
-			EndIf
-			
-		EndFor
-	EndIf
-
+	cmdStr = RemoveEnding(cmdStr,",") + ")"
+	return cmdStr
 End
+
+//Kills all the visible external function parameters controls
+Function KillExtParams()
+	String func = CurrentExtFunc()
+	
+	DFREF NTF = root:Packages:NT
+	Wave/T param = NTF:ExtFunc_Parameters
+	
+	Variable numParams = str2num(getParam("N_PARAMS",func))
+	
+	Variable i
+	For(i=0;i<numParams;i+=1)
+		KillControl/W=NT $("param" + num2str(i))
+	EndFor
+	
+	//Kill wave validity text
+	validWaveText("",0,deleteText=1)
+End
+
 
 //Updates the text showing valid and invalid wave references in the External Functions parameters
 Function validWaveText(path,ypos,[,deleteText])
@@ -2933,4 +3026,5 @@ Function validWaveText(path,ypos,[,deleteText])
 		SetDrawEnv/W=NT gstop
 	EndIf
 	
+	SetDrawEnv/W=NT textrgb=(0,0,0)
 End
