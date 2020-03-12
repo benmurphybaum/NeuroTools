@@ -978,6 +978,9 @@ Function openParameterFold([size])
 		case "Kill Data Folder":
 		case "External Function":
 			Button WaveListSelector win=NT,disable=3
+			
+			BuildExtFuncControls(CurrentExtFunc())
+			
 			break
 		case "Get ROI":
 			ListBox ROIListBox win=NT,disable=0
@@ -1058,9 +1061,9 @@ Function closeParameterFold([size])
 		//Shift the right line
 		SetDrawEnv/W=NT  fstyle= 0
 		DrawAction/W=NT delete,getgroup=rightLine
-		SetDrawEnv/W=NT xcoord= abs,ycoord= rel,linefgc= (0,0,0,16384),linethick= 4,gname=rightLine,gstart
+		SetDrawEnv/W=NT xcoord= abs,ycoord= rel,textxjust= 1,textyjust= 1,linefgc= (0,0,0,16384),linethick= 4,gname=rightLine,gstart
 		DrawLine/W=NT 448 + shift,0, 448 + shift,1;DelayUpdate
-		SetDrawEnv/W=NT gstop
+		SetDrawEnv/W=NT gstop,textxjust= 1,textyjust= 1
 
 		DoUpdate/W=NT
 	While(expansion > size )

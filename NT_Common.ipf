@@ -3017,14 +3017,14 @@ Function validWaveText(path,ypos,[,deleteText])
 	EndIf
 	
 	If(WaveExists($path))
-		SetDrawEnv/W=NT textrgb= (3,52428,1),fstyle=2,fsize=10,gname=ValidWaveText,gstart
+		SetDrawEnv/W=NT textrgb= (3,52428,1),fstyle=2,fsize=10, textxjust= 0,textyjust= 0,gname=ValidWaveText,gstart
 		DrawText/W=NT 626,ypos,"Valid"
 		SetDrawEnv/W=NT gstop
 	Else
-		SetDrawEnv/W=NT textrgb= (65535,0,0),fstyle=2,fsize=10,gname=ValidWaveText,gstart
+		SetDrawEnv/W=NT textrgb= (65535,0,0),fstyle=2,fsize=10, textxjust= 0,textyjust= 0,gname=ValidWaveText,gstart
 		DrawText/W=NT 626,ypos,"Invalid"
 		SetDrawEnv/W=NT gstop
 	EndIf
 	
-	SetDrawEnv/W=NT textrgb=(0,0,0)
+	SetDrawEnv/W=NT textrgb=(0,0,0), textxjust= 1,textyjust= 1
 End
