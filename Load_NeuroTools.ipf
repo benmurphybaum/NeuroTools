@@ -823,7 +823,7 @@ Function CreateControlLists()
 	
 	controlAssignments[7][0] = "External Function"
 	controlAssignments[7][1] = "extFuncPopUp;extFuncHelp;goToProcButton;"
-	controlAssignments[7][2] = "210"
+	controlAssignments[7][2] = "230"
 	
 	controlAssignments[8][0] = "Run Cmd Line"
 	controlAssignments[8][1] = "cmdLineStr;appendCommand;clearCommand;printCommand;"

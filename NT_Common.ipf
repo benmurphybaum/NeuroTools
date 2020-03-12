@@ -2811,7 +2811,7 @@ Function BuildExtFuncControls(theFunction)
 	functionStr = RemoveEnding(StringFromList(1,functionStr,"("),")")
 	
 	String extParamNames = functionStr
-	Variable left=460,top=110
+	Variable left=480,top=110
 	String type,name,ctrlName
 	
 	For(i=0;i<numParams;i+=1)
@@ -2833,7 +2833,7 @@ Function BuildExtFuncControls(theFunction)
 					String selection = getParam("PARAM_" + num2str(i) + "_VALUE",theFunction)
 					Variable selectionIndex = WhichListItem(selection,DSNameList,";")
 					
-					PopUpMenu/Z $ctrlName win=NT,pos={left,top},size={115,20},bodywidth=75,title=StringFromList(1,name,"_"),value=#"root:Packages:NT:DataSets:DSNameList",disable=0,mode=1,popValue=selection,proc=ntExtParamPopProc
+					PopUpMenu/Z $ctrlName win=NT,pos={left,top},size={120,20},bodywidth=80,title=StringFromList(1,name,"_"),value=#"root:Packages:NT:DataSets:DSNameList",disable=0,mode=1,popValue=selection,proc=ntExtParamPopProc
 				Else
 					SetVariable/Z $ctrlName win=NT,pos={left,top},size={90,20},bodywidth=50,title=name,value=_STR:valueStr,disable=0,proc=ntExtParamProc
 				EndIf
@@ -3018,11 +3018,11 @@ Function validWaveText(path,ypos,[,deleteText])
 	
 	If(WaveExists($path))
 		SetDrawEnv/W=NT textrgb= (3,52428,1),fstyle=2,fsize=10,gname=ValidWaveText,gstart
-		DrawText/W=NT 606,ypos,"Valid"
+		DrawText/W=NT 626,ypos,"Valid"
 		SetDrawEnv/W=NT gstop
 	Else
 		SetDrawEnv/W=NT textrgb= (65535,0,0),fstyle=2,fsize=10,gname=ValidWaveText,gstart
-		DrawText/W=NT 606,ypos,"Invalid"
+		DrawText/W=NT 626,ypos,"Invalid"
 		SetDrawEnv/W=NT gstop
 	EndIf
 	
