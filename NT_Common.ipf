@@ -2721,6 +2721,12 @@ Function RunExternalFunction(cmd)
 		default:
 			cmd = getExtFuncCmdStr(cmd)
 			Execute/Q cmd
+			
+			//return to original state, this was changed to force External Functions to use data sets
+			DFREF NTF = root:Packages:NT
+			SVAR WaveSelectorStr = NTF:WaveSelectorStr
+			ControlInfo/W=NT WaveListSelector
+			WaveSelectorStr = TrimString(StringFromList(1,S_Title,"\u005cJL▼"))
 	endswitch
 	
 	return 1
