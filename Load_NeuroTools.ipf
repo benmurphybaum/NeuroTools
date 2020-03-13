@@ -289,7 +289,12 @@ Function MakePackageFolders()
 	//Data Set Names List for the External Functions pop up menus
 	String/G NTD:DSNameList
 	SVAR DSNameList = NTD:DSNameList
-	DSNameList = textWaveToStringList(DSNamesLB_ListWave,";",layer=0)
+	
+	If(WaveExists(DSNamesLB_ListWave))
+		DSNameList = textWaveToStringList(DSNamesLB_ListWave,";",layer=0)
+	Else
+		DSNameList = ""
+	EndIf
 	
 	//Tests for existence to avoid overwriting saved data sets
 	If(!WaveExists(DSNamesLB_ListWave))
