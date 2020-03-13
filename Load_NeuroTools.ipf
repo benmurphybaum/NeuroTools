@@ -504,6 +504,10 @@ Function MakePackageFolders()
 		ppr = 60
 		scaleFactor = 1
 	EndIf
+	
+	If(ppr == 0)
+		ppr = 60
+	EndIf
 
 	return 1
 End
@@ -628,7 +632,8 @@ Function LoadImagingPackage()
 	DFREF NTF = root:Packages:NT
 	SVAR loadedPackages = NTF:loadedPackages
 	If(!stringmatch(loadedPackages,"*Imaging*"))
-		//LOAD
+	
+		//LOAD - supports Jamie Boyd's 2PLSM Igor Imaging software
 		If(DataFolderExists("root:Packages:twoP"))
 			loadedPackages += "Imaging;"
 			
@@ -660,6 +665,45 @@ Function LoadImagingPackage()
 	
 End
 
+//Loads the ScanImage Imaging Package for access to specialized Calcium imaging functions 
+//that work with scanimage bigtiff files
+Function LoadScanImagePackage()
+	DFREF NTF = root:Packages:NT
+	SVAR loadedPackages = NTF:loadedPackages
+	If(!stringmatch(loadedPackages,"*ScanImage*"))
+	
+		//LOAD - supports Jamie Boyd's 2PLSM Igor Imaging software
+		loadedPackages += "ScanImage;"
+		
+		//Load procedures
+		Execute/P/Q/Z "INSERTINCLUDE \"NT_ScanImage_Package\""
+		Execute/P/Q/Z "COMPILEPROCEDURES "
+		
+		//Load the controls, etc.
+		//Executes command string to avoid compilation prior to loading the package.
+		Execute/Q/Z "NT_ScanImage_CreateControls()"
+	Else
+		//UNLOAD
+		loadedPackages = RemoveFromList("Imaging;",loadedPackages,";")
+		
+		//Remove procedures
+		Execute/P/Q/Z "DELETEINCLUDE \"NT_ScanImage_Package\""
+		Execute/P/Q/Z "COMPILEPROCEDURES "
+			
+		//return to a main menu function
+		SVAR selectedCmd = NTF:selectedCmd
+		switchCommandMenu("Measure")
+		SwitchControls("Measure",selectedCmd)
+		switchHelpMessage("Measure")
+	EndIf
+	
+	//Rebuild all the menus
+	BuildMenu "All"
+	
+End
+
+
+
 //Contextual menu for the wave list selector in the parameters panel
 Menu "WaveListSelectorMenu",contextualMenu,dynamic
 	AddSubMenu("WaveSelector"),""
@@ -673,6 +717,7 @@ End
 Menu "Macros",dynamic
 	Submenu "Load Packages"
 		 LoadUnload("Imaging"),LoadImagingPackage()
+		 LoadUnload("ScanImage"),LoadScanImagePackage()
 	End
 End
 
@@ -685,10 +730,10 @@ Function/S LoadUnload(package)
 		return ""
 	EndIf
 	
-	If(!stringmatch(loadedPackages,"*Imaging*"))
-		return "Imaging"
+	If(!stringmatch(loadedPackages,"*" + package + "*"))
+		return package
 	Else
-		return "Unload Imaging"
+		return "Unload " + package
 	EndIf
 End
 
@@ -932,7 +977,7 @@ Function openSettingsPanel()
 	//Parameter Settings
 	NVAR ppr = NTS:ppr
 	NVAR scaleFactor = NTS:scaleFactor
-	SetVariable ppr win=NTSettingsPanel,pos={10,10},size={150,20},title="Parameters Open Speed",value=ppr,proc=NTSettings_SetVarProc
+	SetVariable ppr win=NTSettingsPanel,pos={10,10},size={150,20},title="Parameters Open Speed",value=ppr,limits={20,inf,10},proc=NTSettings_SetVarProc
 	SetVariable scaleFactor win=NTSettingsPanel,pos={62,30},size={98,20},title="Scale Factor",value=scaleFactor,limits={0.1,inf,0.05},proc=NTSettings_SetVarProc
 	Button scaleFactorUpdate win=NTSettingsPanel,pos={162,26},size={20,20},title="∆",proc=ntButtonProc
 End
