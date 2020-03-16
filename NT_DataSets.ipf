@@ -477,6 +477,10 @@ Function GetNumWaveSets(listWave)
 	Variable item = 0,count = 0
 	String name = ""
 	
+	If(!WaveExists(listWave))
+		return 0
+	EndIf
+	
 	If(DimSize(listWave,0) == 0)
 		return 0
 	EndIf
@@ -513,7 +517,11 @@ Function/WAVE GetWaveSet(listWave,wsn)
 	Variable wsn
 	Variable i = 0,count = 0
 	
-	//If listwave is empty
+	//If listwave is empty or doesn't exist
+	If(!WaveExists(listWave))
+		return $""
+	EndIf
+	
 	If(DimSize(listWave,0) == 0)
 		return $""
 	EndIf
@@ -585,6 +593,10 @@ End
 Function/WAVE GetWaveSetRefs(listWave,wsn)
 	Wave/T listWave
 	Variable wsn
+	
+	If(!WaveExists(listWave))
+		return $""
+	EndIf
 	
 	String list = GetWaveSetList(listWave,wsn,1)
 	

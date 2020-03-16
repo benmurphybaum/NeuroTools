@@ -7,10 +7,10 @@
 
 
 //Global Fonts
-StrConstant LIGHT = "Helvetica Neue Light"
-StrConstant REG = "Helvetica Neue"
-StrConstant TITLE = "Bodoni 72 SmallCaps"
-StrConstant SUBTITLE = "Bodoni 72 Oldstyle"
+StrConstant LIGHT = "Roboto Light"
+StrConstant REG = "Roboto"
+StrConstant TITLE = "Mongolian Baiti"
+StrConstant SUBTITLE = "Mongolian Baiti"
 
 //Builds the GUI
 Function LoadNT([left,top])
@@ -37,9 +37,11 @@ Function LoadNT([left,top])
 	top += 0
 	width = 754
 	height = 515
-
+	
+	Variable r = ScreenResolution / 72
+	
 	//Main Panel
-	NewPanel /K=1 /W=(left,top,left + width,top + height) as "NeuroTools"
+	NewPanel /K=1 /W=(left*r,top*r,left*r + width,top*r + height) as "NeuroTools"
 	DoWindow/C NT
 	ModifyPanel /W=NT, fixedSize= 1
 	
@@ -596,7 +598,7 @@ Function MakeCommandList()
 	//Set data folder reference
 	DFREF NT = root:Packages:NT
 	
-	Make/O/T/N=(2,2) NT:controlListWave
+	Make/O/T/N=(3,2) NT:controlListWave
 	Wave/T controlListWave = NT:controlListWave
 	
 	controlListWave[0][0] = "Main"
@@ -604,6 +606,9 @@ Function MakeCommandList()
 
 	controlListWave[1][0] = "Imaging"
 	controlListWave[1][1] = "Get ROI;dF Map;"
+	
+	controlListWave[2][0] = "ScanImage"
+	controlListWave[2][1] = "SI: Get ROI;SI: dF Map;"
 	return 1
 End
 
@@ -619,6 +624,8 @@ Menu "CommandMenu",contextualMenu
 	AddSubMenu("Main"),""
 	
 	AddSubMenu("Imaging"),""
+	
+	AddSubMenu("ScanImage"),""
 	
 End
 
@@ -672,19 +679,22 @@ Function LoadScanImagePackage()
 	SVAR loadedPackages = NTF:loadedPackages
 	If(!stringmatch(loadedPackages,"*ScanImage*"))
 	
-		//LOAD - supports Jamie Boyd's 2PLSM Igor Imaging software
+		//LOAD - supports Vidrio's ScanImage software
 		loadedPackages += "ScanImage;"
 		
 		//Load procedures
 		Execute/P/Q/Z "INSERTINCLUDE \"NT_ScanImage_Package\""
 		Execute/P/Q/Z "COMPILEPROCEDURES "
-		
+	
 		//Load the controls, etc.
 		//Executes command string to avoid compilation prior to loading the package.
-		Execute/Q/Z "NT_ScanImage_CreateControls()"
+		Execute/Q/P "NT_ScanImage_CreateControls()"
 	Else
 		//UNLOAD
-		loadedPackages = RemoveFromList("Imaging;",loadedPackages,";")
+		loadedPackages = RemoveFromList("ScanImage;",loadedPackages,";")
+		
+		//Kill the Image Browser
+		KillWindow/Z SI
 		
 		//Remove procedures
 		Execute/P/Q/Z "DELETEINCLUDE \"NT_ScanImage_Package\""
@@ -729,7 +739,7 @@ Function/S LoadUnload(package)
 	If(!SVAR_EXISTS(loadedPackages))
 		return ""
 	EndIf
-	
+
 	If(!stringmatch(loadedPackages,"*" + package + "*"))
 		return package
 	Else
@@ -814,6 +824,17 @@ Function/S AddSubMenu(String package)
 			EndIf
 			
 			index = tableMatch("Imaging",controlListWave)
+			If(index == -1)
+				return ""
+			EndIf
+			commandStr = "-;" + controlListWave[index][1]
+			break
+		case "ScanImage":
+			If(!stringmatch(loadedPackages,"*ScanImage*"))
+				return ""
+			EndIf
+			
+			index = tableMatch("ScanImage",controlListWave)
 			If(index == -1)
 				return ""
 			EndIf
@@ -967,9 +988,13 @@ Function openSettingsPanel()
 	DFREF NTS = root:Packages:NT:Settings
 	//Open the settings panel
 	DoWindow/W=NTSettingsPanel NTSettingsPanel
+	
+	Variable r = ScreenResolution / 72
+	
 	If(!V_flag)
 		GetWindow NT wsize
-		NewPanel/K=1/N=NTSettingsPanel/W=(V_right,V_top,V_right+200,V_top+200) as "Settings"
+		NewPanel/K=1/N=NTSettingsPanel/W=(V_right*r,V_top*r,V_right*r+200,V_top*r+200) as "Settings"
+		ModifyPanel/W=NTSettingsPanel fixedSize=1
 	Else
 		DoWindow/F/W=NTSettingsPanel NTSettingsPanel
 	EndIf
@@ -977,9 +1002,9 @@ Function openSettingsPanel()
 	//Parameter Settings
 	NVAR ppr = NTS:ppr
 	NVAR scaleFactor = NTS:scaleFactor
-	SetVariable ppr win=NTSettingsPanel,pos={10,10},size={150,20},title="Parameters Open Speed",value=ppr,limits={20,inf,10},proc=NTSettings_SetVarProc
-	SetVariable scaleFactor win=NTSettingsPanel,pos={62,30},size={98,20},title="Scale Factor",value=scaleFactor,limits={0.1,inf,0.05},proc=NTSettings_SetVarProc
-	Button scaleFactorUpdate win=NTSettingsPanel,pos={162,26},size={20,20},title="∆",proc=ntButtonProc
+	SetVariable ppr win=NTSettingsPanel,pos={10,10},size={170,20},title="Parameters Open Speed",value=ppr,limits={20,inf,10},proc=NTSettings_SetVarProc
+//	SetVariable scaleFactor win=NTSettingsPanel,pos={62,30},size={98,20},title="Scale Factor",value=scaleFactor,limits={0.1,inf,0.05},proc=NTSettings_SetVarProc
+//	Button scaleFactorUpdate win=NTSettingsPanel,pos={162,26},size={20,20},title="∆",proc=ntButtonProc
 End
 
 //Handles SetVariable inputs for the Settings Panel

@@ -210,6 +210,8 @@ Function switchControls(currentCmd,prevCmd)
 	SVAR selectedCmd = NTF:selectedCmd
 	Wave/T controlAssignments = NTF:controlAssignments 
 	
+	Variable r = ScreenResolution / 72
+	
 	//Find the row for the current command selection in the control assignments wave
 	Variable index = tableMatch(currentCmd,controlAssignments)
 	If(index == -1)
@@ -224,7 +226,7 @@ Function switchControls(currentCmd,prevCmd)
 	GetWindow NT wsize
 	Variable left,top,right,bottom
 	left = V_left;right=V_right;top=V_top;bottom=V_bottom
-	Variable expansion = (right - left) - 754 //current expansion relative to original width of the panel
+	Variable expansion = (right*r - left*r) - 754 //current expansion relative to original width of the panel
 	
 	//Delete the command line entry
 	SetDrawEnv/W=NT  fstyle= 0, textxjust= 0
@@ -295,13 +297,16 @@ Function switchControls(currentCmd,prevCmd)
 	DrawAction/W=NT getgroup=fcnText,delete
 	strswitch(selectedCmd)
 		case "Get ROI":
+		case "SI: Get ROI":
+		case "SI: dF Map":
 			SetDrawEnv/W=NT fstyle=0,textxjust=0,textyjust=0,xcoord=abs,ycoord=abs,fname=$LIGHT,fsize=12,gname=fcnText,gstart
 			DrawText/W=NT 687,98,"ROIs"
 			SetDrawEnv/W=NT fstyle=0,textxjust=0,textyjust=0,xcoord=abs,ycoord=abs,fsize=12,fname=$LIGHT
 			DrawText/W=NT 605,98,"Scans"
 			SetDrawEnv/W=NT gstop
 			break
-		case "df Map":
+		case "dF Map":
+		
 			SetDrawEnv/W=NT fstyle=0,textxjust=0,textyjust=0,xcoord=abs,ycoord=abs,fname=$LIGHT,fsize=12,gname=fcnText,gstart
 			DrawText/W=NT 605,98,"Scans"
 			SetDrawEnv/W=NT gstop
@@ -416,7 +421,7 @@ Function/WAVE StringListToTextWave(strList,separator)
 	size = ItemsInList(strList,separator)
 	Make/FREE/T/N=(size) textWave
 	For(i=0;i<size;i+=1)
-		textWave[i] = StringFromList(i,strList,";")
+		textWave[i] = StringFromList(i,strList,separator)
 	EndFor
 
 	return textWave
@@ -2464,13 +2469,15 @@ Function openViewer()
 	NVAR viewerOpen = NTF:viewerOpen
 	SVAR viewerRecall = NTF:viewerRecall
 	
+	Variable r = ScreenResolution / 72
+	
 	//Define guides
 	DefineGuide/W=NT VT = {FT,0.6315,FB}
 	DefineGuide/W=NT VB = {FT,0.97,FB}
 	
 	//Add an additional 200 pixels to the toolbox on the bottom
 	GetWindow NT wsize
-	MoveWindow/W=NT V_left,V_top,V_right,V_bottom + 300
+	MoveWindow/W=NT V_left,V_top,V_right,V_bottom + 300/r
 	
 	//Open the display window only if it wasn't already open
 	If(viewerOpen == 0)
@@ -2501,6 +2508,8 @@ Function closeViewer()
 	SVAR viewerRecall = NTF:viewerRecall
 	NVAR viewerOpen = NTF:viewerOpen
 	
+	Variable r = ScreenResolution / 72
+	
 	viewerRecall = WinRecreation("NT#ntViewerGraph",0)
 	//viewerRecall = ReplaceString("Display/W=(162,200,488,600)/FG=(FL,VT,FR,VB)/HOST=#",viewerRecall,"AppendToGraph/W=NT#ntViewerGraph")
 	
@@ -2512,7 +2521,7 @@ Function closeViewer()
 	KillWindow/Z NT#ntViewerGraph
 	//Remove 200 pixels to the toolbox on the bottom
 	GetWindow NT wsize
-	MoveWindow/W=NT V_left,V_top,V_right,V_bottom - 300
+	MoveWindow/W=NT V_left,V_top,V_right,V_bottom - 300/r
 	
 	//adjust guide for scanListPanel so it doesn't get in the viewer's way
 	DefineGuide/W=NT listboxBottom={FB,-10}

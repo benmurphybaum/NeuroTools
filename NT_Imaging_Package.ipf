@@ -115,6 +115,15 @@ Function/WAVE NT_GetROI()
 	
 	Variable i,j,k,totalWaveCount = 0
 	
+
+	
+	img.scan.num = 1
+	img.roi.num = 1
+	img.rois = "A"
+	
+	Wave/wave img.roi.x = root:twoP_ROIS:A_x
+	Wave/wave img.roi.y = root:twoP_ROIS:A_y
+	
 	For(i=0;i<img.scan.num;i+=1)
 		Variable ref = StartMSTimer
 		
@@ -137,6 +146,9 @@ Function/WAVE NT_GetROI()
 				break
 		endswitch
 		
+		Wave theScan = root:Scans:gCamp6f_LIGHT8Dir_00006:gCamp6f_LIGHT8Dir_00006_R0
+		Wave theBgnd = root:Scans:gCamp6f_LIGHT8Dir_00006:gCamp6f_LIGHT8Dir_00006_R0
+	
 		//Get dendritic mask
 		Wave mask = GetDendriticmask(theBgnd)
 		Redimension/B/U mask
@@ -148,6 +160,7 @@ Function/WAVE NT_GetROI()
 		For(j=0;j<img.roi.num;j+=1)
 			String theROI = img.rois[j]
 			
+			theROI = "A"
 			
 			String ROIFolder = "root:ROI_analysis:" + theROI
 			
@@ -158,6 +171,9 @@ Function/WAVE NT_GetROI()
 			//X and Y waves that define the ROI area
 			Wave roiX = img.roi.x[j]
 			Wave roiY  = img.roi.y[j]
+		
+			Wave roiX = root:twoP_ROIS:A_x
+			Wave roiY = root:twoP_ROIS:A_y
 		
 			//Seed values for filling out the ROI mask
 			Variable maskMax,maskMin,xSeed,ySeed

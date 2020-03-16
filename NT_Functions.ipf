@@ -146,10 +146,13 @@ Function/WAVE ExecuteCommand(ds,cmd)
 			Wave/WAVE out = $""
 			break
 		case "External Function":
-			//Save the data set structure so the external function can retrieve it.
-			SaveStruct(ds)
-			ControlInfo/W=NT extFuncPopUp
-			String extCmd = TrimString(StringFromList(1,S_Title,"\u005cJL▼   "))
+			String extCmd = CurrentExtFunc()
+			
+			If(cmpstr(extCmd,"Write Your Own"))
+				//Save the data set structure so the external function can retrieve it.
+				SaveStruct(ds)
+			EndIf
+			
 			RunExternalFunction(extCmd)
 			break
 	endswitch
@@ -819,11 +822,20 @@ Function NT_NewDataFolder()
 	SVAR cdf = root:Packages:NT:currentDataFolder
 	
 	Variable i
+	
+	//no selection, so must use current data folder
+	If(!strlen(folderList))
+	 folderList += RemoveEnding(cdf,":")
+	EndIf
+	
 	For(i=0;i<ItemsInList(folderList,";");i+=1)
 		String path = StringFromList(i,folderList,";") + ":" + folder
 		NewDataFolder/O $path
 	EndFor
 	
+	//update the folder and waves listbox
+	getFolders()
+	getFolderWaves()
 End
 
 //Kills the selected data folders
@@ -848,11 +860,21 @@ Function NT_KillDataFolder()
 	
 	SVAR cdf = root:Packages:NT:currentDataFolder
 	
+	//no selection, so must use current data folder
+	If(!strlen(folderList))
+	 folderList += RemoveEnding(cdf,":")
+	EndIf
+	
+	
 	Variable i
 	For(i=0;i<ItemsInList(folderList,";");i+=1)
 		String path = StringFromList(i,folderList,";") + ":" + folder
 		KillDataFolder/Z $path
 	EndFor
+	
+	//update the folder and waves listbox
+	getFolders()
+	getFolderWaves()
 End
 
 //Performs various measurements on the data set and puts the result in an output wave

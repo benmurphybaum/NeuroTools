@@ -97,7 +97,7 @@ Function HandleLBSelection(ctrlName,listWave,row,mouseHor,mouseVert,eventMod)
 				return 0
 			EndIf
 			
-			If(eventMod == 17)
+			If(eventMod == 16 || eventMod == 17)
 				//GOTO selected wave contextual menu
 				PopupContextualMenu/C=(mouseHor, mouseVert) "GoTo;Edit;Display;"
 				If(V_flag)
@@ -128,7 +128,7 @@ Function HandleLBSelection(ctrlName,listWave,row,mouseHor,mouseVert,eventMod)
 				return 0
 			EndIf
 			
-			If(eventMod == 17)
+			If(eventMod == 16 || eventMod == 17)
 				//GOTO selected wave contextual menu
 				PopupContextualMenu/C=(mouseHor, mouseVert) "GoTo;Edit;Display;"
 				If(V_flag)
@@ -154,7 +154,7 @@ Function HandleLBSelection(ctrlName,listWave,row,mouseHor,mouseVert,eventMod)
 			break
 		case "dataSetNamesListBox": //data set names
 						
-			If(eventMod == 17)
+			If(eventMod == 16 || eventMod == 17)
 				//If the right click happens on a non-previously selected data set,
 				//first loads those data set setttings into the GUI controls
 				If(row > DimSize(listWave,0) - 1)	
@@ -190,7 +190,7 @@ Function HandleLBSelection(ctrlName,listWave,row,mouseHor,mouseVert,eventMod)
 				return 0
 			EndIf
 			
-			If(eventMod == 17)
+			If(eventMod == 16 || eventMod == 17)
 				//GOTO selected wave contextual menu
 				PopupContextualMenu/C=(mouseHor, mouseVert) "GoTo;"
 				If(V_flag)
@@ -207,7 +207,7 @@ Function HandleLBSelection(ctrlName,listWave,row,mouseHor,mouseVert,eventMod)
 				return 0
 			EndIf
 			
-			If(eventMod == 17)
+			If(eventMod == 16 || eventMod == 17)
 				//GOTO selected wave contextual menu
 				PopupContextualMenu/C=(mouseHor, mouseVert) "GoTo;Edit;Display;"
 				If(V_flag)
@@ -368,6 +368,7 @@ Function doRightClickAction(command,list)
 				return 0
 			EndIf
 			
+			
 			Edit/W=(V_right,V_top,V_right + 200,V_top + 200) theWave
 			
 			break
@@ -423,7 +424,8 @@ End
 //BUTTONS------------------------------------------------------------
 Function ntButtonProc(ba) : ButtonControl
 	STRUCT WMButtonAction &ba
-
+	
+	
 	switch( ba.eventCode )
 		case 2: // mouse up
 			// click code here
@@ -832,6 +834,7 @@ Function foldParametersHook(s)
 	NVAR foldStatus = NTF:foldStatus
 	
 	Variable hookResult = 0
+	Variable r = ScreenResolution / 72
 	
 	switch(s.eventCode)
 		case 0:
@@ -938,6 +941,9 @@ Function openParameterFold([size])
 	SVAR selectedCmd = NTF:selectedCmd	
 	switchHelpMessage(selectedCmd)
 	
+	Variable r = ScreenResolution/72
+	Variable delta = ppr/r
+	
 	Do
 		Variable i
 	
@@ -945,7 +951,7 @@ Function openParameterFold([size])
 		GetWindow NT wsize
 		Variable left,top,right,bottom
 		left = V_left;right=V_right;top=V_top;bottom=V_bottom
-		Variable expansion = (right - left) - 754 //current expansion relative to original width of the panel
+		Variable expansion = (right*r - left*r) - 754 //current expansion relative to original width of the panel
 		
 		If(expansion >= size)
 			break
@@ -953,12 +959,12 @@ Function openParameterFold([size])
 		
 		Variable pixelsLeft = size - expansion
 		If(pixelsLeft < ppr)
-			MoveWindow/W=NT left,top,right+pixelsLeft,bottom;DelayUpdate
+			MoveWindow/W=NT left,top,right+(pixelsLeft/r),bottom;DelayUpdate
 			Variable shift = size
 		Else
 			//Extend right edge of the panel to make room
-			MoveWindow/W=NT left,top,right+ppr,bottom;DelayUpdate
-			shift = expansion + ppr
+			MoveWindow/W=NT left,top,right+delta,bottom;DelayUpdate
+			shift = expansion + delta
 		EndIf
 				
 		//Shift the right line
@@ -984,8 +990,20 @@ Function openParameterFold([size])
 			break
 		case "Get ROI":
 			ListBox ROIListBox win=NT,disable=0
+			Button WaveListSelector win=NT,disable=3
+			break
+		case "SI: Get ROI":
+			ListBox scanGroups win=NT,disable=0
+			ListBox scanFields win=NT,disable=0
+			Button WaveListSelector win=NT,disable=3
+			break
 		case "dF Map":
 			ListBox ScanListBox win=NT,disable=0
+			Button WaveListSelector win=NT,disable=3
+			break
+		case "SI: dF Map":
+			ListBox scanGroups win=NT,disable=0
+			ListBox scanFields win=NT,disable=0
 			Button WaveListSelector win=NT,disable=3
 			break
 		default:
@@ -1003,7 +1021,10 @@ Function closeParameterFold([size])
 	NVAR ppr = root:Packages:NT:Settings:ppr //pixel shift per refresh; can adjust in Settings panel
 	
 	SVAR selectedCmd = NTF:selectedCmd	
-		
+	
+	Variable r = ScreenResolution/72
+	Variable delta = ppr/r
+	
 	If(ParamIsDefault(size))
 		size = 0
 		
@@ -1016,6 +1037,12 @@ Function closeParameterFold([size])
 		If(!cmpstr(selectedCmd,"Get ROI"))
 			ListBox ROIListBox win=NT,disable=3
 		EndIf
+		
+		If(!cmpstr(selectedCmd,"SI: Get ROI") || !cmpstr(selectedCmd,"SI: dF Map"))
+			ListBox scanGroups win=NT,disable=3
+			ListBox scanFields win=NT,disable=3
+		EndIf
+		
 	Else
 		//shift text label if there is a non-zero size
 		SetDrawEnv/W=NT  fstyle= 0
@@ -1042,7 +1069,7 @@ Function closeParameterFold([size])
 		GetWindow NT wsize
 		Variable left,top,right,bottom
 		left = V_left;right=V_right;top=V_top;bottom=V_bottom
-		Variable expansion = (right - left) - 754 //current expansion relative to original width of the panel
+		Variable expansion = (r * right - r * left) - 754 //current expansion relative to original width of the panel
 		
 		If(expansion <= size)
 			break
@@ -1050,12 +1077,12 @@ Function closeParameterFold([size])
 		
 		Variable pixelsLeft = expansion - size
 		If(pixelsLeft < ppr)
-			MoveWindow/W=NT left,top,right-pixelsLeft,bottom;DelayUpdate
+			MoveWindow/W=NT left,top,right-(pixelsLeft/r),bottom;DelayUpdate
 			Variable shift = size
 		Else
 			//Extend right edge of the panel to make room
-			MoveWindow/W=NT left,top,right-ppr,bottom;DelayUpdate
-			shift = expansion - ppr
+			MoveWindow/W=NT left,top,right-delta,bottom;DelayUpdate
+			shift = expansion - delta
 		EndIf
 
 		//Shift the right line
@@ -1100,7 +1127,7 @@ Function cmdLineEntryHook(s)
 			//handle mouse down
 			SVAR masterCmdLineStr = NTF:masterCmdLineStr
 
-			If(s.eventMod == 17) //right click
+			If(s.eventMod == 16 || s.eventMod == 17) //right click
 				Variable numEntries = ItemsInList(masterCmdLineStr,";/;")
 				GetMouse/W=NT
 				
