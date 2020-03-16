@@ -42,6 +42,17 @@
 	End
 #endif
 
+#if(!cmpstr(IgorInfo(2),"Macintosh"))
+	StrConstant LIGHT = "Roboto Light"
+	StrConstant REG = "Roboto"
+	StrConstant TITLE = "Bodoni 72 Smallcaps"
+	StrConstant SUBTITLE = "Bodoni 72 Oldstyle"
+#else
+	StrConstant LIGHT = "Roboto Light"
+	StrConstant REG = "Roboto"
+	StrConstant TITLE = "Mongolian Baiti"
+	StrConstant SUBTITLE = "Mongolian Baiti"
+#endif
 
 //Setup menu for loading NT
 Menu "Analysis", dynamic
