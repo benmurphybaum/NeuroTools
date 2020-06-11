@@ -786,7 +786,7 @@ End
 //Loads the Imaging functions for the NeuroTools
 Menu "Macros",dynamic
 	Submenu "Load Packages"
-		 LoadUnload("Imaging"),LoadImagingPackage()
+//		 LoadUnload("Imaging"),LoadImagingPackage()
 		 LoadUnload("ScanImage"),LoadScanImagePackage()
 	End
 	
@@ -1452,6 +1452,11 @@ Function Update_NT()
 	//Move the files to the correct folders
 	String path = "bmb:Users:bmb:Downloads:NeuroTools-master:"
 
+	String IgorAppPath = SpecialDirPath("Igor Application",0,0,0)
+	String UserProcPath = IgorAppPath + "User Procedures:NeuroTools:"
+	String IgorProcPath = IgorAppPath + "Igor Procedures:"
+	String IgorHelpPath = IgorAppPath + "Igor Help Files:"
+	
 	String UserProcedures = "Load_NeuroTools.ipf;NT_Common.ipf;NT_Controls.ipf;NT_DataSets.ipf;NT_ExternalFunctions.ipf;NT_Functions.ipf;"
 	UserProcedures += "NT_ImageRegistration.ipf;NT_InsertTemplate.ipf;NT_ScanImage_Package.ipf;NT_Imaging_Package.ipf;NT_Structures.ipf;"
 	UserProcedures += "ScanImageTiffReader.ipf;ReadMe.md;LICENSE;"
@@ -1464,7 +1469,7 @@ Function Update_NT()
 	For(i=0;i<numFiles;i+=1)
 		String fileName = StringFromList(i,UserProcedures,";")
 		String filePath = path + fileName
-		String destPath = "bmb:Users:bmb:Documents:GitHub:NeuroTools2:" + fileName
+		String destPath = UserProcPath + fileName
 		MoveFile/O filePath as destPath
 	EndFor	
 	
@@ -1473,7 +1478,7 @@ Function Update_NT()
 	For(i=0;i<numFiles;i+=1)
 		fileName = StringFromList(i,IgorProcedures,";")
 		filePath = path + fileName
-		destPath = "bmb:Users:bmb:Documents:GitHub:NeuroTools2:" + fileName
+		destPath = IgorProcPath + fileName
 		MoveFile/O filePath as destPath
 	EndFor
 	
@@ -1482,7 +1487,7 @@ Function Update_NT()
 	For(i=0;i<numFiles;i+=1)
 		fileName = StringFromList(i,IgorHelpFiles,";")
 		filePath = path + fileName
-		destPath = "bmb:Users:bmb:Documents:GitHub:NeuroTools2:" + fileName
+		destPath = IgorHelpPath + fileName
 		MoveFile/O filePath as destPath
 	EndFor
 	
