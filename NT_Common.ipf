@@ -357,6 +357,7 @@ Function switchControls(currentCmd,prevCmd)
 	strswitch(selectedCmd)
 		case "Get ROI":
 		case "dF Map":		
+		case "Max Project":
 		case "Response Quality":
 		case "Adjust Galvo Distortion":
 			switchWaveListSelectorMenu("Image Browser")
