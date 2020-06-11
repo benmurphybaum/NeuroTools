@@ -5,14 +5,14 @@
 //Major updates, refactoring, and reorganization from its predecessor, AnalysisTools.
 //Ben Murphy-Baum, 2020
 
-//Just testing out
-
 //Global Fonts
 
 //StrConstant LIGHT = "Roboto Light"
 //StrConstant REG = "Roboto"
 //StrConstant TITLE = "Mongolian Baiti"
 //StrConstant SUBTITLE = "Mongolian Baiti"
+
+STRCONSTANT NTversion = "1.0"
 
 //Builds the GUI
 Function LoadNT([left,top])
@@ -24,6 +24,7 @@ Function LoadNT([left,top])
 	If(V_flag)
 		DoWindow/K NT
 	EndIf
+	
 	
 	//Create the NeuroTools package folders and waves
 	MakePackageFolders()
@@ -792,6 +793,8 @@ Menu "Macros",dynamic
 	Submenu "Shortcuts"
 		"Organize Windows/1"
 	End
+	
+	"Update NeuroTools",Update_NT()
 End
 
 //Add in layout tools for figure sizing to single,1.5, and double column
@@ -1434,7 +1437,140 @@ Function NT_Migrate()
 End
 
 //Downloads the latest package from github, puts the files in the correct places.
-Function Update_NT()
+Function Update_NT()	
 	
+	String gitAddress="https://github.com/benmurphybaum/NeuroTools/archive/master.zip",gitFile="master.zip"
+	
+	//Download the github repo as a zip file
+	Print "Downloading NeuroTools..."
+	URLRequest/O/FILE=gitFile/P=filePath url=gitAddress
+	
+	//Unzip the package
+	Print "Updating Packages..."
+	unzipArchive("bmb:Users:bmb:Downloads:master.zip","bmb:Users:bmb:Downloads")
+	
+	//Move the files to the correct folders
+	String path = "bmb:Users:bmb:Downloads:NeuroTools-master:"
 
+	String UserProcedures = "Load_NeuroTools.ipf;NT_Common.ipf;NT_Controls.ipf;NT_DataSets.ipf;NT_ExternalFunctions.ipf;NT_Functions.ipf;"
+	UserProcedures += "NT_ImageRegistration.ipf;NT_InsertTemplate.ipf;NT_ScanImage_Package.ipf;NT_Imaging_Package.ipf;NT_Structures.ipf;"
+	UserProcedures += "ScanImageTiffReader.ipf;ReadMe.md;LICENSE;"
+	
+	String IgorProcedures = "NT_Loader.ipf;"
+	String IgorHelpFiles = "NeuroTools_Help.ihf;"
+	
+	//User Procedures
+	Variable i,numFiles = ItemsInList(UserProcedures,";")
+	For(i=0;i<numFiles;i+=1)
+		String fileName = StringFromList(i,UserProcedures,";")
+		String filePath = path + fileName
+		String destPath = "bmb:Users:bmb:Documents:GitHub:NeuroTools2:" + fileName
+		MoveFile/O filePath as destPath
+	EndFor	
+	
+	//Igor Procedures
+	numFiles = ItemsInList(IgorProcedures,";")
+	For(i=0;i<numFiles;i+=1)
+		fileName = StringFromList(i,IgorProcedures,";")
+		filePath = path + fileName
+		destPath = "bmb:Users:bmb:Documents:GitHub:NeuroTools2:" + fileName
+		MoveFile/O filePath as destPath
+	EndFor
+	
+	//Igor Help Files
+	numFiles = ItemsInList(IgorHelpFiles,";")
+	For(i=0;i<numFiles;i+=1)
+		fileName = StringFromList(i,IgorHelpFiles,";")
+		filePath = path + fileName
+		destPath = "bmb:Users:bmb:Documents:GitHub:NeuroTools2:" + fileName
+		MoveFile/O filePath as destPath
+	EndFor
+	
+	//Cleanup 
+	DeleteFile/Z path + ":master.zip"
+	
+	//Reload NeuroTools package
+	GetWindow NT wsize
+	KillWindow/Z NT
+	LoadNT(left=V_left,top=V_top)
+	
+	DoWindow SI
+	If(V_flag)
+		KillWindow/Z SI
+		LoadScanImagePackage()
+	EndIf
+	
+	print "Version: ",NTversion
 End
+
+//Unzips an archived file
+// returns 1 for success, 0 for failure
+function unzipArchive(archivePathStr, unzippedPathStr)
+    string archivePathStr, unzippedPathStr
+        
+    string validExtensions="zip;" // set to "" to skip check
+    variable verbose=0 // choose whether to print output from executescripttext
+    string msg, unixCmd, cmd
+        
+    GetFileFolderInfo /Q/Z archivePathStr
+
+    if(V_Flag || V_isFile==0)
+        printf "Could not find file %s\r", archivePathStr
+        return 0
+    endif
+
+    if(itemsInList(validExtensions) && findlistItem(ParseFilePath(4, archivePathStr, ":", 0, 0), validExtensions, ";", 0, 0)==-1)
+        printf "%s doesn't appear to be a zip archive\r", ParseFilePath(0, archivePathStr, ":", 1, 0)
+        return 0
+    endif
+    
+    if(strlen(unzippedPathStr)==0)
+        unzippedPathStr=SpecialDirPath("Desktop",0,0,0)+ParseFilePath(3, archivePathStr, ":", 0, 0)
+        sprintf msg, "Unzip to %s:%s?", ParseFilePath(0, unzippedPathStr, ":", 1, 1), ParseFilePath(0, unzippedPathStr, ":", 1, 0)
+        doALert 1, msg
+        if (v_flag==2)
+            return 0
+        endif
+    else
+        GetFileFolderInfo /Q/Z unzippedPathStr
+        if(V_Flag || V_isFolder==0)
+            sprintf msg, "Could not find unzippedPathStr folder\rCreate %s?", unzippedPathStr
+            doalert 1, msg
+            if (v_flag==2)
+                return 0
+            endif
+        endif   
+    endif
+    
+    // make sure unzippedPathStr folder exists - necessary for mac
+    newpath /C/O/Q acw_tmpPath, unzippedPathStr
+    killpath /Z acw_tmpPath
+
+    if(stringmatch(StringByKey("OS", igorinfo(3))[0,2],"Win")) // Windows
+        // The following works with .Net 4.5, which is available in Windows 8 and up.
+        // current versions of Windows with Powershell 5 can use the more succinct PS command 
+        // 'Expand-Archive -LiteralPath C:\archive.zip -DestinationPath C:\Dest'
+        
+        string strVersion=StringByKey("OSVERSION", igorinfo(3))
+        variable WinVersion=str2num(strVersion) // turns "10.1.2.3" into 10.1 and 6.23.111 into 6.2 (windows 8.0)
+        if (WinVersion<6.2) // https://docs.microsoft.com/en-us/windows/win32/sysinfo/operating-system…
+            print "unzipArchive requires Windows 8 or later"
+            return 0
+        endif
+        
+        archivePathStr=parseFilePath(5, archivePathStr, "\\", 0, 0)
+        unzippedPathStr=parseFilePath(5, unzippedPathStr, "\\", 0, 0)
+        cmd="powershell.exe -nologo -noprofile -command \"& { Add-Type -A 'System.IO.Compression.FileSystem';"
+        sprintf cmd "%s [IO.Compression.ZipFile]::ExtractToDirectory('%s', '%s'); }\"", cmd, archivePathStr, unzippedPathStr
+    else // Mac
+        sprintf unixCmd, "unzip %s -d %s", ParseFilePath(5, archivePathStr, "/", 0,0), ParseFilePath(5, unzippedPathStr, "/", 0,0)
+        sprintf cmd, "do shell script \"%s\"", unixCmd
+    endif
+    
+    executescripttext /B/UNQ/Z cmd
+    if(verbose)
+        print S_value // output from executescripttext
+    endif
+    
+    return (v_flag==0)
+end
