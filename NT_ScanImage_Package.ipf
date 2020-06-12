@@ -67,6 +67,11 @@ Function SI_CreatePackage()
 	NVAR dynamicROI_Size = NTSI:dynamicROI_Size
 	dynamicROI_Size = 10
 	
+	//Is the dynamic ROI scaling auto or cumulative?
+	Variable/G NTSI:scaleCumulative
+	NVAR scaleCumulative = NTSI:scaleCumulative
+	scaleCumulative = 0
+	
 	//keeps track of the number of frames that have gone into the average
 	Variable/G NTSI:rollingAverageCount
 	NVAR rollingAverageCount = NTSI:rollingAverageCount
@@ -532,8 +537,8 @@ Function/Wave SI_GetROIs(group)
 
 		SetDataFolder NTR
 	
-		String roiX = WaveList("*_x",";","MINROWS:5,MAXROWS:5")
-		String roiY = WaveList("*_y",";","MINROWS:5,MAXROWS:5")
+		String roiX = WaveList("*_x",";","MINROWS:5")
+		String roiY = WaveList("*_y",";","MINROWS:5")
 		String somaROIs = WaveList("*_soma",";","")
 		
 		Wave/T roiData = validROILists(roiList,groupList,currentGroup,roiX,roiY,somaROIs)
@@ -547,8 +552,8 @@ Function/Wave SI_GetROIs(group)
 		
 		SetDataFolder NTR
 	
-		roiX = WaveList("*_x",";","MINROWS:5,MAXROWS:5")
-		roiY = WaveList("*_y",";","MINROWS:5,MAXROWS:5")
+		roiX = WaveList("*_x",";","MINROWS:5")
+		roiY = WaveList("*_y",";","MINROWS:5")
 		somaROIs = WaveList("*_soma",";","")
 		
 		Wave/T roiData = validROILists(roiList,groupList,"",roiX,roiY,somaROIs)
@@ -814,7 +819,6 @@ Function DisplayScanField(imageList[,add])
 			Variable maxVal = WaveMax(theImage)
 			Variable minVal = WaveMin(theImage)
 			
-			maxVal = 0.5 * maxVal
 
 			//Append and modify the image being appended
 			//append the image
@@ -966,6 +970,7 @@ Function zoomScrollHook(s)
 	DFREF NTSI = root:Packages:NT:ScanImage
 	DFREF NTSR = root:Packages:NT:ScanImage:ROIs
 	NVAR clickROIStatus = NTSI:clickROIStatus
+	NVAR scaleCumulative = NTSI:scaleCumulative
 	
 	Variable hookResult = 0
 	switch(s.eventCode)
@@ -1076,12 +1081,28 @@ Function zoomScrollHook(s)
 					dROI /= (size * size)
 					
 					NVAR maxVal = NTSI:dynamicROI_MaxVal
-					Variable dROI_max = WaveMax(dROI)
-					If(dROI_max > maxVal)
-						maxVal = dROI_max
-						SetAxis/W=dynamicROI left,0,maxVal
-					EndIf
+					NVAR minVal = NTSI:dynamicROI_MinVal
 					
+					Variable dROI_min = WaveMin(dROI)
+					Variable dROI_max = WaveMax(dROI)
+					
+					//Accumulates min and max scaling such that the scale is the widest scale encountered during mouse movement
+					If(scaleCumulative)	
+						If(dROI_max > maxVal)
+							maxVal = dROI_max
+							SetAxis/W=dynamicROI left,minVal,maxVal
+						EndIf
+						
+						If(dROI_min < minVal)
+							minVal = dROI_min
+							SetAxis/W=dynamicROI left,minVal,maxVal
+						EndIf
+					Else
+						//always autoscales to the data limits
+						maxVal = 0
+						SetAxis/W=dynamicROI left,dROI_min,dROI_max
+					EndIf
+										
 //					//Get the ROI number we are hovering over
 //					String list = ImageNameList("SIDisplay#image" + num2str(sw) + "#graph" + num2str(sw),";")
 //					String ROIname = StringFromList(1,list,";")
@@ -1324,9 +1345,7 @@ Function flipMaxProj()
 		
 		Variable maxVal = WaveMax(theImage)
 		Variable minVal = WaveMin(theImage)
-		
-		maxVal = 0.5 * maxVal
-		
+				
 		plane = 0
 		ModifyImage/W=SIDisplay#$subPanel#$graph $NameOfWave(theImage) plane=plane,ctab= {minVal,maxVal,$"",0}
 		
@@ -2357,6 +2376,9 @@ Function siCheckBoxProc(cba) : CheckBoxControl
 					Wave ScanFieldSelWave = NTSI:ScanFieldSelWave
 					ScanFieldSelWave = checked
 					break
+				case "CumulativeScale":
+					NVAR scaleCumulative = NTSI:scaleCumulative
+					scaleCumulative = checked
 			endswitch
 			break
 		case -1: // control being killed
@@ -2557,6 +2579,9 @@ End
 Function StartDynamicROI(theImage)
 	Wave theImage
 	
+	DFREF NTSI = root:Packages:NT:ScanImage
+	NVAR scaleCumulative = NTSI:scaleCumulative
+	
 	//Make a new display window
 	GetWindow/Z dynamicROI wsize
 	KillWindow/Z dynamicROI
@@ -2567,6 +2592,9 @@ Function StartDynamicROI(theImage)
 		GetWindow/Z SIDisplay wsize
 		Display/N=dynamicROI/W=(V_right,V_top,V_right+300,V_top+200)/K=1 as "Dynamic ROI"
 	EndIf
+	
+	ControlBar/T/W=dynamicROI 20
+	Checkbox CumulativeScale,win=dynamicROI,pos={5,0},size={100,20},side=1,title="Cumulative Scaling ",value=scaleCumulative,proc=siCheckBoxProc 
 	
 	Variable frames = DimSize(theImage,2)
 	Variable delta = DimDelta(theImage,2)
@@ -2587,8 +2615,10 @@ Function StartDynamicROI(theImage)
 	
 	Variable/G NTSI:dynamicROI_MaxVal
 	NVAR maxVal = NTSI:dynamicROI_MaxVal
-	
-	maxVal = 0
+	Variable/G NTSI:dynamicROI_MinVal
+	NVAR minVal = NTSI:dynamicROI_MinVal
+	maxVal = -5000
+	minVal = 5000
 	
 	String/G NTSI:dynamicROI_Image
 	SVAR dynamicROI_Image = NTSI:dynamicROI_Image

@@ -1452,9 +1452,9 @@ Function Update_NT()
 	//Unzip the package
 	Print "Updating Packages..."
 	unzipArchive(path + "master.zip",path)	
-	
+
 	//Unzipped folder path
-	path += "NeuroTools-master:"
+	String packagePath = path + "NeuroTools-master:"
 	
 	String IgorAppPath = SpecialDirPath("Igor Application",0,0,0)
 	String UserProcPath = IgorAppPath + "User Procedures:NeuroTools:"
@@ -1468,13 +1468,11 @@ Function Update_NT()
 	String IgorProcedures = "NT_Loader.ipf;"
 	String IgorHelpFiles = "NeuroTools_Help.ihf;"
 	
-	
-	
 	//User Procedures
 	Variable i,numFiles = ItemsInList(UserProcedures,";")
 	For(i=0;i<numFiles;i+=1)
 		String fileName = StringFromList(i,UserProcedures,";")
-		String filePath = path + fileName
+		String filePath = packagePath + fileName
 		String destPath = UserProcPath + fileName
 		MoveFile/O filePath as destPath
 	EndFor	
@@ -1483,7 +1481,7 @@ Function Update_NT()
 	numFiles = ItemsInList(IgorProcedures,";")
 	For(i=0;i<numFiles;i+=1)
 		fileName = StringFromList(i,IgorProcedures,";")
-		filePath = path + fileName
+		filePath = packagePath + fileName
 		destPath = IgorProcPath + fileName
 		MoveFile/O filePath as destPath
 	EndFor
@@ -1492,13 +1490,13 @@ Function Update_NT()
 	numFiles = ItemsInList(IgorHelpFiles,";")
 	For(i=0;i<numFiles;i+=1)
 		fileName = StringFromList(i,IgorHelpFiles,";")
-		filePath = path + fileName
+		filePath = packagePath + fileName
 		destPath = IgorHelpPath + fileName
 		MoveFile/O filePath as destPath
 	EndFor
 	
 	//Cleanup 
-	DeleteFile/Z path + ":master.zip"
+	DeleteFile/Z path + "master.zip"
 	
 	//Reload NeuroTools package
 	GetWindow NT wsize
