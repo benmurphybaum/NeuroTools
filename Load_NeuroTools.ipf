@@ -1441,16 +1441,19 @@ Function Update_NT()
 	
 	String gitAddress="https://github.com/benmurphybaum/NeuroTools/archive/master.zip",gitFile="master.zip"
 	
+	//Move the files to the correct folders
+	String path = SpecialDirPath("Desktop",0,0,0)
+	
+	NewPath/O desktopPath,path
 	//Download the github repo as a zip file
 	Print "Downloading NeuroTools..."
-	URLRequest/O/FILE=gitFile/P=filePath url=gitAddress
+	URLRequest/O/FILE=gitFile/P=desktopPath url=gitAddress
 	
 	//Unzip the package
 	Print "Updating Packages..."
 	unzipArchive("bmb:Users:bmb:Downloads:master.zip","bmb:Users:bmb:Downloads")
 	
-	//Move the files to the correct folders
-	String path = SpecialDirPath("Desktop",0,0,0)
+	
 
 	String IgorAppPath = SpecialDirPath("Igor Application",0,0,0)
 	String UserProcPath = IgorAppPath + "User Procedures:NeuroTools:"
