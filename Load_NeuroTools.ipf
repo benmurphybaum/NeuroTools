@@ -1451,10 +1451,11 @@ Function Update_NT()
 	
 	//Unzip the package
 	Print "Updating Packages..."
-	unzipArchive("bmb:Users:bmb:Downloads:master.zip","bmb:Users:bmb:Downloads")
+	unzipArchive(path + "master.zip",path)	
 	
+	//Unzipped folder path
+	path += "NeuroTools-master:"
 	
-
 	String IgorAppPath = SpecialDirPath("Igor Application",0,0,0)
 	String UserProcPath = IgorAppPath + "User Procedures:NeuroTools:"
 	String IgorProcPath = IgorAppPath + "Igor Procedures:"
@@ -1466,6 +1467,8 @@ Function Update_NT()
 	
 	String IgorProcedures = "NT_Loader.ipf;"
 	String IgorHelpFiles = "NeuroTools_Help.ihf;"
+	
+	
 	
 	//User Procedures
 	Variable i,numFiles = ItemsInList(UserProcedures,";")
