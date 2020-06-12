@@ -965,6 +965,7 @@ Function zoomScrollHook(s)
 	STRUCT WMWinHookStruct &s
 	DFREF NTSI = root:Packages:NT:ScanImage
 	DFREF NTSR = root:Packages:NT:ScanImage:ROIs
+	NVAR clickROIStatus = NTSI:clickROIStatus
 	
 	Variable hookResult = 0
 	switch(s.eventCode)
@@ -1123,9 +1124,22 @@ Function zoomScrollHook(s)
 		case 5: //mouse up
 			Variable/G NTSI:mouseDrag
 			NVAR mouseDrag = NTSI:mouseDrag
+			NVAR mouseStartX = NTSI:mouseStartX
+			NVAR mouseStartY = NTSI:mouseStartY
+			
+			//Get target image for drawing
+			ControlInfo/W=SI targetImage
+			String target = S_Value
+				
 			mouseDrag = 0
-			s.doSetCursor = 1
-			s.cursorCode = 0 //hand cursor
+			
+			If(clickROIStatus)
+				//save the mouse position
+				CreateROIFromClick(s.mouseLoc.h,s.mouseLoc.v,target)
+			Else
+				s.doSetCursor = 1
+				s.cursorCode = 0 //hand cursor
+			EndIf
 			break
 		case 22: //mouse scroll
 			SVAR imageList = NTSI:SIDisplay_ImageNameList 
@@ -2722,8 +2736,12 @@ Function/S SelectedROIs([groups])
 End
 
 //Creates a new ROI using marquee coordinates, returns a wave reference wave with the X and Y coordinate waves
-Function/WAVE CreateROI(left,top,right,bottom)
-	Variable left,top,right,bottom
+Function/WAVE CreateROI(left,top,right,bottom,[autoName])
+	Variable left,top,right,bottom,autoName
+	
+	If(ParamIsDefault(autoName))
+		autoName = 0
+	EndIf
 	
 	If(!DataFolderExists("root:Packages:NT:ScanImage:ROIs"))
 		NewDataFolder root:Packages:NT:ScanImage:ROIs
@@ -2740,33 +2758,62 @@ Function/WAVE CreateROI(left,top,right,bottom)
 			break
 	endswitch
 	
-	//Get the selected ROI Group
-	String group = SelectedROIGroup()
+	DFREF saveDF = GetDataFolderDFR()
 	
-	If(ItemsInList(group,";") == 0)
-		//no groups selected, create a new one
+	If(autoName)
+		//Make a new ROI group
 		String newGroup = UniqueName("Group",11,0)
-		
 		NewDataFolder $(roiFolder + newGroup)
-		
+	
 		DFREF NTR = $(roiFolder + newGroup)
-	Else
-		//in case of multiple selections, put new ROI into the first selected group
-		group = StringFromList(0,group,";")
 		
-		DFREF NTR = $(roiFolder + group)
-	EndIf
-
-	//Make ROI coordinates X and Y waves
-	ControlInfo/W=SIDisplay#control ROIname
-	String name = S_Value + "_x"
+		//Make numerically named ROIs
+		SetDataFolder NTR
+		Variable index = 0
+		Do
+			String name = "ROI_" + num2str(index)
+			If(!WaveExists($(roiFolder + name + "_x")) && !WaveExists($(roiFolder + name + "_y")))
+				break
+			EndIf
+			index += 1
+			
+			If(index == 1000)
+				Abort "Couldn't find an available ROI name"
+			EndIf
+		While(1)
+		
+		String S_Value = name
+		name += "_x"
+	Else
+		//Get the selected ROI Group
+		String group = SelectedROIGroup()
+		
+		If(ItemsInList(group,";") == 0)
+			//no groups selected, create a new one
+			newGroup = UniqueName("Group",11,0)
+			
+			NewDataFolder $(roiFolder + newGroup)
+			
+			DFREF NTR = $(roiFolder + newGroup)
+		Else
+			//in case of multiple selections, put new ROI into the first selected group
+			group = StringFromList(0,group,";")
+			
+			DFREF NTR = $(roiFolder + group)
+		EndIf
 	
-	If(!strlen(S_Value))
-		Abort "Must enter a name for the ROI"
-		return $""
-	EndIf
+		//Make ROI coordinates X and Y waves
+		ControlInfo/W=SIDisplay#control ROIname
+		name = S_Value + "_x"
+		
 	
-	If(WaveExists($(roiFolder + S_Value + "_x")) || WaveExists($(roiFolder + S_Value + "_x")))
+		If(!strlen(S_Value))
+			Abort "Must enter a name for the ROI"
+			return $""
+		EndIf
+	EndIf
+		
+	If(WaveExists($(roiFolder + S_Value + "_x")) || WaveExists($(roiFolder + S_Value + "_y")))
 		DoAlert/T="Overwrite ROI?" 1,"ROI already exists. Overwrite?"
 		If(V_flag == 2) //clicked no
 			return $""
@@ -2798,6 +2845,7 @@ Function/WAVE CreateROI(left,top,right,bottom)
 	roiRefs[0] = roiX
 	roiRefs[1] = roiY
 	
+	SetDataFolder saveDF
 	return roiRefs
 End
 
@@ -2965,6 +3013,10 @@ Function FindSomas(theImage,roiName)
 								endX = blockSize - 1
 							EndIf
 							
+							If(endX < 0)
+								continue
+							EndIf
+							
 							overShootY = shiftY + blockSize - cols  
 							If(overShootY > 0)
 								endY = blockSize - overShootY - 1
@@ -2972,9 +3024,10 @@ Function FindSomas(theImage,roiName)
 								endY = blockSize - 1
 							EndIf
 							
-							If(roiCount == 23)
-								print "p"
-							endif
+							If(endY < 0)
+								continue
+							EndIf
+							
 							//Get new block that is better centered
 							MultiThread block = 0
 							MultiThread block[0,endX][0,endY] = temp[p + shiftX][q + shiftY]
@@ -4191,6 +4244,53 @@ Function NT_ResponseQuality(ds)
 	
 	SetDataFolder saveDF
 End
+
+//Parent function for providing a few different methods for making many ROIs all at once
+Function NT_CreateROIs()
+	
+	//Get target image for drawing
+	ControlInfo/W=SI targetImage
+	String target = S_Value
+	
+	//Set hook function for creating ROIs
+	Variable/G root:Packages:NT:ScanImage:clickROIStatus
+	NVAR clickROIStatus = root:Packages:NT:ScanImage:clickROIStatus
+	clickROIStatus = 1
+End
+
+//Creates an ROI of
+Function CreateROIFromClick(mh,mv,target)
+	Variable mh,mv
+	String target
+	
+	Variable width = 10
+	Variable height = 10
+	
+	Variable subWin = whichSubWindow()
+	
+	If(!cmpstr(target,"SIDisplay"))
+		target += "#image" + num2str(subWin) + "#graph" + num2str(subWin)
+	EndIf
+	
+	String imageName = StringFromList(0,ImageNameList(target,";"),";")
+	String info = ImageInfo(target,imageName,0)
+	String xAxis = StringByKey("XAXIS",info,":",";")
+	String yAxis = StringByKey("YAXIS",info,":",";")
+	
+	Variable xCenter = AxisValFromPixel(target,xAxis,mh)
+	Variable yCenter = AxisValFromPixel(target,yAxis,mv)
+	
+	Wave image = ImageNameToWaveRef(target,imageName)
+	Variable left = xCenter - (DimDelta(image,0) * width * 0.5)
+	Variable top  = yCenter - (DimDelta(image,1) * height * 0.5)
+	Variable right = xCenter + (DimDelta(image,0) * width * 0.5)
+	Variable bottom  = yCenter + (DimDelta(image,1) * height * 0.5)
+	
+	Wave/WAVE roiRefs = CreateROI(left,top,right,bottom,autoName=1)
+	
+	AppendToGraph/W=$target/T=$xAxis/L=$yAxis roiRefs[1] vs roiRefs[0]
+End
+
 
 //Returns a mask wave for the input scan
 Function/WAVE GetDendriticMask(theWave)

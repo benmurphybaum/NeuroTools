@@ -1450,7 +1450,7 @@ Function Update_NT()
 	unzipArchive("bmb:Users:bmb:Downloads:master.zip","bmb:Users:bmb:Downloads")
 	
 	//Move the files to the correct folders
-	String path = "bmb:Users:bmb:Downloads:NeuroTools-master:"
+	String path = SpecialDirPath("Desktop",0,0,0)
 
 	String IgorAppPath = SpecialDirPath("Igor Application",0,0,0)
 	String UserProcPath = IgorAppPath + "User Procedures:NeuroTools:"
