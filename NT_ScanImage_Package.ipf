@@ -1159,7 +1159,7 @@ Function zoomScrollHook(s)
 				CreateROIFromClick(s.mouseLoc.h,s.mouseLoc.v,target)
 			Else
 				s.doSetCursor = 1
-				s.cursorCode = 0 //hand cursor
+				s.cursorCode = 3 //hand cursor
 			EndIf
 			break
 		case 22: //mouse scroll
@@ -2088,6 +2088,10 @@ Function siButtonProc(ba) : ButtonControl
 			// click code here
 			strswitch(ba.ctrlName)
 				case "displayScanfield":
+					//first ensure that the mouse drag monitor is set to 0
+					NVAR mouseDrag = NTSI:mouseDrag
+					mouseDrag = 0
+					
 					//displays the selected scanfield in a new panel
 					String imageList = GetSelectedImages()
 					DisplayScanField(imageList)
@@ -2116,27 +2120,53 @@ Function siButtonProc(ba) : ButtonControl
 				case "liveROIs":
 					//Disable the movement hook
 					SetWindow SIDisplay hook(zoomScrollHook) = $""
-					SetVariable ROIname win=SIDisplay#control,pos={196,23},size={50,20},font=$LIGHT,value=_STR:"",disable=0
-					Button confirmROI win=SIDisplay#control,pos={250,20},size={60,20},font=$LIGHT,valueColor=(0,0x9999,0),title="Confirm",disable=0,proc=siButtonProc
+					
 					Button somaROI win=SIDisplay#control,pos={315,20},size={80,20},font=$LIGHT,valueColor=(0,0x9999,0),title="Find Somas",disable=0,proc=siButtonProc
+					
+					
+					//Build a new external panel for controlling ROI creation
+					DoWindow/W=SIDisplay#ROIPanel ROIPanel
+					If(V_flag)
+						break
+					EndIf
+					
+					NewPanel/EXT=1/HOST=SIDisplay/N=ROIPanel/W=(110,0,0,300) as "Create ROIs"
+					PopUpMenu roiType,win=SIDisplay#ROIPanel,pos={28,10},size={72,20},bodywidth=72,title="Type",font=$LIGHT,value="Marquee;Click;Grid;",proc=siPopProc
+			
+					SetVariable roiWidth,win=SIDisplay#ROIPanel,pos={2,35},size={60,20},bodywidth=30,title="Width",font=$LIGHT,limits={2,inf,1},value=_NUM:10,disable=1
+					SetVariable roiHeight,win=SIDisplay#ROIPanel,pos={2,55},size={60,20},bodywidth=30,title="Height",font=$LIGHT,limits={2,inf,1},value=_NUM:10,disable=1
+					
+					SetVariable ROIname win=SIDisplay#ROIPanel,pos={3,35},size={93,20},font=$LIGHT,value=_STR:"",title="Name",disable=0
+					
+					Wave/T ROIGroupListWave = NTSI:ROIGroupListWave
+					String/G NTSI:GroupList 
+					SVAR GroupList = NTSI:GroupList
+					GroupList = "**NEW**;" + TextWaveToStringList(ROIGroupListWave,";")
+					
+					PopUpMenu roiGroupSelect,win=SIDisplay#ROIPanel,pos={5,55},bodywidth=72,title="Group",font=$LIGHT,value=#"root:Packages:NT:ScanImage:GroupList",proc=siPopProc
+					
+					
+					
+					Button addROI win=SIDisplay#ROIPanel,pos={2,75},size={20,20},font=$LIGHT,valueColor=(0,0x9999,0),title="+",disable=0,proc=siButtonProc
+					Button confirmROI win=SIDisplay#ROIPanel,pos={25,75},size={81,20},font=$LIGHT,valueColor=(0,0x9999,0),title="Done",disable=0,proc=siButtonProc
+					
+					
 					break
+				
+				case "addROI":
+					//Adds new marquee ROI
 
-				case "confirmROI":
-					//Enable the movement hook
-					SetWindow SIDisplay hook(zoomScrollHook) = zoomScrollHook
-					
-					//Hide the confirm button and ROI name entry
-					SetVariable ROIname win=SIDisplay#control,disable=3
-					Button confirmROI win=SIDisplay#control,disable=3,proc=siButtonProc
-					Button somaROI win=SIDisplay#control,disable=3,proc=siButtonProc
-					
-						
 					//Get target image for drawing
 					ControlInfo/W=SI targetImage
 					String target = S_Value
-							
+					
+					If(!strlen(target))
+						target = "SIDisplay"
+						PopUpMenu targetImage,win=SI,value="SIDisplay"
+					EndIf
+					
 					If(!cmpstr(target,"SIDisplay"))
-						GetMarquee/W=#/K/Z left,top
+						GetMarquee/W=$("SIDisplay#image0#graph0")/K/Z left,top
 					Else
 						GetMarquee/W=$target/K/Z left,top
 					EndIf
@@ -2191,6 +2221,13 @@ Function siButtonProc(ba) : ButtonControl
 						EndIf						
 						updateImageBrowserLists()
 					EndIf		
+					
+					break
+				case "confirmROI":
+					//Enable the mouse movement hook for the SIDisplay window
+					SetWindow SIDisplay hook(zoomScrollHook) = zoomScrollHook
+					
+					KillWindow/Z SIDisplay#ROIPanel
 					break
 				case "somaROI":
 					//Finds all the somas in the ROI, and makes a 3D ROI mask wave, each soma in it's own layer
@@ -2521,6 +2558,10 @@ Function siPopProc(pa) : PopupMenuControl
 						DoWindow/F $popStr
 					EndIf
 					break
+				case "roiType":
+					//handle ROI creation control displays
+					SwitchROIControls(popStr)
+					break
 			endswitch
 			
 			break
@@ -2573,6 +2614,38 @@ Function siSliderProc(sa) : SliderControl
 	endswitch
 
 	return 0
+End
+
+//Switches control display on the ROI Creation Panel according to ROI type
+Function SwitchROIControls(roiType)
+	String roiType
+	
+	strswitch(roiType)
+		case "Marquee":
+			SetVariable roiWidth,win=SIDisplay#ROIPanel,disable=1
+			SetVariable roiHeight,win=SIDisplay#ROIPanel,disable=1
+			SetVariable ROIname,win=SIDisplay#ROIPanel,pos={3,35},disable=0
+			Button addROI,win=SIDisplay#ROIPanel,disable=0
+			Button confirmROI,win=SIDisplay#ROIPanel,pos={25,75},size={81,20},title="Done"
+			PopUpMenu roiGroupSelect,win=SIDisplay#ROIPanel,pos={5,55},bodywidth=72,disable=0
+			break
+		case "Click":
+			SetVariable roiWidth,win=SIDisplay#ROIPanel,disable=0
+			SetVariable roiHeight,win=SIDisplay#ROIPanel,disable=0
+			SetVariable ROIname,win=SIDisplay#ROIPanel,pos={3,75},disable=0
+			Button addROI,win=SIDisplay#ROIPanel,disable=1
+			Button confirmROI,win=SIDisplay#ROIPanel,pos={2,115},size={93,20},title="Start"
+			PopUpMenu roiGroupSelect,win=SIDisplay#ROIPanel,pos={5,95},bodywidth=72, disable=0
+			break
+		case "Grid":
+			SetVariable roiWidth,win=SIDisplay#ROIPanel,disable=0
+			SetVariable roiHeight,win=SIDisplay#ROIPanel,disable=0
+			SetVariable ROIname,win=SIDisplay#ROIPanel,pos={3,75},disable=0
+			Button addROI,win=SIDisplay#ROIPanel,disable=1
+			Button confirmROI,win=SIDisplay#ROIPanel,pos={2,115},size={93,20},title="Start"
+			PopUpMenu roiGroupSelect,win=SIDisplay#ROIPanel,pos={5,95},bodywidth=72,disable=0
+			break
+	endswitch
 End
 
 //Dynamic ROI
@@ -2833,7 +2906,7 @@ Function/WAVE CreateROI(left,top,right,bottom,[autoName])
 		EndIf
 	
 		//Make ROI coordinates X and Y waves
-		ControlInfo/W=SIDisplay#control ROIname
+		ControlInfo/W=SIDisplay#ROIPanel ROIname
 		name = S_Value + "_x"
 		
 	
