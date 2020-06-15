@@ -5228,8 +5228,8 @@ Function RunCmd_ScanImagePackage(cmd)
 		case "Vector Sum Map":
 			GetStruct(ds)
 			String angles = GetVectorSumAngles(ds,ds.numWaves)
-//			NT_VectorSumMap(ds,angles)
-			NT_FindDSCells(ds,angles)
+			NT_VectorSumMap(ds,angles)
+//			NT_FindDSCells(ds,angles)
 			break
 		case "Response Quality":
 			GetStruct(ds)
