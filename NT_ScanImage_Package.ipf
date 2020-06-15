@@ -1176,6 +1176,9 @@ Function zoomScrollHook(s)
 				
 			If(!cmpstr(target,"SIDisplay"))
 				sw = WhichSubWindow()
+				If(sw == -1) //in case of window focus error or something
+					sw = 0
+				EndIf
 				target = "SIDisplay#image" + num2str(sw) + "#graph" + num2str(sw)
 			EndIf
 			
@@ -3057,12 +3060,17 @@ Function/WAVE CreateROI(left,top,right,bottom,[group,baseName,autoName])
 	//was just created. 
 	DFREF NTSI = root:Packages:NT:ScanImage
 	
+	updateImageBrowserLists()
+	refreshROIGroupList()
+	
 	SVAR ROIGroupList = NTSI:GroupList
 	index = WhichListItem(group,ROIGroupList,";")
+	
 	If(index != -1)
 		PopUpMenu roiGroupSelect,win=SIDisplay#ROIPanel,mode=index+1
 		ControlUpdate/A
 	EndIf
+	
 	return roiRefs
 End
 
