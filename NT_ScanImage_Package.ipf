@@ -1174,9 +1174,11 @@ Function zoomScrollHook(s)
 				Variable diffY =  AxisValFromPixel(graphRef,"left",s.mouseLoc.v) - AxisValFromPixel(graphRef,"left",mouseStartY)
 				
 				//If nudge ROI is engaged, we may have clicked an ROI, in which case this is the wave reference
-				Wave xROI = clickedROIRef[0]
-				Wave yROI = clickedROIRef[1]
-				
+				If(WaveExists(clickedROIRef))
+					Wave xROI = clickedROIRef[0]
+					Wave yROI = clickedROIRef[1]
+				EndIf
+						
 				If(WaveExists(xROI) && WaveExists(yROI))
 					Variable doNudge = 1
 				EndIf
