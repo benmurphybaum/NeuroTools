@@ -1462,7 +1462,7 @@ Function Update_NT()
 	String IgorProcPath = IgorAppPath + "Igor Procedures:"
 	String IgorHelpPath = IgorAppPath + "Igor Help Files:"
 	
-	String UserProcedures = "Load_NeuroTools.ipf;NT_Common.ipf;NT_Controls.ipf;NT_DataSets.ipf;NT_ExternalFunctions.ipf;NT_Functions.ipf;"
+	String UserProcedures = "Load_NeuroTools.ipf;NT_Common.ipf;NT_Controls.ipf;NT_DataSets.ipf;NT_Functions.ipf;"
 	UserProcedures += "NT_ImageRegistration.ipf;NT_InsertTemplate.ipf;NT_ScanImage_Package.ipf;NT_Imaging_Package.ipf;NT_Structures.ipf;"
 	UserProcedures += "ScanImageTiffReader.ipf;ReadMe.md;LICENSE;"
 	

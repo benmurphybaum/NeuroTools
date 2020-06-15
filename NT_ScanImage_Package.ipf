@@ -20,6 +20,11 @@ Function SI_CreatePackage()
 		NewDataFolder root:Scans
 	EndIf
 	
+	//Make the ScanImage ROI folder
+	If(!DataFolderExists("root:Packages:NT:ScanImage:ROIs"))
+		NewDataFolder root:Packages:NT:ScanImage:ROIs
+	EndIf
+	
 	DFREF NTSI = root:Packages:NT:ScanImage
 	
 	//Are we creating scanimage file structures or 2PLSM?
@@ -2195,7 +2200,9 @@ Function siButtonProc(ba) : ButtonControl
 	STRUCT WMButtonAction &ba
 	
 	DFREF NTSI = root:Packages:NT:ScanImage
-	
+	NVAR ROI_Width = NTSI:ROI_Width
+	NVAR ROI_Height = NTSI:ROI_Height
+					
 	Variable hookResult = 0
 	switch( ba.eventCode )
 		case 2: // mouse up
@@ -2251,9 +2258,7 @@ Function siButtonProc(ba) : ButtonControl
 					If(!cmpstr(S_Value,"Marquee"))
 						SetWindow SIDisplay hook(zoomScrollHook) = $""
 					EndIf
-					
-					NVAR ROI_Width = NTSI:ROI_Width
-					NVAR ROI_Height = NTSI:ROI_Height
+				
 	
 					SetVariable roiWidth,win=SIDisplay#ROIPanel,pos={2,35},size={60,20},bodywidth=30,title="Width",font=$LIGHT,limits={2,inf,1},value=ROI_Width,disable=1
 					SetVariable roiHeight,win=SIDisplay#ROIPanel,pos={2,55},size={60,20},bodywidth=30,title="Height",font=$LIGHT,limits={2,inf,1},value=ROI_Height,disable=1
@@ -2365,28 +2370,49 @@ Function siButtonProc(ba) : ButtonControl
 					NVAR ROI_Engaged = NTSI:ROI_Engaged
 					
 					ControlInfo/W=SIDisplay#ROIPanel roiType
-					If(!cmpstr(S_Value,"Marquee"))
-						Button confirmROI win=SIDisplay#ROIPanel,title="Done"
-						KillWindow/Z SIDisplay#ROIPanel
-						break
-					EndIf
 					
-					If(ROI_Engaged)
-						ROI_Engaged = 0 //set back to zero, finished creating ROIs
+					strswitch(S_Value) //ROI Type
+						case "Marquee":
+							Button confirmROI win=SIDisplay#ROIPanel,title="Done"
+							KillWindow/Z SIDisplay#ROIPanel
+							break
+						case "Grid":
+							//Get target image for drawing
+							ControlInfo/W=SI targetImage
+							target = S_Value
+							
+							//always use the first image in the SIDisplay panel if multiples are displayed
+							If(!cmpstr(target,"SIDisplay"))
+								target = "SIDisplay#image0#graph0" 
+							EndIf
+							
+							//Get base ROI name
+							ControlInfo/W=SIDisplay#ROIPanel roiName
+							baseName = S_Value
 						
-						Button confirmROI win=SIDisplay#ROIPanel,title="Start"
-											
-						KillWindow/Z SIDisplay#ROIPanel
+							//Get group name
+							ControlInfo/W=SIDisplay#ROIPanel roiGroupSelect
+							group = S_Value			
 						
-						//Enable the mouse movement hook for the SIDisplay window
-						SetWindow SIDisplay hook(zoomScrollHook) = zoomScrollHook
-						
-					Else
-						//Begin creating ROIs
-						ROI_Engaged = 1
-						
-						Button confirmROI win=SIDisplay#ROIPanel,title="Finish"
-					EndIf
+							CreateROIGrid(ROI_Width,ROI_Height,target,group,baseName)
+							break
+						case "Click":
+							If(ROI_Engaged)
+								ROI_Engaged = 0 //set back to zero, finished creating ROIs
+								
+								Button confirmROI win=SIDisplay#ROIPanel,title="Start"						
+								KillWindow/Z SIDisplay#ROIPanel
+								
+								//Enable the mouse movement hook for the SIDisplay window
+								SetWindow SIDisplay hook(zoomScrollHook) = zoomScrollHook	
+							Else
+								//Begin creating ROIs
+								ROI_Engaged = 1
+								
+								Button confirmROI win=SIDisplay#ROIPanel,title="Finish"
+							EndIf
+							break
+					endswitch					
 					break
 				case "somaROI":
 					//Finds all the somas in the ROI, and makes a 3D ROI mask wave, each soma in it's own layer
@@ -4558,7 +4584,7 @@ Function NT_ResponseQuality(ds)
 	SetDataFolder saveDF
 End
 
-//Creates an ROI of
+//Creates an ROI at the point of the mouse click
 Function CreateROIFromClick(mh,mv,width,height,target,group,baseName)
 	Variable mh,mv,width,height
 	String target,group,baseName
@@ -4590,6 +4616,108 @@ Function CreateROIFromClick(mh,mv,width,height,target,group,baseName)
 	refreshROIGroupList()
 End
 
+//Create an ROI grid across an image
+Function CreateROIGrid(w,h,target,group,baseName)
+	Variable w,h
+	String target,group,baseName
+	
+	DFREF NTSI = root:Packages:NT:ScanImage
+	
+	//Get the image wave (time-varying scan, not max projection)
+	SVAR SIDisplay_ImagePaths = NTSI:SIDisplay_ImagePaths
+	Wave image = $StringFromList(0,SIDisplay_ImagePaths,";")
+	
+	If(!WaveExists(image))
+		return 0
+	EndIf
+	
+	//Determine base folder for the scans
+	String software = whichImagingSoftware()
+	
+	strswitch(software)
+		case "ScanImage":
+			String roiFolder = "root:Packages:NT:ScanImage:ROIs:"
+			break
+		case "2PLSM":
+			roiFolder = "root:twoP_ROIS:"
+			break
+	endswitch
+	
+	//Make a new ROI group if selected
+	If(!cmpstr(group,"**NEW**"))
+		group = UniqueName("Group",11,0)
+		NewDataFolder $(roiFolder + group)
+	EndIf
+	
+	//First get a variance map of the image, in order to create a dendritic mask
+	Wave mask = GetDendriticMask(image)
+	Redimension/B/U mask
+	CopyScales image,mask
+	
+	//Make a wave reference wave to hold all ROIs, high limit to 2000 ROIs per grid
+	Make/FREE/WAVE/N=1000 xROI_Refs,yROI_Refs
+	
+	//Fill the entire image with ROIs in square grid first, then prune them away
+	Variable row=0,col=0,strideX=w,strideY=h,index=0
+	Do
+		col = 0
+		If(row + strideX - 1 > DimSize(mask,0)-1)
+			break
+		EndIf
+		Do
+		
+			If(col + strideY - 1 > DimSize(mask,1)-1)
+				break
+			EndIf
+			
+			Make/N=5/FREE roiX,roiY			
+			
+			//X ROI coordinates
+			roiX[0] = IndexToScale(mask,row,0)
+			roiX[1] = IndexToScale(mask,row,0)
+			roiX[2] = IndexToScale(mask,row+strideX-1,0)
+			roiX[3] = IndexToScale(mask,row+strideX-1,0)
+			roiX[4] = IndexToScale(mask,row,0)
+			
+			//Y ROI coordinates
+			roiY[0] = IndexToScale(mask,col,1)
+			roiY[1] = IndexToScale(mask,col+strideY-1,1)
+			roiY[2] = IndexToScale(mask,col+strideY-1,1)
+			roiY[3] = IndexToScale(mask,col,1)
+			roiY[4] = IndexToScale(mask,col,1)
+
+			
+			//Create mask for the ROI and compare it with the image mask to see if there is enough fluorescence to merit an ROI.
+			Variable xSeed = IndexToScale(mask,row+3,0)
+			Variable ySeed = IndexToScale(mask,col+3,1)
+			
+			ImageBoundaryToMask width=DimSize(mask,0),height=DimSize(mask,1),xwave=roiX,ywave=roiY,scalingwave=mask,seedX=xSeed,seedY=ySeed
+			Wave ROIMask = M_ROIMask
+			MatrixOP/FREE bit = bitAND(mask,ROIMask)
+			
+			//thresholding
+			If(sum(bit) < 0.3 * (w * h))
+				KillWaves/Z roiX,roiY
+				col += strideY
+				continue
+			EndIf
+			
+			//Make new waves
+			Make/N=5/O $(roiFolder + group + ":" + baseName + "_" + num2str(index) + "_y")/Wave=yROI
+			Make/N=5/O $(roiFolder + group + ":" + baseName + "_" + num2str(index) + "_x")/Wave=xROI
+			
+			//put into the wave reference waves
+			xROI = roiX
+			yROI = roiY
+			
+			col += strideY
+			index += 1
+		While(1)
+		
+		row += strideX
+	While(1)
+
+End
 
 //Returns a mask wave for the input scan
 Function/WAVE GetDendriticMask(theWave)
@@ -4606,7 +4734,14 @@ Function/WAVE GetDendriticMask(theWave)
 	frames = DimSize(theWave,2)
 	
 	Redimension/S maxProj
+	
+	//Must be a scan (3D), not a max projection or single frame image
+	If(DimSize(theWave,2) == 0)
+		return $""
+	EndIf
+	
 	Multithread maxProj /= DimSize(theWave,2)
+	
 	
 	Make/FREE/N=(DimSize(theWave,0),DimSize(theWave,1)) varMap
 	varMap = 0
