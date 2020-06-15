@@ -2110,6 +2110,7 @@ Function HandleSelectionRightClick(selection,software,ROIListWave,ROISelWave)
 				String baseROIPath = "root:twoP_ROIS:"
 			Else
 				DFREF NTR = root:twoP_ROIS
+				baseROIPath = "root:twoP_ROIS:"
 			EndIf
 		Else
 			DFREF NTR = root:Packages:NT:ScanImage:ROIs:$roiGroup
@@ -2157,7 +2158,11 @@ Function HandleSelectionRightClick(selection,software,ROIListWave,ROISelWave)
 					return 0
 				EndIf
 				
-				String moveToROI = selection
+				//First pass
+				If(i == 0)
+					String moveToROI = selection
+				EndIf
+				
 				Wave roiX = NTR:$(roiName + "_x")
 				Wave roiY = NTR:$(roiName + "_y")
 				
