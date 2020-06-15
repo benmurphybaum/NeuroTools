@@ -13,6 +13,7 @@
 //StrConstant SUBTITLE = "Mongolian Baiti"
 
 STRCONSTANT NTversion = "1.0"
+STRCONSTANT NTLastUpdate = "June 14, 2020"
 
 //Builds the GUI
 Function LoadNT([left,top])
@@ -1510,6 +1511,7 @@ Function Update_NT()
 	EndIf
 	
 	print "Version: ",NTversion
+	print "Last Update: ",NTLastUpdate
 End
 
 //Unzips an archived file
