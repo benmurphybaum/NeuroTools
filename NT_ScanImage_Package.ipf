@@ -87,7 +87,6 @@ Function SI_CreatePackage()
 	Make/O/T/N=0 NTSI:ROIGroupListWave /Wave = ROIGroupListWave
 	Make/O/N=0 NTSI:ROIGroupSelWave /Wave = ROIGroupSelWave
 	
-	
 	//ROI groups, select first group
 	Wave/T listWave = SI_GetROIGroups()
 	Redimension/N=(DimSize(listWave,0)) ROIGroupListWave,ROIGroupSelWave
@@ -99,6 +98,17 @@ Function SI_CreatePackage()
 	Else
 		group = ""
 	EndIf
+	
+	Variable/G NTSI:ROI_Engaged
+	NVAR ROI_Engaged = NTSI:ROI_Engaged
+	ROI_Engaged = 0
+	
+	Variable/G NTSI:ROI_Width
+	NVAR ROI_Width = NTSI:ROI_Width
+	ROI_Width = 15
+	Variable/G NTSI:ROI_Height
+	NVAR ROI_Height = NTSI:ROI_Height
+	ROI_Height = 15
 	
 	//ROIs within the selected group
 	Wave/T listWave = SI_GetROIs(group)
@@ -971,7 +981,8 @@ Function zoomScrollHook(s)
 	DFREF NTSR = root:Packages:NT:ScanImage:ROIs
 	NVAR clickROIStatus = NTSI:clickROIStatus
 	NVAR scaleCumulative = NTSI:scaleCumulative
-	
+	NVAR ROI_Engaged = NTSI:ROI_Engaged
+		
 	Variable hookResult = 0
 	switch(s.eventCode)
 		case 0: //Activate
@@ -979,6 +990,7 @@ Function zoomScrollHook(s)
 		case 1: //Deactivate
 			break
 		case 3: //mouse down
+			
 			Variable/G NTSI:mouseDrag
 			NVAR mouseDrag = NTSI:mouseDrag
 			
@@ -990,7 +1002,10 @@ Function zoomScrollHook(s)
 				break
 			EndIf
 			
-			mouseDrag = 1
+			//If we're creating an ROI, don't engage the drag hook function
+			If(!ROI_Engaged)
+				mouseDrag = 1
+			EndIf
 			
 			mouseStartX = s.mouseLoc.h
 			mouseStartY = s.mouseLoc.v
@@ -999,6 +1014,8 @@ Function zoomScrollHook(s)
 			return hookResult
 			break
 		case 4: //mouse moved
+			//This is allowed to execute during ROI creation, so dynamic ROI is 
+			//available simultaneously...
 			
 			NVAR isDynamicROI = NTSI:isDynamicROI	
 			NVAR mouseDrag = NTSI:mouseDrag
@@ -1009,7 +1026,7 @@ Function zoomScrollHook(s)
 		 	If(sw == -1)
 		 		return 0
 		 	EndIf
-		 	
+		 		 	
 			//Skip dynamic ROI if we're dragging the frame around
 			If(!mouseDrag)
 				If(isDynamicROI)
@@ -1038,12 +1055,14 @@ Function zoomScrollHook(s)
 					rows = DimSize(theImage,0)
 					cols = DimSize(theImage,1)
 					
+					
+					String target = "SIDisplay#image" + num2str(sw) + "#graph" + num2str(sw)
 					//Horizontal index of image
-					Variable hPixel = AxisValFromPixel("SIDisplay#image" + num2str(sw) + "#graph" + num2str(sw),"top",s.mouseLoc.h)
+					Variable hPixel = AxisValFromPixel(target,"top",s.mouseLoc.h)
 					hPixel = ScaleToIndex(theImage,hPixel,0)
 					
 					//Vertical index of image
-					Variable vPixel = AxisValFromPixel("SIDisplay#image" + num2str(sw) + "#graph" + num2str(sw),"left",s.mouseLoc.v)
+					Variable vPixel = AxisValFromPixel(target,"left",s.mouseLoc.v)
 					vPixel = ScaleToIndex(theImage,vPixel,1)
 					
 					//Ensure valid index
@@ -1112,9 +1131,12 @@ Function zoomScrollHook(s)
 //						Variable roiNumber = roiMask[hPixel][vPixel]
 //						print roiNumber	
 //					EndIf
+
+					
 				EndIf
 				return 1
 			Else
+				//Drag the image around
 				NVAR mouseStartX = NTSI:mouseStartX
 				NVAR mouseStartY = NTSI:mouseStartY
 				
@@ -1150,19 +1172,52 @@ Function zoomScrollHook(s)
 			
 			//Get target image for drawing
 			ControlInfo/W=SI targetImage
-			String target = S_Value
+			target = S_Value
 				
+			If(!cmpstr(target,"SIDisplay"))
+				sw = WhichSubWindow()
+				target = "SIDisplay#image" + num2str(sw) + "#graph" + num2str(sw)
+			EndIf
+			
 			mouseDrag = 0
 			
-			If(clickROIStatus)
-				//save the mouse position
-				CreateROIFromClick(s.mouseLoc.h,s.mouseLoc.v,target)
+			//Create a new ROI if it's engaged
+			If(ROI_Engaged)
+				ControlInfo/W=SIDisplay#ROIPanel roiType
+				strswitch(S_Value)
+					case "Click":
+						//What is the width and height?
+						ControlInfo/W=SIDisplay#ROIPanel roiWidth
+						Variable width = V_Value
+						
+						ControlInfo/W=SIDisplay#ROIPanel roiHeight
+						Variable height = V_Value
+						
+						ControlInfo/W=SIDisplay#ROIPanel roiName
+						String baseName = S_Value
+						
+						ControlInfo/W=SIDisplay#ROIPanel roiGroupSelect
+						String group = S_Value
+						
+						CreateROIFromClick(mouseStartX,mouseStartY,width,height,target,group,baseName)
+						break
+					case "Grid":
+						break
+					default:
+						break
+				endswitch
 			Else
 				s.doSetCursor = 1
 				s.cursorCode = 3 //hand cursor
 			EndIf
+			
 			break
 		case 22: //mouse scroll
+			//If we're creating an ROI, don't perform hook function
+			If(ROI_Engaged)
+				break
+			EndIf
+			
 			SVAR imageList = NTSI:SIDisplay_ImageNameList 
 			
 			GetMouse/W=SIDisplay
@@ -1979,6 +2034,7 @@ Function siListBoxProc(lba) : ListBoxControl
 			endswitch
 			
 			updateImageBrowserLists()
+			refreshROIGroupList()
 			break
 		case 13: // checkbox clicked (Igor 6.2 or later)
 			break
@@ -2118,10 +2174,8 @@ Function siButtonProc(ba) : ButtonControl
 					break
 					
 				case "liveROIs":
-					//Disable the movement hook
-					SetWindow SIDisplay hook(zoomScrollHook) = $""
 					
-					Button somaROI win=SIDisplay#control,pos={315,20},size={80,20},font=$LIGHT,valueColor=(0,0x9999,0),title="Find Somas",disable=0,proc=siButtonProc
+//					Button somaROI win=SIDisplay#control,pos={315,20},size={80,20},font=$LIGHT,valueColor=(0,0x9999,0),title="Find Somas",disable=0,proc=siButtonProc
 					
 					
 					//Build a new external panel for controlling ROI creation
@@ -2131,11 +2185,20 @@ Function siButtonProc(ba) : ButtonControl
 					EndIf
 					
 					NewPanel/EXT=1/HOST=SIDisplay/N=ROIPanel/W=(110,0,0,300) as "Create ROIs"
-					PopUpMenu roiType,win=SIDisplay#ROIPanel,pos={28,10},size={72,20},bodywidth=72,title="Type",font=$LIGHT,value="Marquee;Click;Grid;",proc=siPopProc
+					PopUpMenu roiType,win=SIDisplay#ROIPanel,pos={54,10},bodywidth=72,title="Type",font=$LIGHT,value="Marquee;Click;Grid;Somas;",proc=siPopProc
 			
-					SetVariable roiWidth,win=SIDisplay#ROIPanel,pos={2,35},size={60,20},bodywidth=30,title="Width",font=$LIGHT,limits={2,inf,1},value=_NUM:10,disable=1
-					SetVariable roiHeight,win=SIDisplay#ROIPanel,pos={2,55},size={60,20},bodywidth=30,title="Height",font=$LIGHT,limits={2,inf,1},value=_NUM:10,disable=1
+					//Disable the movement hook for marquee mode
+					ControlInfo/W=SIDisplay#ROIPanel roiType
 					
+					If(!cmpstr(S_Value,"Marquee"))
+						SetWindow SIDisplay hook(zoomScrollHook) = $""
+					EndIf
+					
+					NVAR ROI_Width = NTSI:ROI_Width
+					NVAR ROI_Height = NTSI:ROI_Height
+	
+					SetVariable roiWidth,win=SIDisplay#ROIPanel,pos={2,35},size={60,20},bodywidth=30,title="Width",font=$LIGHT,limits={2,inf,1},value=ROI_Width,disable=1
+					SetVariable roiHeight,win=SIDisplay#ROIPanel,pos={2,55},size={60,20},bodywidth=30,title="Height",font=$LIGHT,limits={2,inf,1},value=ROI_Height,disable=1
 					SetVariable ROIname win=SIDisplay#ROIPanel,pos={3,35},size={93,20},font=$LIGHT,value=_STR:"",title="Name",disable=0
 					
 					Wave/T ROIGroupListWave = NTSI:ROIGroupListWave
@@ -2143,14 +2206,10 @@ Function siButtonProc(ba) : ButtonControl
 					SVAR GroupList = NTSI:GroupList
 					GroupList = "**NEW**;" + TextWaveToStringList(ROIGroupListWave,";")
 					
-					PopUpMenu roiGroupSelect,win=SIDisplay#ROIPanel,pos={5,55},bodywidth=72,title="Group",font=$LIGHT,value=#"root:Packages:NT:ScanImage:GroupList",proc=siPopProc
-					
-					
-					
-					Button addROI win=SIDisplay#ROIPanel,pos={2,75},size={20,20},font=$LIGHT,valueColor=(0,0x9999,0),title="+",disable=0,proc=siButtonProc
-					Button confirmROI win=SIDisplay#ROIPanel,pos={25,75},size={81,20},font=$LIGHT,valueColor=(0,0x9999,0),title="Done",disable=0,proc=siButtonProc
-					
-					
+					PopUpMenu roiGroupSelect,win=SIDisplay#ROIPanel,pos={54,55},bodywidth=72,title="Group",font=$LIGHT,value=#"root:Packages:NT:ScanImage:GroupList",proc=siPopProc
+					Button addROI win=SIDisplay#ROIPanel,pos={2,80},size={20,20},font=$LIGHT,valueColor=(0,0x9999,0),title="+",disable=0,proc=siButtonProc
+					Button confirmROI win=SIDisplay#ROIPanel,pos={25,80},size={81,20},font=$LIGHT,valueColor=(0,0x9999,0),title="Done",disable=0,proc=siButtonProc
+
 					break
 				
 				case "addROI":
@@ -2166,13 +2225,24 @@ Function siButtonProc(ba) : ButtonControl
 					EndIf
 					
 					If(!cmpstr(target,"SIDisplay"))
-						GetMarquee/W=$("SIDisplay#image0#graph0")/K/Z left,top
+						GetMarquee/W=$("SIDisplay#image0#graph0")/K left,top
 					Else
 						GetMarquee/W=$target/K/Z left,top
 					EndIf
-									
+					
+					Variable leftEdge,rightEdge,topEdge,bottomEdge
+					leftEdge = V_left;rightEdge=V_right;topEdge=V_top;bottomEdge=V_bottom
+					
+					
 					If(V_flag)
-						Wave/Wave roiRefs = CreateROI(V_left,V_top,V_right,V_bottom)
+					
+						//Which group will we put the new ROI in?
+						ControlInfo/W=SIDisplay#ROIPanel ROIGroupSelect
+						String group = S_Value
+						
+						ControlInfo/W=SIDisplay#ROIPanel ROIname
+						String baseName = S_Value
+						Wave/Wave roiRefs = CreateROI(leftEdge,topEdge,rightEdge,bottomEdge,group=group,baseName=baseName)
 						
 						If(!WaveExists(roiRefs))
 							return 0
@@ -2222,12 +2292,30 @@ Function siButtonProc(ba) : ButtonControl
 						updateImageBrowserLists()
 					EndIf		
 					
+					//Refresh the ROI group list
+					refreshROIGroupList()
+					
 					break
 				case "confirmROI":
-					//Enable the mouse movement hook for the SIDisplay window
-					SetWindow SIDisplay hook(zoomScrollHook) = zoomScrollHook
+				
+					NVAR ROI_Engaged = NTSI:ROI_Engaged
 					
-					KillWindow/Z SIDisplay#ROIPanel
+					If(ROI_Engaged)
+						ROI_Engaged = 0 //set back to zero, finished creating ROIs
+						
+						Button confirmROI win=SIDisplay#ROIPanel,title="Start"
+											
+						KillWindow/Z SIDisplay#ROIPanel
+						
+						//Enable the mouse movement hook for the SIDisplay window
+						SetWindow SIDisplay hook(zoomScrollHook) = zoomScrollHook
+						
+					Else
+						//Begin creating ROIs
+						ROI_Engaged = 1
+						
+						Button confirmROI win=SIDisplay#ROIPanel,title="Finish"
+					EndIf
 					break
 				case "somaROI":
 					//Finds all the somas in the ROI, and makes a 3D ROI mask wave, each soma in it's own layer
@@ -2236,9 +2324,9 @@ Function siButtonProc(ba) : ButtonControl
 					SetWindow SIDisplay hook(zoomScrollHook) = zoomScrollHook
 					
 					//Hide the confirm button and ROI name entry
-					SetVariable ROIname win=SIDisplay#control,disable=3
-					Button confirmROI win=SIDisplay#control,disable=3,proc=siButtonProc
-					Button somaROI win=SIDisplay#control,disable=3,proc=siButtonProc
+					SetVariable ROIname win=SIDisplay#ROIPanel,disable=3
+					Button confirmROI win=SIDisplay#ROIPanel,disable=3,proc=siButtonProc
+					Button somaROI win=SIDisplay#ROIPanel,disable=3,proc=siButtonProc
 					
 						
 					//Get target image for drawing
@@ -2626,26 +2714,43 @@ Function SwitchROIControls(roiType)
 			SetVariable roiHeight,win=SIDisplay#ROIPanel,disable=1
 			SetVariable ROIname,win=SIDisplay#ROIPanel,pos={3,35},disable=0
 			Button addROI,win=SIDisplay#ROIPanel,disable=0
-			Button confirmROI,win=SIDisplay#ROIPanel,pos={25,75},size={81,20},title="Done"
+			Button confirmROI,win=SIDisplay#ROIPanel,pos={25,80},size={81,20},title="Done"
 			PopUpMenu roiGroupSelect,win=SIDisplay#ROIPanel,pos={5,55},bodywidth=72,disable=0
+
+			SetWindow SIDisplay hook(zoomScrollHook) = $""
 			break
 		case "Click":
 			SetVariable roiWidth,win=SIDisplay#ROIPanel,disable=0
 			SetVariable roiHeight,win=SIDisplay#ROIPanel,disable=0
 			SetVariable ROIname,win=SIDisplay#ROIPanel,pos={3,75},disable=0
 			Button addROI,win=SIDisplay#ROIPanel,disable=1
-			Button confirmROI,win=SIDisplay#ROIPanel,pos={2,115},size={93,20},title="Start"
+			Button confirmROI,win=SIDisplay#ROIPanel,pos={9,120},size={93,20},title="Start"
 			PopUpMenu roiGroupSelect,win=SIDisplay#ROIPanel,pos={5,95},bodywidth=72, disable=0
+			
+			SetWindow SIDisplay hook(zoomScrollHook) = zoomScrollHook
 			break
 		case "Grid":
 			SetVariable roiWidth,win=SIDisplay#ROIPanel,disable=0
 			SetVariable roiHeight,win=SIDisplay#ROIPanel,disable=0
 			SetVariable ROIname,win=SIDisplay#ROIPanel,pos={3,75},disable=0
 			Button addROI,win=SIDisplay#ROIPanel,disable=1
-			Button confirmROI,win=SIDisplay#ROIPanel,pos={2,115},size={93,20},title="Start"
+			Button confirmROI,win=SIDisplay#ROIPanel,pos={9,120},size={93,20},title="Start"
 			PopUpMenu roiGroupSelect,win=SIDisplay#ROIPanel,pos={5,95},bodywidth=72,disable=0
+			
+			SetWindow SIDisplay hook(zoomScrollHook) = zoomScrollHook
 			break
 	endswitch
+End
+
+Function refreshROIGroupList()
+	DFREF NTSI = root:Packages:NT:ScanImage
+	
+	//Refresh the ROI group list
+	Wave/T ROIGroupListWave = NTSI:ROIGroupListWave
+	String/G NTSI:GroupList 
+	SVAR GroupList = NTSI:GroupList
+	GroupList = "**NEW**;" + TextWaveToStringList(ROIGroupListWave,";")
+
 End
 
 //Dynamic ROI
@@ -2839,11 +2944,17 @@ Function/S SelectedROIs([groups])
 End
 
 //Creates a new ROI using marquee coordinates, returns a wave reference wave with the X and Y coordinate waves
-Function/WAVE CreateROI(left,top,right,bottom,[autoName])
-	Variable left,top,right,bottom,autoName
+Function/WAVE CreateROI(left,top,right,bottom,[group,baseName,autoName])
+	Variable left,top,right,bottom
+	String baseName,group
+	Variable autoName
 	
 	If(ParamIsDefault(autoName))
 		autoName = 0
+	EndIf
+	
+	If(ParamIsDefault(group))
+		group = "**NEW**"
 	EndIf
 	
 	If(!DataFolderExists("root:Packages:NT:ScanImage:ROIs"))
@@ -2863,19 +2974,23 @@ Function/WAVE CreateROI(left,top,right,bottom,[autoName])
 	
 	DFREF saveDF = GetDataFolderDFR()
 	
+	//If automatic naming is indicated or we're creating a new group
 	If(autoName)
-		//Make a new ROI group
-		String newGroup = UniqueName("Group",11,0)
-		NewDataFolder $(roiFolder + newGroup)
-	
-		DFREF NTR = $(roiFolder + newGroup)
+		If(!cmpstr(group,"**NEW**"))
+			//Make a new ROI group
+			group = UniqueName("Group",11,0)
+			NewDataFolder $(roiFolder + group)
+		EndIf
+		
+		DFREF NTR = $(roiFolder + group)
 		
 		//Make numerically named ROIs
 		SetDataFolder NTR
+		
 		Variable index = 0
 		Do
-			String name = "ROI_" + num2str(index)
-			If(!WaveExists($(roiFolder + name + "_x")) && !WaveExists($(roiFolder + name + "_y")))
+			If(!WaveExists($(roiFolder + group + ":" + baseName + "_" + num2str(index) + "_x")) && !WaveExists($(roiFolder + group + ":" + baseName + num2str(index) + "_y")))
+				baseName +=  "_" + num2str(index)
 				break
 			EndIf
 			index += 1
@@ -2885,48 +3000,35 @@ Function/WAVE CreateROI(left,top,right,bottom,[autoName])
 			EndIf
 		While(1)
 		
-		String S_Value = name
-		name += "_x"
 	Else
-		//Get the selected ROI Group
-		String group = SelectedROIGroup()
+		DFREF NTR = $(roiFolder + group)
 		
-		If(ItemsInList(group,";") == 0)
-			//no groups selected, create a new one
-			newGroup = UniqueName("Group",11,0)
-			
-			NewDataFolder $(roiFolder + newGroup)
-			
-			DFREF NTR = $(roiFolder + newGroup)
-		Else
-			//in case of multiple selections, put new ROI into the first selected group
-			group = StringFromList(0,group,";")
-			
+		If(!DataFolderRefStatus(NTR))
+			//If the ROI group doesn't actually exist for some reason, create one with that name
+			NewDataFolder $(roiFolder + group)
 			DFREF NTR = $(roiFolder + group)
 		EndIf
 	
 		//Make ROI coordinates X and Y waves
 		ControlInfo/W=SIDisplay#ROIPanel ROIname
-		name = S_Value + "_x"
+		baseName = S_Value
 		
-	
 		If(!strlen(S_Value))
 			Abort "Must enter a name for the ROI"
 			return $""
 		EndIf
 	EndIf
 		
-	If(WaveExists($(roiFolder + S_Value + "_x")) || WaveExists($(roiFolder + S_Value + "_y")))
+	If(WaveExists($(roiFolder + group + ":" + basename + "_x")) || WaveExists($(roiFolder + group + ":" + basename + "_y")))
 		DoAlert/T="Overwrite ROI?" 1,"ROI already exists. Overwrite?"
 		If(V_flag == 2) //clicked no
 			return $""
 		EndIf
 	EndIf
 	
-	Make/O/N=5 NTR:$name /Wave = roiX
 	
-	name = S_Value + "_y"
-	Make/O/N=5 NTR:$name /Wave = roiY
+	Make/O/N=5 NTR:$(baseName + "_x") /Wave = roiX
+	Make/O/N=5 NTR:$(baseName + "_y") /Wave = roiY
 	
 	//Fill the ROI wave with the coordinates to form a rectangle
 	roiX[0] = left //top left
@@ -2949,6 +3051,18 @@ Function/WAVE CreateROI(left,top,right,bottom,[autoName])
 	roiRefs[1] = roiY
 	
 	SetDataFolder saveDF
+	
+	//Set the ROI Group Selector to the current group, in case ***NEW** group was created.
+	//This will allow you to click-create ROIs in a NEW group without having to choose the group that
+	//was just created. 
+	DFREF NTSI = root:Packages:NT:ScanImage
+	
+	SVAR ROIGroupList = NTSI:GroupList
+	index = WhichListItem(group,ROIGroupList,";")
+	If(index != -1)
+		PopUpMenu roiGroupSelect,win=SIDisplay#ROIPanel,mode=index+1
+		ControlUpdate/A
+	EndIf
 	return roiRefs
 End
 
@@ -4348,32 +4462,10 @@ Function NT_ResponseQuality(ds)
 	SetDataFolder saveDF
 End
 
-//Parent function for providing a few different methods for making many ROIs all at once
-Function NT_CreateROIs()
-	
-	//Get target image for drawing
-	ControlInfo/W=SI targetImage
-	String target = S_Value
-	
-	//Set hook function for creating ROIs
-	Variable/G root:Packages:NT:ScanImage:clickROIStatus
-	NVAR clickROIStatus = root:Packages:NT:ScanImage:clickROIStatus
-	clickROIStatus = 1
-End
-
 //Creates an ROI of
-Function CreateROIFromClick(mh,mv,target)
-	Variable mh,mv
-	String target
-	
-	Variable width = 10
-	Variable height = 10
-	
-	Variable subWin = whichSubWindow()
-	
-	If(!cmpstr(target,"SIDisplay"))
-		target += "#image" + num2str(subWin) + "#graph" + num2str(subWin)
-	EndIf
+Function CreateROIFromClick(mh,mv,width,height,target,group,baseName)
+	Variable mh,mv,width,height
+	String target,group,baseName
 	
 	String imageName = StringFromList(0,ImageNameList(target,";"),";")
 	String info = ImageInfo(target,imageName,0)
@@ -4389,9 +4481,13 @@ Function CreateROIFromClick(mh,mv,target)
 	Variable right = xCenter + (DimDelta(image,0) * width * 0.5)
 	Variable bottom  = yCenter + (DimDelta(image,1) * height * 0.5)
 	
-	Wave/WAVE roiRefs = CreateROI(left,top,right,bottom,autoName=1)
+	Wave/WAVE roiRefs = CreateROI(left,top,right,bottom,group=group,baseName=baseName,autoname=1)
 	
 	AppendToGraph/W=$target/T=$xAxis/L=$yAxis roiRefs[1] vs roiRefs[0]
+	
+	//Update lists
+	updateImageBrowserLists()
+	refreshROIGroupList()
 End
 
 
