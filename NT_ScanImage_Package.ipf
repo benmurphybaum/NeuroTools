@@ -1980,35 +1980,38 @@ Function siListBoxProc(lba) : ListBoxControl
 
 						If(V_flag)
 							
-							Variable j
-							For(i=0;i<DimSize(ROIGroupSelWave,0);i+=1)
-								If(ROIGroupSelWave[i] > 0)
-									roiGroup = ROIGroupListWave[i]
-									
-									If(!cmpstr(software,"2PLSM"))
-										ROIFolder ="root:twoP_ROIS:" + roiGroup + ":"
-									Else
-										ROIFolder = "root:Packages:NT:ScanImage:ROIs:" + roiGroup + ":"
-									EndIf
-									
-									//All the ROIs in the selected ROI group
-									Wave/T ROIListWave = SI_GetROIs(roiGroup)
-									If(DimSize(ROIListWave,0) > 0)					
-										//Make this a full path list wave for the ROIs					
-										ROIListWave = ROIFolder + ROIListWave[p]
+							DoAlert/T="Delete ROI Group" 1,"Are you sure you want to delete the ROI group?"
+							If(V_flag == 1)
+								Variable j
+								For(i=0;i<DimSize(ROIGroupSelWave,0);i+=1)
+									If(ROIGroupSelWave[i] > 0)
+										roiGroup = ROIGroupListWave[i]
 										
-										//Remove any of the ROIs from the SIDisplay or other graphs, then kill them
-										For(j=0;j<DimSize(ROIListWave,0);j+=1)
-											RemoveFromSIDisplay($(ROIListWave[j] + "_y")) //Remove from the SIDisplay
-											ReallyKillWaves($(ROIListWave[j] + "_x")) //Remove from any other plot and kill
-											ReallyKillWaves($(ROIListWave[j] + "_y")) //Remove from any other plot and kill
-										EndFor
-									EndIf
-									
-									//Kill the ROI Group folder
-									KillDataFolder/Z ROIFolder		
-								EndIf	
-							EndFor
+										If(!cmpstr(software,"2PLSM"))
+											ROIFolder ="root:twoP_ROIS:" + roiGroup + ":"
+										Else
+											ROIFolder = "root:Packages:NT:ScanImage:ROIs:" + roiGroup + ":"
+										EndIf
+										
+										//All the ROIs in the selected ROI group
+										Wave/T ROIListWave = SI_GetROIs(roiGroup)
+										If(DimSize(ROIListWave,0) > 0)					
+											//Make this a full path list wave for the ROIs					
+											ROIListWave = ROIFolder + ROIListWave[p]
+											
+											//Remove any of the ROIs from the SIDisplay or other graphs, then kill them
+											For(j=0;j<DimSize(ROIListWave,0);j+=1)
+												RemoveFromSIDisplay($(ROIListWave[j] + "_y")) //Remove from the SIDisplay
+												ReallyKillWaves($(ROIListWave[j] + "_x")) //Remove from any other plot and kill
+												ReallyKillWaves($(ROIListWave[j] + "_y")) //Remove from any other plot and kill
+											EndFor
+										EndIf
+										
+										//Kill the ROI Group folder
+										KillDataFolder/Z ROIFolder		
+									EndIf	
+								EndFor
+							EndIf
 						EndIf
 						
 						//Update the ROI panel
@@ -2252,7 +2255,9 @@ Function siButtonProc(ba) : ButtonControl
 	NVAR ROI_Width = NTSI:ROI_Width
 	NVAR ROI_Height = NTSI:ROI_Height
 	NVAR ROI_PctThreshold = NTSI:ROI_PctThreshold
-					
+	NVAR ROI_Engaged = NTSI:ROI_Engaged
+	NVAR Nudge_Engaged = NTSI:Nudge_Engaged
+				
 	Variable hookResult = 0
 	switch( ba.eventCode )
 		case 2: // mouse up
@@ -2296,6 +2301,10 @@ Function siButtonProc(ba) : ButtonControl
 					//Build a new external panel for controlling ROI creation
 					DoWindow/W=SIDisplay#ROIPanel ROIPanel
 					If(V_flag)
+						//Reset any ROI creation variables
+						ROI_Engaged = 0
+						Nudge_Engaged = 0
+						KillWindow/Z SIDisplay#ROIPanel
 						break
 					EndIf
 					
@@ -2416,8 +2425,6 @@ Function siButtonProc(ba) : ButtonControl
 					break
 				case "confirmROI":
 					//Confirms the ROI creation, or engages click/grid ROI for creating many ROIs quickly
-				
-					NVAR ROI_Engaged = NTSI:ROI_Engaged
 					
 					ControlInfo/W=SIDisplay#ROIPanel roiType
 					
