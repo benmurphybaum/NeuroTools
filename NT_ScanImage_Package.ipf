@@ -119,6 +119,10 @@ Function SI_CreatePackage()
 	NVAR ROI_Height = NTSI:ROI_Height
 	ROI_Height = 15
 	
+	Variable/G NTSI:ROI_PctThreshold
+	NVAR ROI_PctThreshold = NTSI:ROI_PctThreshold
+	ROI_PctThreshold = 50
+	
 	//ROIs within the selected group
 	Wave/T listWave = SI_GetROIs(group)
 	Redimension/N=(DimSize(listWave,0),-1,-1) ROIListWave,ROISelWave
@@ -1970,6 +1974,51 @@ Function siListBoxProc(lba) : ListBoxControl
 				case "roiGroups":
 					//Updates the ROI list box for the selected ROI groups
 					
+					If(lba.eventMod == 19) //shift held during right click
+						//Rename/Goto/Delete ROI contextual menu
+						PopupContextualMenu/C=(lba.mouseLoc.h, lba.mouseLoc.v) "Delete;"
+
+						If(V_flag)
+							
+							Variable j
+							For(i=0;i<DimSize(ROIGroupSelWave,0);i+=1)
+								If(ROIGroupSelWave[i] > 0)
+									roiGroup = ROIGroupListWave[i]
+									
+									If(!cmpstr(software,"2PLSM"))
+										ROIFolder ="root:twoP_ROIS:" + roiGroup + ":"
+									Else
+										ROIFolder = "root:Packages:NT:ScanImage:ROIs:" + roiGroup + ":"
+									EndIf
+									
+									//All the ROIs in the selected ROI group
+									Wave/T ROIListWave = SI_GetROIs(roiGroup)
+									If(DimSize(ROIListWave,0) > 0)					
+										//Make this a full path list wave for the ROIs					
+										ROIListWave = ROIFolder + ROIListWave[p]
+										
+										//Remove any of the ROIs from the SIDisplay or other graphs, then kill them
+										For(j=0;j<DimSize(ROIListWave,0);j+=1)
+											RemoveFromSIDisplay($(ROIListWave[j] + "_y")) //Remove from the SIDisplay
+											ReallyKillWaves($(ROIListWave[j] + "_x")) //Remove from any other plot and kill
+											ReallyKillWaves($(ROIListWave[j] + "_y")) //Remove from any other plot and kill
+										EndFor
+									EndIf
+									
+									//Kill the ROI Group folder
+									KillDataFolder/Z ROIFolder		
+								EndIf	
+							EndFor
+						EndIf
+						
+						//Update the ROI panel
+						updateImageBrowserLists()
+						refreshROIGroupList()
+						
+						hookResult = 1
+						return hookResult
+					EndIf
+					
 					groupList = SelectedROIGroup()
 					Wave/T listWave = SI_GetROIs(groupList)
 					Redimension/N=(DimSize(listWave,0),-1,-1) ROIListWave,ROISelWave
@@ -2202,6 +2251,7 @@ Function siButtonProc(ba) : ButtonControl
 	DFREF NTSI = root:Packages:NT:ScanImage
 	NVAR ROI_Width = NTSI:ROI_Width
 	NVAR ROI_Height = NTSI:ROI_Height
+	NVAR ROI_PctThreshold = NTSI:ROI_PctThreshold
 					
 	Variable hookResult = 0
 	switch( ba.eventCode )
@@ -2273,7 +2323,7 @@ Function siButtonProc(ba) : ButtonControl
 					GroupList = "**NEW**;" + TextWaveToStringList(ROIGroupListWave,";")
 					
 					PopUpMenu roiGroupSelect,win=SIDisplay#ROIPanel,pos={54,55},bodywidth=72,title="Group",font=$LIGHT,value=#"root:Packages:NT:ScanImage:GroupList",proc=siPopProc
-					
+					SetVariable pctFillThreshold,win=SIDisplay#ROIPanel,pos={47,35},size={60,20},bodywidth=30,title="%",value=ROI_PctThreshold,disable=1
 					Button nudgeROI win=SIDisplay#ROIPanel,pos={9,77},size={93,20},font=$LIGHT,valueColor=(0,0x9999,0),title="Nudge ROIs",disable=0,proc=siButtonProc
 					Button addROI win=SIDisplay#ROIPanel,pos={2,100},size={20,20},font=$LIGHT,valueColor=(0,0x9999,0),title="+",disable=0,proc=siButtonProc
 					Button confirmROI win=SIDisplay#ROIPanel,pos={25,100},size={81,20},font=$LIGHT,valueColor=(0,0x9999,0),title="Done",disable=0,proc=siButtonProc
@@ -2394,7 +2444,12 @@ Function siButtonProc(ba) : ButtonControl
 							ControlInfo/W=SIDisplay#ROIPanel roiGroupSelect
 							group = S_Value			
 						
-							CreateROIGrid(ROI_Width,ROI_Height,target,group,baseName)
+							CreateROIGrid(ROI_Width,ROI_Height,ROI_PctThreshold,target,group,baseName)
+							
+							//Refresh the ROI group list
+							refreshROIGroupList()
+							updateImageBrowserLists()
+							
 							break
 						case "Click":
 							If(ROI_Engaged)
@@ -2830,6 +2885,7 @@ Function SwitchROIControls(roiType)
 			Button addROI,win=SIDisplay#ROIPanel,disable=0
 			Button confirmROI,win=SIDisplay#ROIPanel,pos={25,100},size={81,20},title="Done"
 			PopUpMenu roiGroupSelect,win=SIDisplay#ROIPanel,pos={5,55},bodywidth=72,disable=0
+			SetVariable pctFillThreshold,win=SIDisplay#ROIPanel,disable=1
 			
 			SetWindow SIDisplay hook(zoomScrollHook) = $""
 			break
@@ -2841,6 +2897,7 @@ Function SwitchROIControls(roiType)
 			Button addROI,win=SIDisplay#ROIPanel,disable=1
 			Button confirmROI,win=SIDisplay#ROIPanel,pos={9,140},size={93,20},title="Start"
 			PopUpMenu roiGroupSelect,win=SIDisplay#ROIPanel,pos={5,95},bodywidth=72, disable=0
+			SetVariable pctFillThreshold,win=SIDisplay#ROIPanel,disable=1
 			
 			SetWindow SIDisplay hook(zoomScrollHook) = zoomScrollHook
 			break
@@ -2852,7 +2909,7 @@ Function SwitchROIControls(roiType)
 			Button addROI,win=SIDisplay#ROIPanel,disable=1
 			Button confirmROI,win=SIDisplay#ROIPanel,pos={9,140},size={93,20},title="Start"
 			PopUpMenu roiGroupSelect,win=SIDisplay#ROIPanel,pos={5,95},bodywidth=72,disable=0
-			
+			SetVariable pctFillThreshold,win=SIDisplay#ROIPanel,disable=0
 			SetWindow SIDisplay hook(zoomScrollHook) = zoomScrollHook
 			break
 	endswitch
@@ -4617,8 +4674,8 @@ Function CreateROIFromClick(mh,mv,width,height,target,group,baseName)
 End
 
 //Create an ROI grid across an image
-Function CreateROIGrid(w,h,target,group,baseName)
-	Variable w,h
+Function CreateROIGrid(w,h,threshold,target,group,baseName)
+	Variable w,h,threshold
 	String target,group,baseName
 	
 	DFREF NTSI = root:Packages:NT:ScanImage
@@ -4654,8 +4711,7 @@ Function CreateROIGrid(w,h,target,group,baseName)
 	Redimension/B/U mask
 	CopyScales image,mask
 	
-	//Make a wave reference wave to hold all ROIs, high limit to 2000 ROIs per grid
-	Make/FREE/WAVE/N=1000 xROI_Refs,yROI_Refs
+	threshold /= 100
 	
 	//Fill the entire image with ROIs in square grid first, then prune them away
 	Variable row=0,col=0,strideX=w,strideY=h,index=0
@@ -4696,10 +4752,14 @@ Function CreateROIGrid(w,h,target,group,baseName)
 			MatrixOP/FREE bit = bitAND(mask,ROIMask)
 			
 			//thresholding
-			If(sum(bit) < 0.3 * (w * h))
+			If(sum(bit) < threshold * (w * h))
 				KillWaves/Z roiX,roiY
 				col += strideY
 				continue
+			EndIf
+			
+			If(!strlen(baseName))
+				baseName = "ROI"
 			EndIf
 			
 			//Make new waves
