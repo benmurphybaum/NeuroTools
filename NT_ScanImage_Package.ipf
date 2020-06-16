@@ -2433,6 +2433,10 @@ Function siButtonProc(ba) : ButtonControl
 				case "confirmROI":
 					//Confirms the ROI creation, or engages click/grid ROI for creating many ROIs quickly
 					
+					//Get target image for drawing
+					ControlInfo/W=SI targetImage
+					target = S_Value
+					
 					ControlInfo/W=SIDisplay#ROIPanel roiType
 					
 					strswitch(S_Value) //ROI Type
