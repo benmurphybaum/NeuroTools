@@ -187,7 +187,9 @@ Function HandleLBSelection(ctrlName,listWave,row,mouseHor,mouseVert,eventMod)
 					
 			NVAR viewerOpen = NTF:viewerOpen
 			If(viewerOpen)
+				Variable ref = StartMSTimer
 				AppendToViewer(MatchLB_ListWave,MatchLB_SelWave)
+				print StopMSTimer(ref) / 1e6
 			EndIf
 					
 			break

@@ -2296,7 +2296,11 @@ Function siButtonProc(ba) : ButtonControl
 				case "liveROIs":
 					
 //					Button somaROI win=SIDisplay#control,pos={315,20},size={80,20},font=$LIGHT,valueColor=(0,0x9999,0),title="Find Somas",disable=0,proc=siButtonProc
+					ControlInfo/W=SI targetImage
+					String target = S_Value
 					
+					//Set the window hook to the target window
+					SetWindow $target hook(zoomScrollHook) = zoomScrollHook
 					
 					//Build a new external panel for controlling ROI creation
 					DoWindow/W=SIDisplay#ROIPanel ROIPanel
@@ -2304,6 +2308,10 @@ Function siButtonProc(ba) : ButtonControl
 						//Reset any ROI creation variables
 						ROI_Engaged = 0
 						Nudge_Engaged = 0
+						
+						//Set the window hook to the target window to null
+						SetWindow $target hook(zoomScrollHook) = $""
+					
 						KillWindow/Z SIDisplay#ROIPanel
 						break
 					EndIf
@@ -2317,8 +2325,7 @@ Function siButtonProc(ba) : ButtonControl
 					If(!cmpstr(S_Value,"Marquee"))
 						SetWindow SIDisplay hook(zoomScrollHook) = $""
 					EndIf
-				
-	
+
 					SetVariable roiWidth,win=SIDisplay#ROIPanel,pos={2,35},size={60,20},bodywidth=30,title="Width",font=$LIGHT,limits={2,inf,1},value=ROI_Width,disable=1
 					SetVariable roiHeight,win=SIDisplay#ROIPanel,pos={2,55},size={60,20},bodywidth=30,title="Height",font=$LIGHT,limits={2,inf,1},value=ROI_Height,disable=1
 					SetVariable ROIname win=SIDisplay#ROIPanel,pos={3,35},size={93,20},font=$LIGHT,value=_STR:"",title="Name",disable=0
@@ -2344,7 +2351,7 @@ Function siButtonProc(ba) : ButtonControl
 
 					//Get target image for drawing
 					ControlInfo/W=SI targetImage
-					String target = S_Value
+					target = S_Value
 					
 					If(!strlen(target))
 						target = "SIDisplay"
@@ -2465,8 +2472,12 @@ Function siButtonProc(ba) : ButtonControl
 								Button confirmROI win=SIDisplay#ROIPanel,title="Start"						
 								KillWindow/Z SIDisplay#ROIPanel
 								
+								//Set the window hook to the target window to null
+								SetWindow $target hook(zoomScrollHook) = $""
+								
 								//Enable the mouse movement hook for the SIDisplay window
 								SetWindow SIDisplay hook(zoomScrollHook) = zoomScrollHook	
+					
 							Else
 								//Begin creating ROIs
 								ROI_Engaged = 1
@@ -4251,7 +4262,7 @@ Function/WAVE NT_dFMap(ds)
 		//Calculate the ∆F map
 		MultiThread dF = (theScanTemp[p][q][r] - scanBaseline[p][q][0]) / (bgndBaseline[p][q][0])
 		
-		CopyScales/I theScan,dF
+		CopyScales/P theScan,dF
 				
 		//Smooth the volume in the Z direction
 //		Smooth/S=2/DIM=2 img.filter,dF
@@ -4324,7 +4335,7 @@ Function/WAVE NT_dFMap(ds)
 			EndFor
 		EndFor
 		
-		CopyScales/I theScan,dFMeasure
+		CopyScales/P theScan,dFMeasure
 		
 		//Masking and final filtering
 		MatrixFilter/N=(3)/R=mask median dF
@@ -4540,7 +4551,7 @@ End
 		Redimension/S maxproj
 		maxproj /= DimSize(theWave,2)
 		
-		CopyScales/I theWave,maxproj
+		CopyScales/P theWave,maxproj
 		ds.wsi += 1
 	While(ds.wsi < ds.numWaves)
 	
@@ -4561,7 +4572,7 @@ Function/WAVE NT_MaxProject(w)
 	Redimension/S maxproj
 	maxproj /= DimSize(w,2)
 	
-	CopyScales/I w,maxproj
+	CopyScales/P w,maxproj
 	
 	SetDataFolder saveDF
 	
@@ -4640,8 +4651,9 @@ Function NT_ResponseQuality(ds)
 		
 		//Calculate Response Quality Index
 		Multithread RQI = (pk - (avg + 2 * sd)) / (pk + (avg + 2 * sd))
-		RQI = (RQI > 0.6) ? 1 : 0
+//		RQI = (RQI > 0.6) ? 1 : 0
 		
+		CopyScales/P w,RQI
 		ds.wsi += 1
 	While(ds.wsi < ds.numWaves)
 	
@@ -4716,7 +4728,7 @@ Function CreateROIGrid(w,h,threshold,target,group,baseName)
 	//First get a variance map of the image, in order to create a dendritic mask
 	Wave mask = GetDendriticMask(image)
 	Redimension/B/U mask
-	CopyScales image,mask
+	CopyScales/P image,mask
 	
 	threshold /= 100
 	

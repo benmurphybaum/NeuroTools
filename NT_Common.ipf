@@ -2867,7 +2867,7 @@ Function AppendToViewer(listWave,selWave)
 	Variable i,j,type,numTraces
 
 	DoWindow/W=NT#ntViewerGraph ntViewerGraph
-	
+		
 	//Does the window exist?
 	If(V_flag)
 		String traceList = TraceNameList("NT#ntViewerGraph",";",1)
@@ -2903,13 +2903,16 @@ Function AppendToViewer(listWave,selWave)
 					
 					//Prevent duplicates waves from being appended
 					If(!stringmatch(traceList,"*" + listWave[i][0][1] + "*"))
-						AppendToGraph/W=NT#ntViewerGraph $listWave[i][0][1]
-						traceList += listWave[i][0][1] + ";"
+						If(WaveExists($listWave[i][0][1]))
+							AppendToGraph/W=NT#ntViewerGraph $listWave[i][0][1]
+							traceList += listWave[i][0][1] + ";"
+						EndIf
 					EndIf
 				EndIf
 			EndIf	
 		EndFor
 	EndIf	
+	
 	
 	If(!strlen(traceList))
 		return 0
@@ -2932,7 +2935,7 @@ Function AppendToViewer(listWave,selWave)
 	If(areHorizSeparated)
 		SeparateTraces("horiz")
 	EndIf
-	
+
 End
 
 //Moves a trace from its current axis to the named axis
