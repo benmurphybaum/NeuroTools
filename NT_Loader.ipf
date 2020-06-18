@@ -247,6 +247,11 @@ function unzipArchive(archivePathStr, unzippedPathStr)
         
         archivePathStr=parseFilePath(5, archivePathStr, "\\", 0, 0)
         unzippedPathStr=parseFilePath(5, unzippedPathStr, "\\", 0, 0)
+        
+        cmd = "powershell.exe -nologo -noprofile -command Remove-Item -path '%s' -recurse"
+        sprintf cmd,cmd,unzippedPathStr + "NeuroTools-master"
+        executescripttext/B/UNQ/Z cmd
+        
         cmd="powershell.exe -nologo -noprofile -command \"& { Add-Type -A 'System.IO.Compression.FileSystem';"
         sprintf cmd "%s [IO.Compression.ZipFile]::ExtractToDirectory('%s', '%s'); }\"", cmd, archivePathStr, unzippedPathStr
     else // Mac
