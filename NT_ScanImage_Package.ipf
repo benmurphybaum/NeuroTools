@@ -2309,8 +2309,8 @@ Function siButtonProc(ba) : ButtonControl
 						ROI_Engaged = 0
 						Nudge_Engaged = 0
 						
-						//Set the window hook to the target window to null
-						SetWindow $target hook(zoomScrollHook) = $""
+						//Set the window hook to the target window back to normal
+						SetWindow $target hook(zoomScrollHook) = zoomScrollHook
 					
 						KillWindow/Z SIDisplay#ROIPanel
 						break
@@ -2443,6 +2443,8 @@ Function siButtonProc(ba) : ButtonControl
 						case "Marquee":
 							Button confirmROI win=SIDisplay#ROIPanel,title="Done"
 							KillWindow/Z SIDisplay#ROIPanel
+							//Set the window hook to the target window back to normal
+							SetWindow $target hook(zoomScrollHook) = zoomScrollHook
 							break
 						case "Grid":
 							//Get target image for drawing

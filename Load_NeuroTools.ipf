@@ -13,7 +13,7 @@
 //StrConstant SUBTITLE = "Mongolian Baiti"
 
 STRCONSTANT NTversion = "1.0"
-STRCONSTANT NTLastUpdate = "June 15, 2020"
+STRCONSTANT NTLastUpdate = "June 18, 2020"
 
 //Builds the GUI
 Function LoadNT([left,top])
