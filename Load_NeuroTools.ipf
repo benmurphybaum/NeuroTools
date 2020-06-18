@@ -1457,7 +1457,7 @@ Function Update_NT()
 	//Unzipped folder path
 	String packagePath = path + "NeuroTools-master:"
 	
-	String IgorAppPath = SpecialDirPath("Igor Application",0,0,0)
+	String IgorAppPath = SpecialDirPath("Igor User Procedures",0,0,0)
 	String UserProcPath = IgorAppPath + "User Procedures:NeuroTools:"
 	String IgorProcPath = IgorAppPath + "Igor Procedures:"
 	String IgorHelpPath = IgorAppPath + "Igor Help Files:"
@@ -1475,7 +1475,9 @@ Function Update_NT()
 		String fileName = StringFromList(i,UserProcedures,";")
 		String filePath = packagePath + fileName
 		String destPath = UserProcPath + fileName
-		MoveFile/O filePath as destPath
+		
+		Execute/Z/Q "CloseProc/D=0/SAVE/NAME=" + fileName
+		MoveFile/O/Z filePath as destPath
 	EndFor	
 	
 	//Igor Procedures
@@ -1484,7 +1486,9 @@ Function Update_NT()
 		fileName = StringFromList(i,IgorProcedures,";")
 		filePath = packagePath + fileName
 		destPath = IgorProcPath + fileName
-		MoveFile/O filePath as destPath
+		
+		Execute/Z/Q "CloseProc/D=0/SAVE/NAME=" + fileName
+		MoveFile/O/Z filePath as destPath
 	EndFor
 	
 	//Igor Help Files
@@ -1493,19 +1497,23 @@ Function Update_NT()
 		fileName = StringFromList(i,IgorHelpFiles,";")
 		filePath = packagePath + fileName
 		destPath = IgorHelpPath + fileName
-		MoveFile/O filePath as destPath
+		
+		Execute/Z/Q "CloseHelp/D=0/NAME=" + fileName
+		MoveFile/O/Z filePath as destPath
 	EndFor
 	
 	//JSON XOP files
 	fileName = "json_functions.ipf"
 	filePath = packagePath + "JSON:procedures:" + fileName
 	destPath = UserProcPath + fileName
-	MoveFile/O filePath as destPath
+	MoveFile/O/Z filePath as destPath
 	
 	fileName = "Json Help.ipf"
 	filePath = packagePath + "JSON:docu:" + fileName
 	destPath = IgorHelpPath + fileName
-	MoveFile/O filePath as destPath
+	
+	Execute/Z/Q "CloseProc/D=0/SAVE/NAME=" + fileName
+	MoveFile/O/Z filePath as destPath
 	
 	//32 or 64 bit Igor, and operating system information
 	String info = IgorInfo(0)
@@ -1531,7 +1539,7 @@ Function Update_NT()
 	EndIf
 	
 	destPath = IgorExtensionsPath + fileName
-	MoveFile/O filePath as destPath
+	MoveFile/O/Z filePath as destPath
 	
 	//Cleanup 
 	DeleteFile/Z path + "master.zip"
