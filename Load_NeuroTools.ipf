@@ -1545,7 +1545,7 @@ Function Update_NT()
 	DeleteFile/Z path + "master.zip"
 	
 	//Reload NeuroTools package
-	GetWindow NT wsize
+	GetWindow/Z NT wsize
 	KillWindow/Z NT
 	LoadNT(left=V_left,top=V_top)
 	
