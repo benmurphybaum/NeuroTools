@@ -1442,6 +1442,8 @@ Function Update_NT()
 	
 	String gitAddress="https://github.com/benmurphybaum/NeuroTools/archive/master.zip",gitFile="master.zip"
 	
+	Variable update = 1
+	
 	//Move the files to the correct folders
 	String path = SpecialDirPath("Desktop",0,0,0)
 	
