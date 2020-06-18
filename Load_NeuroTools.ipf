@@ -1496,6 +1496,43 @@ Function Update_NT()
 		MoveFile/O filePath as destPath
 	EndFor
 	
+	//JSON XOP files
+	fileName = "json_functions.ipf"
+	filePath = packagePath + "JSON:procedures:" + fileName
+	destPath = UserProcPath + fileName
+	MoveFile/O filePath as destPath
+	
+	fileName = "Json Help.ipf"
+	filePath = packagePath + "JSON:docu:" + fileName
+	destPath = IgorHelpPath + fileName
+	MoveFile/O filePath as destPath
+	
+	//32 or 64 bit Igor, and operating system information
+	String info = IgorInfo(0)
+	String kind = StringByKey("IGORKIND",info,":",";")
+	String os = IgorInfo(2)
+	
+	If(!cmpstr(kind,"pro")) //32 bit
+		fileName = "JSON.xop"
+		String IgorExtensionsPath = IgorAppPath + "Igor Extensions:"
+	ElseIf(!cmpstr(kind,"pro64")) //64 bit
+		fileName = "JSON-64.xop"
+		IgorExtensionsPath = IgorAppPath + "Igor Extensions (64 bit):"
+	EndIf
+	
+	If(!cmpstr(os,"Windows"))
+		If(!cmpstr(kind,"pro"))
+			filePath = packagePath + "JSON:output:win:x86:" + fileName
+		ElseIf(!cmpstr(kind,"pro64"))
+			filePath = packagePath + "JSON:output:win:x64:" + fileName
+		EndIf
+	ElseIf(!cmpstr(os,"Macintosh"))
+		filePath = packagePath + "JSON:output:mac:" + fileName
+	EndIf
+	
+	destPath = IgorExtensionsPath + fileName
+	MoveFile/O filePath as destPath
+	
 	//Cleanup 
 	DeleteFile/Z path + "master.zip"
 	
