@@ -1525,7 +1525,7 @@ Function Update_NT()
 		String IgorExtensionsPath = IgorAppPath + "Igor Extensions:"
 	ElseIf(!cmpstr(kind,"pro64")) //64 bit
 		fileName = "JSON-64.xop"
-		IgorExtensionsPath = IgorAppPath + "Igor Extensions (64 bit):"
+		IgorExtensionsPath = IgorAppPath + "Igor Extensions (64-bit):"
 	EndIf
 	
 	If(!cmpstr(os,"Windows"))
