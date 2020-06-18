@@ -1457,7 +1457,7 @@ Function Update_NT()
 	//Unzipped folder path
 	String packagePath = path + "NeuroTools-master:"
 	
-	String IgorAppPath = SpecialDirPath("Igor User Procedures",0,0,0)
+	String IgorAppPath = SpecialDirPath("Igor Pro User Files",0,0,0)
 	String UserProcPath = IgorAppPath + "User Procedures:NeuroTools:"
 	String IgorProcPath = IgorAppPath + "Igor Procedures:"
 	String IgorHelpPath = IgorAppPath + "Igor Help Files:"
