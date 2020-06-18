@@ -1478,7 +1478,8 @@ Function Update_NT()
 		String filePath = packagePath + fileName
 		String destPath = UserProcPath + fileName
 		
-		Execute/Z/Q "CloseProc/D=0/SAVE/NAME=" + fileName
+//		Execute/Z/Q "CloseProc/D=0/SAVE/NAME=" + fileName
+		DeleteFile/Z destPath
 		MoveFile/O/Z filePath as destPath
 	EndFor	
 	
