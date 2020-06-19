@@ -24,6 +24,7 @@ Function LoadNT([left,top])
 		DoWindow/K NT
 	EndIf
 	
+	print "hellO"
 	
 	//Create the NeuroTools package folders and waves
 	MakePackageFolders()
