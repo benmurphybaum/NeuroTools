@@ -2796,11 +2796,15 @@ Function openViewer()
 	Variable r = ScreenResolution / 72
 	
 	//Define guides
-	DefineGuide/W=NT VT = {FT,0.6315,FB}
-	DefineGuide/W=NT VB = {FT,0.97,FB}
+//	DefineGuide/W=NT VT = {FT,0.6315,FB}
+//	DefineGuide/W=NT VB = {FT,0.97,FB}
+
+	DefineGuide/W=NT VT = {FT,515}
+	DefineGuide/W=NT VB = {FT,790}	
 	
-	//Add an additional 200 pixels to the toolbox on the bottom
+	//Add an additional 300 pixels to the toolbox on the bottom
 	GetWindow NT wsize
+
 	MoveWindow/W=NT V_left,V_top,V_right,V_bottom + 300/r
 	
 	//Open the display window only if it wasn't already open
@@ -2844,9 +2848,10 @@ Function closeViewer()
 	viewerRecall = ReplaceString(matchStr,viewerRecall,"AppendToGraph/W=NT#ntViewerGraph")
 	
 	KillWindow/Z NT#ntViewerGraph
-	//Remove 200 pixels to the toolbox on the bottom
-	GetWindow NT wsize
-	MoveWindow/W=NT V_left,V_top,V_right,V_bottom - 300/r
+	//Remove 300 pixels to the toolbox on the bottom, or however many pixels it is for Windows when not using full screen
+	
+	GetWindow NT wsize	
+	MoveWindow/W=NT V_left,V_top,V_right,V_top + 515/r
 	
 	//adjust guide for scanListPanel so it doesn't get in the viewer's way
 	DefineGuide/W=NT listboxBottom={FB,-10}
