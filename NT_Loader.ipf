@@ -75,7 +75,16 @@ Function Update_NT()
 	
 	String gitAddress="https://github.com/benmurphybaum/NeuroTools/archive/master.zip",gitFile="master.zip"
 	
-	Variable update = 1
+	Variable i
+	String procs = "Load_NeuroTools;NT_Common;NT_Controls;NT_DataSets;NT_Functions;"
+	procs += "NT_ImageRegistration;NT_InsertTemplate;NT_ScanImage_Package;NT_Imaging_Package;NT_Structures;"
+	procs += "ScanImageTiffReader;NT_ExternalFunctions;"
+	
+	For(i=0;i<ItemsInList(procs,";");i+=1)
+		String theProc = StringFromList(i,procs,";")
+		Execute/Q/Z/P "DELETEINCLUDE \"" + theProc + "\""
+	EndFor	
+	
 	
 	//Move the files to the correct folders
 	String path = SpecialDirPath("Desktop",0,0,0)
@@ -105,7 +114,7 @@ Function Update_NT()
 	String IgorHelpFiles = "NeuroTools_Help.ihf;"
 	
 	//User Procedures
-	Variable i,numFiles = ItemsInList(UserProcedures,";")
+	Variable numFiles = ItemsInList(UserProcedures,";")
 	For(i=0;i<numFiles;i+=1)
 		String fileName = StringFromList(i,UserProcedures,";")
 		String filePath = packagePath + fileName
