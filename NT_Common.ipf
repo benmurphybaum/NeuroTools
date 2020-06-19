@@ -3158,6 +3158,11 @@ End
 
 //returns the current selection of the 'Commands' drop down menu
 Function/S CurrentCommand()
+	DoWindow NT
+	If(!V_flag)
+		return ""
+	EndIf
+	
 	ControlInfo/W=NT CommandMenu
 	String func = TrimString(StringFromList(1,S_Title,"\u005cJL▼"))
 	return func
