@@ -8,7 +8,7 @@ STRCONSTANT NTLastUpdate = "June 22, 2020"
 #if(DataFolderExists("root:Packages:twoP"))
 	//Adds #includes the external procedure files
 	Function NT_InsertIncludes()
-		String fileList = "twoP_Loader.ipf;Load_NeuroTools;NT_Common;NT_Controls;NT_DataSets;NT_Functions;NT_InsertTemplate;NT_ExternalFunctions;NT_Structures;"
+		String fileList = "twoP_Loader.ipf;Load_NeuroTools;NT_Common;NT_Controls;NT_DataSets;NT_Functions;NT_InsertTemplate;NT_ExternalFunctions;NT_Structures;json_functions;"
 		Variable numFiles,i
 		String theFile
 		
@@ -28,7 +28,7 @@ STRCONSTANT NTLastUpdate = "June 22, 2020"
 #else
 	//Adds #includes the external procedure files
 	Function NT_InsertIncludes()
-		String fileList = "Load_NeuroTools;NT_Common;NT_Controls;NT_DataSets;NT_Functions;NT_InsertTemplate;NT_ExternalFunctions;NT_Structures;"
+		String fileList = "Load_NeuroTools;NT_Common;NT_Controls;NT_DataSets;NT_Functions;NT_InsertTemplate;NT_ExternalFunctions;NT_Structures;json_functions;"
 		Variable numFiles,i
 		String theFile
 		
