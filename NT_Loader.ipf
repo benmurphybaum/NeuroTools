@@ -103,6 +103,8 @@ Function Update_NT()
 	
 	String IgorAppPath = SpecialDirPath("Igor Pro User Files",0,0,0)
 	String UserProcPath = IgorAppPath + "User Procedures:NeuroTools:"
+	NewPath/C/O/Q NTPath,UserProcPath
+	
 	String IgorProcPath = IgorAppPath + "Igor Procedures:"
 	String IgorHelpPath = IgorAppPath + "Igor Help Files:"
 	
