@@ -3012,6 +3012,11 @@ End
 Function/S SelectedScanFolder()
 	Wave/T listWave = root:Packages:NT:ScanImage:ScanFolderListWave
 	ControlInfo/W=SI scanFolders
+	
+	If(DimSize(listWave,0) == 0)
+		return ""
+	EndIf
+	
 	return listWave[V_Value][0][0]
 End
 
