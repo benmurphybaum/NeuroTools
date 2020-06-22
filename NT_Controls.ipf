@@ -1076,7 +1076,10 @@ End
 Function MouseClickHooks(s)
 	STRUCT WMWinHookStruct &s
 	DFREF NTF = root:Packages:NT
+	DFREF NTS = root:Packages:NT:Settings
 	NVAR foldStatus = NTF:foldStatus
+	
+	NVAR hf = NTS:hf
 	
 	Variable hookResult = 0
 	Variable r = ScreenResolution / 72
@@ -1105,7 +1108,7 @@ Function MouseClickHooks(s)
 			
 			//Check mouse position
 			GetMouse/W=NT
-			If(V_left > 442 && V_left < 454 && V_top <= 510)
+			If(V_left > 442 && V_left < 454 && V_top <= 510*hf)
 				If(foldStatus)
 					closeParameterFold()
 					foldStatus = 0
@@ -1115,17 +1118,17 @@ Function MouseClickHooks(s)
 				EndIf
 				
 			//checks right boundary as well for when the panel is open
-			ElseIf(V_left > (448 + rightEdge-6) && V_left < (448 + rightEdge+6) && V_top <= 510 && foldStatus) 
+			ElseIf(V_left > (448 + rightEdge-6) && V_left < (448 + rightEdge+6) && V_top <= 510*hf && foldStatus) 
 				closeParameterFold()
 				foldStatus = 0
 				
 			//mouse hook for toggling the listbox focus	
-			ElseIf(V_left > 0 && V_left < 182 && V_top > 99 && V_top < 123) //Wave Match Click
+			ElseIf(V_left > 0 && V_left < 182 && V_top > 99*hf && V_top < 123*hf) //Wave Match Click
 				changeFocus("WaveMatch",1)
-			ElseIf(V_left > 182 && V_left < 438 && V_top > 99 && V_top < 123) //Data Set Click
+			ElseIf(V_left > 182 && V_left < 438 && V_top > 99*hf && V_top < 123*hf) //Data Set Click
 				changeFocus("DataSet",1)
-			ElseIf(V_left < 58 && V_top > 469 && V_top < 486)//Grouping Click
-				PopUpContextualMenu/C=(10,486)/N "GroupingMenu"
+			ElseIf(V_left < 58 && V_top > 469*hf && V_top < 486*hf)//Grouping Click
+				PopUpContextualMenu/C=(10,486*hf)/N "GroupingMenu"
 				
 				String popStr = S_Selection
 				Variable popNum = V_flag
@@ -1137,7 +1140,7 @@ Function MouseClickHooks(s)
 				popStr = TrimString(StringFromList(0,popStr,"("))
 				
 				appendGroupSelection(popStr)
-			ElseIf(V_left < 446 && V_top > 505 && V_top < 515)
+			ElseIf(V_left < 446 && V_top > 505*hf && V_top < 515*hf)
 				NVAR viewerOpen = NTF:viewerOpen
 			
 				If(!viewerOpen) 

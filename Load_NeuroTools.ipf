@@ -24,7 +24,6 @@ Function LoadNT([left,top])
 		DoWindow/K NT
 	EndIf
 	
-	print "hellO there"
 	
 	//Create the NeuroTools package folders and waves
 	MakePackageFolders()
@@ -34,6 +33,7 @@ Function LoadNT([left,top])
 	
 	DFREF NTF = root:Packages:NT
 	DFREF NTD = root:Packages:NT:DataSets
+	DFREF NTS = root:Packages:NT:Settings
 	
 	//Build the GUI
 	left += 0
@@ -41,10 +41,81 @@ Function LoadNT([left,top])
 	width = 754
 	height = 515
 	
-	Variable r = ScreenResolution / 72
+	//Get the screen dimensions for scaling purposes
+	String screenInfo =StringByKey("SCREEN1",IgorInfo(0),":",";")
+	screenInfo = StringFromList(2,screenInfo,"=")
 	
+	Variable/G NTS:screenWidth
+	NVAR screenWidth = NTS:screenWidth
+	Variable/G NTS:screenHeight
+	NVAR screenHeight = NTS:screenHeight
+	
+	screenWidth = str2num(StringFromList(2,screenInfo,","))
+	screenHeight = str2num(StringFromList(3,screenInfo,","))
+	
+	Variable/G NTS:fontSize,NTS:offsetY,NTS:fontSizeDS,NTS:controlHeightDS //vertical offset of some controls based on common screen heights
+	NVAR fontSize = NTS:fontSize
+	NVAR fontSizeDS = NTS:fontSizeDS
+	NVAR offsetY = NTS:offsetY
+	NVAR controlHeightDS = NTS:controlHeightDS
+	Variable/G NTS:wf
+	NVAR wf =  NTS:wf
+	Variable/G NTS:hf
+	NVAR hf =  NTS:hf
+		
+	If(!cmpstr(IgorInfo(2),"Macintosh"))
+		offsetY = 0
+		fontSize = 9
+		fontSizeDS = 12
+		controlHeightDS = 20
+		hf = 1
+		wf = 1
+	Else
+		wf = screenWidth / 1440	
+		hf = screenHeight / (900 + 150)
+		
+		switch(screenHeight)
+			case 660:
+				//incompatible, just get a better screen.
+				return 0
+			case 720:		
+				//not ideal, mild cut-offs		
+			case 768:
+			case 800:
+				offsetY = -8
+				fontSize = 9
+				fontSizeDS = 9
+				controlHeightDS = 19
+				break
+			case 864:
+				offsetY = -8
+				fontSize = 10
+				fontSizeDS = 10
+				controlHeightDS = 19
+				break
+			case 960:
+				offsetY = -8
+				fontSize = 11
+				fontSizeDS = 11
+				controlHeightDS = 19
+				break
+			case 1024:
+				offsetY = -8
+				fontSize = 12
+				fontSizeDS = 12
+				controlHeightDS = 19
+				break
+			default: //anthing over 1024 vertical pixels should be handle native coding just fine.
+				offsetY = 0
+				fontSize = 12
+				controlHeightDS = 20
+		endswitch
+	EndIf
+
+	Variable r = ScreenResolution / 72
+
 	//Main Panel
-	NewPanel /K=1 /W=(left*r,top*r,left*r + width,top*r + height) as "NeuroTools"
+	NewPanel /K=1 /W=(left*r,top*r,left*r + width,top*r + height*hf) as "NeuroTools"
 	DoWindow/C NT
 	ModifyPanel /W=NT, fixedSize= 1
 	
@@ -58,10 +129,10 @@ Function LoadNT([left,top])
 	String/G NTF:currentDataFolder
 	SVAR cdf = NTF:currentDataFolder
 	cdf = GetDataFolder(1)
-	SetVariable NT_cdf win=NT#navigatorPanel,pos={0,28},size={200,20},fsize=10,font=$LIGHT,value=cdf,title=" ",disable=2,frame=0
+	SetVariable NT_cdf win=NT#navigatorPanel,pos={0,28*hf},size={200,20},fsize=10,font=$LIGHT,value=cdf,title=" ",disable=2,frame=0
 	
 	//Back Button
-	Button Back win=NT#navigatorPanel,size={30,20},pos={1,49},font=$REG,fsize=9,title="Back",proc=ntButtonProc,disable=0
+	Button Back win=NT#navigatorPanel,size={30,20},pos={1,49*hf},font=$REG,fsize=9,title="Back",proc=ntButtonProc,disable=0
 
 	//Reload NeuroTools button
 	Button Reload win=NT,font=$LIGHT,size={50,20},pos={3,1},title="Reload",proc=ntButtonProc
@@ -69,7 +140,7 @@ Function LoadNT([left,top])
 	//Viewer Button
 	//Draw line along bottom of the GUI as a window hook for opening and closing the Viewer window
 	SetDrawEnv/W=NT xcoord= abs,ycoord= abs,linefgc= (0,0,0,16384),linethick= 4.00,gname=ViewerLine,gstart 
-	DrawLine/W=NT 0,513,446,513
+	DrawLine/W=NT 0,513*hf,446,513*hf
 	SetDrawEnv/W=NT gstop
 	
 //	Button ntViewerButton win=NT,font=$LIGHT,size={80,20},pos={288,58},title="▼ Viewer ▼",proc=ntButtonProc
@@ -100,11 +171,12 @@ Function LoadNT([left,top])
 	Button NT_Settings win=NT,font=$LIGHT,pos={57,1},size={20,20},title="...",disable=0,proc=ntButtonProc
 	
 	//Wave Matching
-	SetVariable waveMatch win=NT,font=$LIGHT,pos={13,40},size={162,25},fsize=12,title="Match",value=_STR:"*",help={"Matches waves in the selected folder.\rLogical 'OR' can be used via '||'"},disable=0,proc=ntSetVarProc
-	SetVariable waveNotMatch win=NT,font=$LIGHT,pos={26,60},size={149,25},fsize=12,title="Not",value=_STR:"",help={"Excludes matched waves in the selected folder.\rLogical 'OR' can be used via '||'"},disable=0,proc=ntSetVarProc
+	Variable waveMatchPosition = 40*hf
+	SetVariable waveMatch win=NT,font=$LIGHT,pos={13,waveMatchPosition},size={162,20},fsize=fontSize,title="Match",value=_STR:"*",help={"Matches waves in the selected folder.\rLogical 'OR' can be used via '||'"},disable=0,proc=ntSetVarProc
+	SetVariable waveNotMatch win=NT,font=$LIGHT,pos={26,waveMatchPosition + 20*hf},size={149,20},fsize=fontSize,title="Not",value=_STR:"",help={"Excludes matched waves in the selected folder.\rLogical 'OR' can be used via '||'"},disable=0,proc=ntSetVarProc
 	String helpNote = "Target subfolder for wave matching.\r Useful if matching in multiple parent folders that each have a common subfolder structure\r"
 	helpNote += "Supports folder matching, and can use '||' as a logical OR to match multiple subfolder searches"
-	SetVariable relativeFolderMatch win=NT,font=$LIGHT,pos={8,80},size={167,25},fsize=12,title=":Folder",value=_STR:"",help={helpNote},disable=0,proc=ntSetVarProc
+	SetVariable relativeFolderMatch win=NT,font=$LIGHT,pos={8,waveMatchPosition + 40*hf},size={167,20},fsize=fontSize,title=":Folder",value=_STR:"",help={helpNote},disable=0,proc=ntSetVarProc
    
 	//List box selection and table waves
 	Wave MatchLB_SelWave = NTF:MatchLB_SelWave //match list box
@@ -127,68 +199,70 @@ Function LoadNT([left,top])
 	getFolders()
 	getFolderWaves()
 	
-	ListBox folderListBox win=NT#navigatorPanel,size={140,435},pos={0,70},mode=9,listWave=FolderLB_ListWave,selWave=FolderLB_SelWave,disable=0,proc=ntListBoxProc
-	ListBox waveListBox win=NT#navigatorPanel,size={140,435},pos={150,70},mode=9,listWave=WavesLB_ListWave,selWave=WavesLB_SelWave,disable=0,proc=ntListBoxProc
+	ListBox folderListBox win=NT#navigatorPanel,size={140,435*hf},pos={0,70*hf},mode=9,listWave=FolderLB_ListWave,selWave=FolderLB_SelWave,disable=0,proc=ntListBoxProc
+	ListBox waveListBox win=NT#navigatorPanel,size={140,435*hf},pos={150,70*hf},mode=9,listWave=WavesLB_ListWave,selWave=WavesLB_SelWave,disable=0,proc=ntListBoxProc
 	
 	//List Box Labels
 	SetDrawEnv/W=NT gstart,gname=labels
 	SetDrawEnv/W=NT xcoord= abs,ycoord= abs, fsize=11, textxjust= 1,textyjust= 1,fname=$LIGHT
-	DrawText/W=NT 92,112,"Wave Matches"
+	DrawText/W=NT 92,112*hf,"Wave Matches"
 	SetDrawEnv/W=NT xcoord= abs,ycoord= abs, fsize=11, textxjust= 1,textyjust= 1,fname=$LIGHT
-	DrawText/W=NT 269,112,"Data Set Waves"
+	DrawText/W=NT 269,112*hf,"Data Set Waves"
 	SetDrawEnv/W=NT xcoord= abs,ycoord= abs, fsize=11, textxjust= 1,textyjust= 1,fname=$LIGHT
-	DrawText/W=NT 402,112,"Data Sets"
+	DrawText/W=NT 402,112*hf,"Data Sets"
 	SetDrawEnv/W=NT#navigatorPanel xcoord= abs,ycoord= abs, fsize=11, textxjust= 1,textyjust= 1,fname=$LIGHT
-	DrawText/W=NT#navigatorPanel 63,60,"Folders"
+	DrawText/W=NT#navigatorPanel 63,60*hf,"Folders"
 	SetDrawEnv/W=NT#navigatorPanel xcoord= abs,ycoord= abs, fsize=11, textxjust= 1,textyjust= 1,fname=$LIGHT
-	DrawText/W=NT#navigatorPanel 221,60,"Waves"
+	DrawText/W=NT#navigatorPanel 221,60*hf,"Waves"
 	SetDrawEnv/W=NT gstop
 	
 	
 	SetDrawEnv/W=NT#navigatorPanel xcoord= abs,ycoord= abs, fsize=14, textxjust= 1,textyjust= 1,fname=$LIGHT
-	DrawText/W=NT#navigatorPanel 143,15,"Navigator"
+	DrawText/W=NT#navigatorPanel 143,15*hf,"Navigator"
 	
 	SetDrawEnv/W=NT xcoord= abs,ycoord= abs, fsize=14, textxjust= 1,textyjust= 1, textrgb= (0,0,0),fname=$LIGHT,gstart,gname=parameterText
-	DrawText/W=NT 554,15,"Parameters"
+	DrawText/W=NT 554,15*hf,"Parameters"
 	SetDrawEnv/W=NT gstop
 	
 	
 	SetDrawEnv/W=NT xcoord= abs,ycoord= abs, fsize=12, textxjust= 1, textrgb= (0,0,0),textyjust= 1,fname=$LIGHT,gname=waveSelectorTitle,gstart
-	DrawText/W=NT 483,85,"Waves:"
+	DrawText/W=NT 483,85*hf,"Waves:"
 	SetDrawEnv/W=NT gstop
 	
 	SetDrawEnv/W=NT fname= $TITLE,textrgb= (43690,43690,43690),xcoord= abs,ycoord= abs,textxjust= 1,textyjust= 1
-	DrawText/W=NT 314,35,"\\Z36N e u r o T o o l s"
+	DrawText/W=NT 314,35*hf,"\\Z36N e u r o T o o l s"
 	SetDrawEnv/W=NT fname= $SUBTITLE,textrgb= (43690,43690,43690),xcoord= abs,ycoord= abs,textxjust= 1,textyjust= 1
-	DrawText/W=NT 314,66,"A data organization and analysis toolbox"
+	DrawText/W=NT 314,66*hf,"A data organization and analysis toolbox"
 	
 	//Group Box for control parameters
-	GroupBox parameterBox win=NT,pos={455,69},size={197,437},disable=0,title="" 
+	GroupBox parameterBox win=NT,pos={455,69},size={197,437*hf},disable=0,title="" 
 	
 	//Data Set controls
-	Button addDataSet win=NT,pos={340,444},font=$LIGHT,size={100,20},title="Add Data Set",disable=0,help={"Adds a new data set with the specified name"},proc=ntButtonProc
-	SetVariable dsNameInput win=NT,pos={345,468},size={90,20},disable=1,focusRing=0,frame=0,value=_STR:"",proc=ntSetVarProc
-	GroupBox dsNameGroupBox win=NT,pos={340,463},size={100,26},disable=1
+	Variable addDSPosition = 444 * hf + offsetY
+	Button addDataSet win=NT,pos={340,addDSPosition},fsize=fontSizeDS,font=$LIGHT,size={100,controlHeightDS},title="Add Data Set",disable=0,help={"Adds a new data set with the specified name"},proc=ntButtonProc
+	SetVariable dsNameInput win=NT,pos={345,468*hf},size={90,20},disable=1,focusRing=0,frame=0,value=_STR:"",proc=ntSetVarProc
+	GroupBox dsNameGroupBox win=NT,pos={340,463*hf},size={100,26},disable=1
 	
 	//Button addDataSetFromSelection win=NT,font=$LIGHT,pos={172,468},size={100,20},title="From Selection",help={"Adds a new data set from the wave list in Browse mode"},disable=0,proc=ntButtonProc
-	Button updateDataSet win=NT,font=$LIGHT,pos={340,465},size={100,20},title="Update DS",help={"Udpate the selected data set from the Wave Match list box"},disable=0,proc=ntButtonProc
-	Button delDataSet win=NT,font=$LIGHT,pos={340,486},size={100,20},title="Delete DS",help={"Delete the selected data set"},disable=0,proc=ntButtonProc	
+	Button updateDataSet win=NT,fsize=fontSizeDS,font=$LIGHT,pos={340,addDSPosition+19},size={100,controlHeightDS},title="Update DS",help={"Udpate the selected data set from the Wave Match list box"},disable=0,proc=ntButtonProc
+	Button delDataSet win=NT,fsize=fontSizeDS,font=$LIGHT,pos={340,addDSPosition+38},size={100,controlHeightDS},title="Delete DS",help={"Delete the selected data set"},disable=0,proc=ntButtonProc	
 	
 	helpNote = "Organize the wave list into wave sets by the indicated underscore position.\rUses zero offset; -2 concatenates into a single wave set"
-	SetVariable waveGrouping win=NT,pos={58,471},size={85,20},title="",disable=0,value=_STR:"",help={helpNote},proc=ntSetVarProc
+	Variable groupingYPos = 471*hf + offsetY
+	SetVariable waveGrouping win=NT,pos={58,groupingYPos},size={85,20},title="",disable=0,fsize=fontSize,value=_STR:"",help={helpNote},proc=ntSetVarProc
 	SetDrawEnv/W=NT fsize=9,fname=$LIGHT
-	DrawText/W=NT 14,484,"Grouping"
+	DrawText/W=NT 14,groupingYPos + 13,"Grouping"
 	SetDrawEnv/W=NT fsize=9,fname=$LIGHT
-	DrawText/W=NT 27,504,"Filters"
+	DrawText/W=NT 27,groupingYPos + 33,"Filters"
 	
 	
-	SetVariable prefixGroup win=NT,pos={58,491},size={40,20},title="",disable=0,value=_STR:"",help={"Filter the wave list by the 1st underscore position"},proc=ntSetVarProc
-	SetVariable groupGroup win=NT,pos={99,491},size={55,20},title=" __",disable=0,value=_STR:"",help={"Filter the wave list by the 2nd underscore position"},proc=ntSetVarProc
-	SetVariable seriesGroup win=NT,pos={155,491},size={55,20},title=" __",disable=0,value=_STR:"",help={"Filter the wave list by the 3rd underscore position"},proc=ntSetVarProc
-	SetVariable sweepGroup win=NT,pos={211,491},size={55,20},title=" __",disable=0,value=_STR:"",help={"Filter the wave list by the 4th underscore position"},proc=ntSetVarProc
-	SetVariable traceGroup win=NT,pos={266,491},size={55,20},title=" __",disable=0,value=_STR:"",help={"Filter the wave list by the 5th underscore position"},proc=ntSetVarProc
+	SetVariable prefixGroup win=NT,pos={58,groupingYPos + 20},size={40,20},title="",disable=0,fsize=fontSize,value=_STR:"",help={"Filter the wave list by the 1st underscore position"},proc=ntSetVarProc
+	SetVariable groupGroup win=NT,pos={99,groupingYPos + 20},size={55,20},title=" __",disable=0,fsize=fontSize,value=_STR:"",help={"Filter the wave list by the 2nd underscore position"},proc=ntSetVarProc
+	SetVariable seriesGroup win=NT,pos={155,groupingYPos + 20},size={55,20},title=" __",disable=0,fsize=fontSize,value=_STR:"",help={"Filter the wave list by the 3rd underscore position"},proc=ntSetVarProc
+	SetVariable sweepGroup win=NT,pos={211,groupingYPos + 20},size={55,20},title=" __",disable=0,fsize=fontSize,value=_STR:"",help={"Filter the wave list by the 4th underscore position"},proc=ntSetVarProc
+	SetVariable traceGroup win=NT,pos={266,groupingYPos + 20},size={55,20},title=" __",disable=0,fsize=fontSize,value=_STR:"",help={"Filter the wave list by the 5th underscore position"},proc=ntSetVarProc
 	
-	Button clearFilters win=NT,pos={153,468},size={130,20},title="Clear Group/Filters",disable=0,help={"Clear all filters and groupings"},proc=ntButtonProc
+	Button clearFilters win=NT,pos={153,468*hf + offsetY},fsize=fontSizeDS,font=$LIGHT,size={130,20},title="Clear Group/Filters",disable=0,help={"Clear all filters and groupings"},proc=ntButtonProc
 	
 	//Initialize the match list from the current data folder
    SetDataFolder root:
@@ -202,18 +276,18 @@ Function LoadNT([left,top])
    getWaveMatchList()
    
 	//List box that holds wave matches
-	ListBox MatchListBox win=NT,pos={6,120},size={172,320},mode=9,listWave=MatchLB_ListWave,selWave=MatchLB_SelWave,disable=0,proc=ntListBoxProc
+	ListBox MatchListBox win=NT,pos={6,120*hf},size={172,320*hf + offsetY},mode=9,listWave=MatchLB_ListWave,selWave=MatchLB_SelWave,disable=0,proc=ntListBoxProc
 	
 	//List box that holds data set wave lists
-	ListBox DataSetWavesListBox win=NT,mode=9,pos={183,120},size={172,320},listWave=DataSetLB_ListWave,selWave=DataSetLB_SelWave,disable=0,proc=ntListBoxProc
+	ListBox DataSetWavesListBox win=NT,mode=9,pos={183,120*hf},size={172,320*hf + offsetY},listWave=DataSetLB_ListWave,selWave=DataSetLB_SelWave,disable=0,proc=ntListBoxProc
 	
 	//List box to hold names of data sets 
-	ListBox DataSetNamesListBox win=NT,mode=2,pos={361,120},size={80,320},listWave=DSNamesLB_ListWave,selWave=DSNamesLB_SelWave,disable=0,proc=ntListBoxProc
+	ListBox DataSetNamesListBox win=NT,mode=2,pos={361,120*hf},size={80,320*hf + offsetY},listWave=DSNamesLB_ListWave,selWave=DSNamesLB_SelWave,disable=0,proc=ntListBoxProc
 	
 	//Draw line between matching and data set section, and the Data Browser section
 	//Put the line into its own draw group so I can pull it out individually
 	SetDrawEnv/W=NT xcoord= abs,ycoord= abs,linefgc= (0,0,0,16384),linethick= 4.00,gname=NavLine,gstart 
-	DrawLine/W=NT 448,0,448,515
+	DrawLine/W=NT 448,0,448,515*hf
 //	SetDrawEnv/W=NT# xcoord= abs,ycoord= abs,linefgc= (0,0,0,16384),linethick= 4.00,
 	SetDrawEnv/W=NT gstop
 	
@@ -221,7 +295,7 @@ Function LoadNT([left,top])
 	NVAR progressVal = NTF:progressVal
 	progressVal = 0
 
-	ValDisplay progress win=NT,pos={198,85},size={233,4},limits={0,100,0},frame=0,barmisc={0,0},mode=0,highColor=(0,43690,65535),value=#"root:Packages:NT:progressVal",disable=1
+	ValDisplay progress win=NT,pos={198,85*hf},size={233,4},limits={0,100,0},frame=0,barmisc={0,0},mode=0,highColor=(0,43690,65535),value=#"root:Packages:NT:progressVal",disable=1
 	
 	//For opening and closing the parameters infold for running functions
 	SetWindow NT hook(MouseClickHooks) = MouseClickHooks

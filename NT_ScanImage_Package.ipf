@@ -82,6 +82,11 @@ Function SI_CreatePackage()
 	NVAR rollingAverageCount = NTSI:rollingAverageCount
 	rollingAverageCount = 0
 	
+	//Hook time out. This works around a possible bug where the resize hook is triggered multiple times
+	//when the Image Browser panel is first opened.
+	Variable/G NTSI:resizeTimeOut
+	
+	
 	//list and selection waves for the ROI list box
 	//second layer will record the ROI Group assigned to each ROI...
 	//...which is only defined by the folder the ROI lives in
@@ -935,7 +940,7 @@ Function resizeHook(s)
 			Variable height = s.winRect.bottom
 			height = (height < 125) ? 125 : height
 			
-			MoveWindow/W=SI V_left,V_top,V_left + 460,V_top + height
+			MoveWindow/W=SI V_left,V_top,V_left + 460/r,V_top + height/r
 			
 			Variable vSize = height - 45
 			Variable vPos = height - 19

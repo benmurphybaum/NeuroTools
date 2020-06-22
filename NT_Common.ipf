@@ -1808,8 +1808,12 @@ Function changeFocus(selection,switchFilterSettings)
 	String selection //left or right
 	Variable switchFilterSettings//switchFilterSettings = 1 to save/recall filters
 	
+	
 	DFREF NTF = root:Packages:NT
 	DFREF NTD = root:Packages:NT:DataSets
+	DFREF NTS = root:Packages:NT:Settings
+	NVAR offsetY = NTS:offsetY
+	NVAR hf =  NTS:hf
 	
 	SVAR listFocus = NTF:listFocus
 	
@@ -1827,34 +1831,34 @@ Function changeFocus(selection,switchFilterSettings)
 		case "WaveMatch":
 			SetDrawEnv/W=NT gname=selectionDots,gstart
 			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 1.0))
-			DrawOval/W=NT 45,108,50,113
+			DrawOval/W=NT 45,108*hf,50,113*hf
 			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.8))
-			DrawOval/W=NT 35,108,40,113
+			DrawOval/W=NT 35,108*hf,40,113*hf
 			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.6))
-			DrawOval/W=NT 25,108,30,113
+			DrawOval/W=NT 25,108*hf,30,113*hf
 			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.4))
-			DrawOval/W=NT 15,108,20,113
+			DrawOval/W=NT 15,108*hf,20,113*hf
 			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.2))
-			DrawOval/W=NT 5,108,10,113
+			DrawOval/W=NT 5,108*hf,10,113*hf
 			
 			//This ones extra, to compensate for some Igor bug messing with my object groups?
 			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 1.0))
-			DrawOval/W=NT 45,108,50,113
+			DrawOval/W=NT 45,108*hf,50,113*hf
 			
 			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 1.0))
-			DrawOval/W=NT 133,108,138,113
+			DrawOval/W=NT 133,108*hf,138,113*hf
 			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.8))
-			DrawOval/W=NT 143,108,148,113
+			DrawOval/W=NT 143,108*hf,148,113*hf
 			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.6))
-			DrawOval/W=NT 153,108,158,113
+			DrawOval/W=NT 153,108*hf,158,113*hf
 			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.4))
-			DrawOval/W=NT 163,108,168,113
+			DrawOval/W=NT 163,108*hf,168,113*hf
 			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.2))
-			DrawOval/W=NT 173,108,178,113
+			DrawOval/W=NT 173,108*hf,178,113*hf
 			
 			//rectangle selection
 			SetDrawEnv/W=NT linethick= 0,linefgc= (3,52428,1),fillfgc= (3,52428,1,32768)
-			DrawRect/W=NT 3,117,180,443
+			DrawRect/W=NT 3,117*hf,180,443*hf + offsetY
 			
 			SetDrawEnv/W=NT gstop
 			
@@ -1874,34 +1878,34 @@ Function changeFocus(selection,switchFilterSettings)
 			SetDrawEnv/W=NT gname=selectionDots,gstart
 			
 			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 1.0))
-			DrawOval/W=NT 69+offset,108,74+offset,113
+			DrawOval/W=NT 69+offset,108*hf,74+offset,113*hf
 			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.8))
-			DrawOval/W=NT 59+offset,108,64+offset,113
+			DrawOval/W=NT 59+offset,108*hf,64+offset,113*hf
 			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.6))
-			DrawOval/W=NT 49+offset,108,54+offset,113
+			DrawOval/W=NT 49+offset,108*hf,54+offset,113*hf
 			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.4))
-			DrawOval/W=NT 39+offset,108,44+offset,113
+			DrawOval/W=NT 39+offset,108*hf,44+offset,113*hf
 			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.2))
-			DrawOval/W=NT 29+offset,108,34+offset,113
+			DrawOval/W=NT 29+offset,108*hf,34+offset,113*hf
 			
 			//This ones extra, to compensate for some Igor bug messing with my object groups?
 			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 1.0))
-			DrawOval/W=NT 69+offset,108,74+offset,113
+			DrawOval/W=NT 69+offset,108*hf,74+offset,113*hf
 			
 			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 1.0))
-			DrawOval/W=NT 169+offset2,108,174+offset2,113
+			DrawOval/W=NT 169+offset2,108*hf,174+offset2,113*hf
 			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.8))
-			DrawOval/W=NT 179+offset2,108,184+offset2,113
+			DrawOval/W=NT 179+offset2,108*hf,184+offset2,113*hf
 			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.6))
-			DrawOval/W=NT 189+offset2,108,194+offset2,113
+			DrawOval/W=NT 189+offset2,108*hf,194+offset2,113*hf
 			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.4))
-			DrawOval/W=NT 199+offset2,108,204+offset2,113
+			DrawOval/W=NT 199+offset2,108*hf,204+offset2,113*hf
 			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.2))
-			DrawOval/W=NT 209+offset2,108,214+offset2,113
+			DrawOval/W=NT 209+offset2,108*hf,214+offset2,113*hf
 			
 			//rectangle selection
 			SetDrawEnv/W=NT linethick= 0,linefgc= (3,52428,1),fillfgc= (3,52428,1,32768)
-			DrawRect/W=NT 180,117,357,443
+			DrawRect/W=NT 180,117*hf,357,443*hf + offsetY
 			
 			SetDrawEnv/W=NT gstop
 			
@@ -2789,23 +2793,23 @@ End
 //Opens the Trace Viewer window
 Function openViewer()
 	DFREF NTF = root:Packages:NT
+	DFREF NTS = root:Packages:NT:Settings
 	
 	NVAR viewerOpen = NTF:viewerOpen
 	SVAR viewerRecall = NTF:viewerRecall
+	NVAR hf = NTS:hf
 	
 	Variable r = ScreenResolution / 72
 	
 	//Define guides
 //	DefineGuide/W=NT VT = {FT,0.6315,FB}
 //	DefineGuide/W=NT VB = {FT,0.97,FB}
-
-	DefineGuide/W=NT VT = {FT,515}
-	DefineGuide/W=NT VB = {FT,790}	
-	
-	//Add an additional 300 pixels to the toolbox on the bottom
+	DefineGuide/W=NT VT = {FT,515*hf}
+	DefineGuide/W=NT VB = {FT,790*hf}
+		
+	//Add an additional 200 pixels to the toolbox on the bottom
 	GetWindow NT wsize
-
-	MoveWindow/W=NT V_left,V_top,V_right,V_bottom + 300/r
+	MoveWindow/W=NT V_left,V_top,V_right,V_bottom + 300*hf/r
 	
 	//Open the display window only if it wasn't already open
 	If(viewerOpen == 0)
@@ -2816,12 +2820,12 @@ Function openViewer()
 	DefineGuide/W=NT listboxBottom={FT,0.61,FB}
 	
 	//Display the window controls
-	Button ntViewerAutoScaleButton win=NT,size={50,20},pos={3,793},title="AUTO",proc=ntButtonProc
-	Button ntViewerDisplayTracesButton win=NT,size={50,20},pos={60,793},title="DISP",proc=ntButtonProc
-	Button ntViewerClearTracesButton win=NT,size={50,20},pos={117,793},title="CLEAR",proc=ntButtonProc
+	Button ntViewerAutoScaleButton win=NT,size={50,20},pos={3,793*hf},title="AUTO",proc=ntButtonProc
+	Button ntViewerDisplayTracesButton win=NT,size={50,20},pos={60,793*hf},title="DISP",proc=ntButtonProc
+	Button ntViewerClearTracesButton win=NT,size={50,20},pos={117,793*hf},title="CLEAR",proc=ntButtonProc
 	
-	CheckBox ntViewerSeparateVert win=NT,size={50,20},font=$LIGHT,fsize=12,pos={174,795},title="Vert",proc=ntCheckProc
-	CheckBox ntViewerSeparateHoriz win=NT,size={50,20},font=$LIGHT,fsize=12,pos={220,795},title="Horiz",proc=ntCheckProc
+	CheckBox ntViewerSeparateVert win=NT,size={50,20},font=$LIGHT,fsize=12,pos={174,795*hf},title="Vert",proc=ntCheckProc
+	CheckBox ntViewerSeparateHoriz win=NT,size={50,20},font=$LIGHT,fsize=12,pos={220,795*hf},title="Horiz",proc=ntCheckProc
 	
 	//Recall previous display
 	If(strlen(viewerRecall))
@@ -2834,8 +2838,10 @@ End
 //Closes the Trace Viewer window
 Function closeViewer()
 	DFREF NTF = root:Packages:NT
+	DFREF NTS = root:Packages:NT:Settings
 	SVAR viewerRecall = NTF:viewerRecall
 	NVAR viewerOpen = NTF:viewerOpen
+	NVAR hf = NTS:hf
 	
 	Variable r = ScreenResolution / 72
 	
@@ -2848,10 +2854,9 @@ Function closeViewer()
 	viewerRecall = ReplaceString(matchStr,viewerRecall,"AppendToGraph/W=NT#ntViewerGraph")
 	
 	KillWindow/Z NT#ntViewerGraph
-	//Remove 300 pixels to the toolbox on the bottom, or however many pixels it is for Windows when not using full screen
-	
-	GetWindow NT wsize	
-	MoveWindow/W=NT V_left,V_top,V_right,V_top + 515/r
+	//Remove 200 pixels to the toolbox on the bottom
+	GetWindow NT wsize
+	MoveWindow/W=NT V_left,V_top,V_right,V_top + 515*hf/r
 	
 	//adjust guide for scanListPanel so it doesn't get in the viewer's way
 	DefineGuide/W=NT listboxBottom={FB,-10}
