@@ -3,7 +3,7 @@
 
 
 STRCONSTANT NTversion = "1.0"
-STRCONSTANT NTLastUpdate = "June 18, 2020"
+STRCONSTANT NTLastUpdate = "June 22, 2020"
 
 #if(DataFolderExists("root:Packages:twoP"))
 	//Adds #includes the external procedure files
