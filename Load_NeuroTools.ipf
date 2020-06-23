@@ -319,6 +319,15 @@ Function LoadNT([left,top])
 	
 	BuildMenu "All"
 	
+	//Print version and update information
+	Variable secs = DateTime - Date2Secs(-1,-1,-1)
+	String updateTime = Secs2Time(secs,1)
+	String updateDate = Secs2Date(secs,0)
+	
+	print "NeuroTools"
+	print "Version: ",NTversion
+	print "Last Update: ",updateDate,updateTime,"UTC"
+	
 End
 
 //Creates NeuroTools package folders and makes all supporting waves
