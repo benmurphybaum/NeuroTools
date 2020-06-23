@@ -2079,7 +2079,7 @@ Function siListBoxProc(lba) : ListBoxControl
 					
 					//Can't overwrite itself
 					If(!cmpstr(newName,oldROIGroupName))
-						ROISelWave[row] = 1
+						ROIGroupSelWave[row] = 1
 						return 0
 					EndIf
 					
@@ -2091,6 +2091,10 @@ Function siListBoxProc(lba) : ListBoxControl
 						RenameDataFolder root:twoP_ROIS:$oldROIGroupName,$ROIGroupListWave[row]
 					Else
 						RenameDataFolder root:Packages:NT:ScanImage:ROIs:$oldROIGroupName,$ROIGroupListWave[row]
+						
+						If(DataFolderExists("root:Analysis:'" + oldROIGroupName + "'"))
+							RenameDataFolder root:Analysis:$oldROIGroupName,$ROIGroupListWave[row]
+						EndIf	
 					EndIf
 									
 					break
@@ -2245,11 +2249,11 @@ Function HandleSelectionRightClick(selection,software,ROIListWave,ROISelWave)
 					KillDataFolder/Z $(baseROIpath + roiGroup)
 				EndIf
 				
+				updateImageBrowserLists()
 				break
 		endswitch
 	EndFor
 	
-	updateImageBrowserLists()
 End
 
 //Handles list box selections in the ScanImage package
@@ -4315,8 +4319,11 @@ Function/WAVE NT_dFMap(ds)
 				//Convert the integer smoothing to a binary mask, and apply to the single float smooth version
 				Duplicate/FREE theBeam,theBeamW
 				Redimension/W theBeamW
-
-				Smooth/S=2/DIM=0 img.filter,theBeam
+				
+				If(img.filter != 0)
+					Smooth/S=2/DIM=0 img.filter,theBeam
+				EndIf
+				
 //				Smooth/S=2/DIM=0 img.filter,theBeamW
 //				theBeamW = (theBeamW) ? 1 : 0
 //				
