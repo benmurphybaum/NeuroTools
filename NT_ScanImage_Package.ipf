@@ -2096,7 +2096,10 @@ Function siListBoxProc(lba) : ListBoxControl
 							RenameDataFolder root:Analysis:$oldROIGroupName,$ROIGroupListWave[row]
 						EndIf	
 					EndIf
-									
+					
+					//Update Navigator lists
+					GetFolders()		
+					GetFolderWaves()
 					break
 				case "rois":
 					newName = ROIListWave[row][0][0]
@@ -5427,6 +5430,8 @@ Function RunCmd_ScanImagePackage(cmd)
 	
 	DFREF NTSI = root:Packages:NT:ScanImage
 	
+	DFREF saveDF = GetDataFolderDFR()
+	
 	strswitch(cmd)
 		case "Get ROI":
 			GetStruct(ds)
@@ -5475,6 +5480,8 @@ Function RunCmd_ScanImagePackage(cmd)
 			NT_ResponseQuality(ds)
 			break
 	endswitch
+	
+	SetDataFolder saveDF
 End
 
 Menu "roiRightClickMenu",contextualMenu,dynamic

@@ -3,7 +3,6 @@
 
 
 STRCONSTANT NTversion = "1.0"
-STRCONSTANT NTLastUpdate = "June 22, 2020"
 
 #if(DataFolderExists("root:Packages:twoP"))
 	//Adds #includes the external procedure files
@@ -194,9 +193,13 @@ Function Update_NT()
 	
 	//Cleanup 
 	DeleteFile/Z path + "master.zip"
-
+	
+	Variable secs = DateTime - Date2Secs(-1,-1,-1)
+	String updateTime = Secs2Time(secs,1)
+	String updateDate = Secs2Date(secs,0)
+	
 	print "Version: ",NTversion
-	print "Last Update: ",NTLastUpdate
+	print "Last Update: ",updateDate,updateTime,"UTC"
 End
 
 
