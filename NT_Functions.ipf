@@ -1190,7 +1190,7 @@ Function NT_Measure(ds)
 				break
 			case "# Spikes": //spike count
 				outWave[ds.wsi] = NT_SpikeCount(theWave,startTm,endTm,threshold)
-				
+				break
 			case "Vector Sum": //vector sum
 				String angles = GetVectorSumAngles(ds,DimSize(theWave,0))
 		
