@@ -1106,6 +1106,10 @@ Function NT_Measure(ds)
 			suffix = "_sem"
 			theNote = "Std. Error:\n"
 			break
+		case "# Spikes":
+			suffix = "_spkct"
+			theNote = "Spike Count:\n"
+			break
 		case "Vector Sum":
 			theNote = "Vector Sum:\n"
 			
@@ -1137,8 +1141,12 @@ Function NT_Measure(ds)
 	//this allows each wave to have a different end point if we're using the whole wave
 	Variable origEndTm = endTm 
 	
+	ControlInfo/W=NT measureThreshold
+	Variable threshold = V_Value
+	
 	ControlInfo/W=NT sortOutput
 	String sortType = S_Value
+	
 	
 	//Make the output wave
 	String outName = StringFromList(0,ds.paths,";") + suffix
@@ -1180,6 +1188,9 @@ Function NT_Measure(ds)
 			case "Std. Error": //sem
 				outWave[ds.wsi] = V_sem
 				break
+			case "# Spikes": //spike count
+				outWave[ds.wsi] = NT_SpikeCount(theWave,startTm,endTm,threshold)
+				
 			case "Vector Sum": //vector sum
 				String angles = GetVectorSumAngles(ds,DimSize(theWave,0))
 		
@@ -1377,6 +1388,22 @@ Function NT_Load_WaveSurfer(String fileList[,String channels])
 	//refresh the folder and wave list boxes
 	getFolders()
 	getFolderWaves()
+End
+
+//Counts the number of spikes in the wave
+Function NT_SpikeCount(theWave,startTm,endTm,threshold)
+	Wave theWave
+	Variable startTm,endTm,threshold
+	Variable spkct
+	
+	If(!WaveExists(theWave))
+		return -1
+	EndIf
+	
+	FindLevels/EDGE=1/R=(startTm,endTm) theWave,threshold
+	spkct = V_LevelsFound
+	
+	return spkct
 End
 
 //Returns the vector sum angle or dsi of the input wave

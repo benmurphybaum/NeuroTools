@@ -747,14 +747,14 @@ Menu "ExternalFuncMenu",contextualMenu
 End
 
 Menu "MeasureTypeMenu",contextualMenu
-	"Peak;Peak Location;Area;Mean;Median;Std. Dev.;Std. Error;-;Vector Sum;",""
+	"Peak;Peak Location;Area;Mean;Median;Std. Dev.;Std. Error;-;# Spikes;Vector Sum;",""
 End
 
 Function/S setupMeasureControls(selection)
 	String selection
 	
 	//Start by setting all Measure associated controls to invisible
-	String invisibleList = "measureStart;measureEnd;angleWave;measureWidth;vectorSumReturn;sortOutput;"
+	String invisibleList = "measureStart;measureEnd;angleWave;measureWidth;measureThreshold;vectorSumReturn;sortOutput;"
 	controlsVisible(invisibleList,1)
 	
 	String visibleList = ""
@@ -765,6 +765,9 @@ Function/S setupMeasureControls(selection)
 			break
 		case "Peak":
 			visibleList = "measureStart;measureEnd;measureWidth;sortOutput;"
+			break
+		case "# Spikes":
+			visibleList = "measureStart;measureEnd;measureThreshold;sortOutput;"
 			break
 		default:
 			visibleList = "measureStart;measureEnd;sortOutput;"
@@ -1214,7 +1217,7 @@ Function CreateControlLists()
 	controlAssignments[10][3] = ""
 	
 	controlAssignments[11][0] = "Measure"
-	controlAssignments[11][1] = "WaveListSelector;measureType;measureStart;measureEnd;angleWave;measureWidth;vectorSumReturn;sortOutput;"
+	controlAssignments[11][1] = "WaveListSelector;measureType;measureStart;measureEnd;measureThreshold;angleWave;measureWidth;vectorSumReturn;sortOutput;"
 	controlAssignments[11][2] = "210"
 	controlAssignments[11][3] = "WaveSelectorTitle;measureTypeTitle;"
 	
@@ -1297,6 +1300,7 @@ Function CreateControls()
 	SetVariable measureStart win=NT,pos={490,130},bodywidth=40,font=$LIGHT,fsize=10,size={40,20},title="Start",limits={0,inf,0.1},value=_NUM:0,disable=1
 	SetVariable measureEnd win=NT,pos={490,150},bodywidth=40,font=$LIGHT,fsize=10,size={40,20},title="End",limits={0,inf,0.1},value=_NUM:0,disable=1
 	SetVariable measureWidth win=NT,pos={490,170},bodywidth=40,font=$LIGHT,fsize=10,size={40,20},title="Width",limits={0,inf,0.1},value=_NUM:0,disable=1
+	SetVariable measureThreshold win=NT,pos={490,170},bodywidth=60,font=$LIGHT,fsize=10,size={60,20},title="Thresh.",limits={-inf,inf,5e-12},value=_NUM:50e-12,disable=1
 	SetVariable angleWave win=NT,pos={530,130},bodywidth=80,font=$LIGHT,fsize=10,size={40,20},title="Angles",value=_STR:"45 * x",disable=1
 	PopUpMenu vectorSumReturn win=NT,pos={530,150},bodywidth=80,font=$LIGHT,fsize=10,size={40,20},title="Return",value="Angle;Resultant;DSI;",disable=3
 	PopUpMenu sortOutput win=NT,pos={530,190},bodywidth=80,font=$LIGHT,fsize=10,size={40,20},title="Sort",value="Linear;Alternating;",disable=3
