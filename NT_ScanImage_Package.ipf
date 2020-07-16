@@ -113,6 +113,12 @@ Function SI_CreatePackage()
 	NVAR ROI_Engaged = NTSI:ROI_Engaged
 	ROI_Engaged = 0
 	
+	Variable/G NTSI:drawROI_Engaged
+	NVAR drawROI_Engaged = NTSI:drawROI_Engaged
+	drawROI_Engaged = 0
+	
+	Make/O/N=0 NTSI:drawROIX,NTSI:drawROIY
+	
 	Variable/G NTSI:Nudge_Engaged
 	NVAR Nudge_Engaged = NTSI:Nudge_Engaged
 	Nudge_Engaged = 0
@@ -1001,8 +1007,11 @@ Function zoomScrollHook(s)
 	NVAR scaleCumulative = NTSI:scaleCumulative
 	NVAR ROI_Engaged = NTSI:ROI_Engaged
 	NVAR Nudge_Engaged = NTSI:Nudge_Engaged	
+	NVAR drawROI_Engaged = NTSI:drawROI_Engaged
 	Wave/Wave clickedROIRef = NTSI:clickedROIRef
-	
+	Wave drawROIX = NTSI:drawROIX
+	Wave drawROIY = NTSI:drawROIY
+								
 	Variable hookResult = 0
 	switch(s.eventCode)
 		case 0: //Activate
@@ -1029,6 +1038,17 @@ Function zoomScrollHook(s)
 			//If we're creating an ROI, don't engage the drag hook function unless Nudge ROI is engaged
 			If(ROI_Engaged && !Nudge_Engaged)
 				mouseDrag = 0
+				
+				//Get the ROI type
+				ControlInfo/W=SIDisplay#ROIPanel roiType
+				String roiType = S_Value
+				
+				If(!cmpstr(roiType,"Click"))
+					drawROI_Engaged = 0
+				ElseIf(!cmpstr(roiType,"Draw"))
+					drawROI_Engaged = 1
+				EndIf
+				
 			ElseIf(Nudge_Engaged)
 				mouseDrag = 1
 				
@@ -1043,6 +1063,8 @@ Function zoomScrollHook(s)
 				
 				//Get the clicked ROI, put into a wave reference wave
 				ClickedROI(mouseStartX,mouseStartY,graphRef)
+			ElseIf(drawROI_Engaged)
+				mouseDrag = 0
 			Else
 				mouseDrag = 1
 			EndIf
@@ -1063,10 +1085,28 @@ Function zoomScrollHook(s)
 		 	If(sw == -1)
 		 		return 0
 		 	EndIf
-		 		 	
+		 		 			 	
 			//Skip dynamic ROI if we're dragging the frame around
 			If(!mouseDrag)
-				If(isDynamicROI)
+				If(drawROI_Engaged)
+					String target = "SIDisplay#image" + num2str(sw) + "#graph" + num2str(sw)
+					//Horizontal index of image
+					Variable hPixel = AxisValFromPixel(target,"top",s.mouseLoc.h)
+					
+					//Vertical index of image
+					Variable vPixel = AxisValFromPixel(target,"left",s.mouseLoc.v)
+					
+					//Add the pixel scale value into the draw ROI waves
+					Variable dim = DimSize(drawROIX,0)
+					Redimension/N=(dim + 1) drawROIX,drawROIY
+					drawROIX[dim] = hPixel
+					drawROIY[dim] = vPixel
+					
+					String traces = TraceNameList(target,";",0)
+					If(WhichListItem("drawROIY",traces,";") == -1)
+						AppendToGraph/W=$target/L/T drawROIY vs drawROIX
+					EndIf
+				ElseIf(isDynamicROI)
 					NVAR size = NTSI:dynamicROI_Size
 				 	
 				 	SVAR SIDisplay_ImagePaths = NTSI:SIDisplay_ImagePaths
@@ -1093,13 +1133,13 @@ Function zoomScrollHook(s)
 					cols = DimSize(theImage,1)
 					
 					
-					String target = "SIDisplay#image" + num2str(sw) + "#graph" + num2str(sw)
+					target = "SIDisplay#image" + num2str(sw) + "#graph" + num2str(sw)
 					//Horizontal index of image
-					Variable hPixel = AxisValFromPixel(target,"top",s.mouseLoc.h)
+					hPixel = AxisValFromPixel(target,"top",s.mouseLoc.h)
 					hPixel = ScaleToIndex(theImage,hPixel,0)
 					
 					//Vertical index of image
-					Variable vPixel = AxisValFromPixel(target,"left",s.mouseLoc.v)
+					vPixel = AxisValFromPixel(target,"left",s.mouseLoc.v)
 					vPixel = ScaleToIndex(theImage,vPixel,1)
 					
 					//Ensure valid index
@@ -1242,24 +1282,28 @@ Function zoomScrollHook(s)
 			EndIf
 			
 			mouseDrag = 0
+			drawROI_Engaged = 0
 			
 			//Create a new ROI if it's engaged
 			If(ROI_Engaged)
 				ControlInfo/W=SIDisplay#ROIPanel roiType
-				strswitch(S_Value)
+			 	roiType = S_Value
+				
+				//What is the width and height?
+				ControlInfo/W=SIDisplay#ROIPanel roiWidth
+				Variable width = V_Value
+				
+				ControlInfo/W=SIDisplay#ROIPanel roiHeight
+				Variable height = V_Value
+				
+				ControlInfo/W=SIDisplay#ROIPanel roiName
+				String baseName = S_Value
+				
+				ControlInfo/W=SIDisplay#ROIPanel roiGroupSelect
+				String group = S_Value
+			
+				strswitch(roiType)
 					case "Click":
-						//What is the width and height?
-						ControlInfo/W=SIDisplay#ROIPanel roiWidth
-						Variable width = V_Value
-						
-						ControlInfo/W=SIDisplay#ROIPanel roiHeight
-						Variable height = V_Value
-						
-						ControlInfo/W=SIDisplay#ROIPanel roiName
-						String baseName = S_Value
-						
-						ControlInfo/W=SIDisplay#ROIPanel roiGroupSelect
-						String group = S_Value
 						
 						CreateROIFromClick(mouseStartX,mouseStartY,width,height,target,group,baseName)
 						
@@ -2269,7 +2313,8 @@ Function siButtonProc(ba) : ButtonControl
 	NVAR ROI_PctThreshold = NTSI:ROI_PctThreshold
 	NVAR ROI_Engaged = NTSI:ROI_Engaged
 	NVAR Nudge_Engaged = NTSI:Nudge_Engaged
-				
+	NVAR drawROI_Engaged = NTSI:drawROI_Engaged
+	
 	Variable hookResult = 0
 	switch( ba.eventCode )
 		case 2: // mouse up
@@ -2311,6 +2356,10 @@ Function siButtonProc(ba) : ButtonControl
 					ControlInfo/W=SI targetImage
 					String target = S_Value
 					
+					If(!strlen(target))
+						break
+					EndIf
+					
 					//Set the window hook to the target window
 					SetWindow $target hook(zoomScrollHook) = zoomScrollHook
 					
@@ -2329,7 +2378,7 @@ Function siButtonProc(ba) : ButtonControl
 					EndIf
 					
 					NewPanel/EXT=1/HOST=SIDisplay/N=ROIPanel/W=(110,0,0,300) as "Create ROIs"
-					PopUpMenu roiType,win=SIDisplay#ROIPanel,pos={54,10},bodywidth=72,title="Type",font=$LIGHT,value="Marquee;Click;Grid;Somas;",proc=siPopProc
+					PopUpMenu roiType,win=SIDisplay#ROIPanel,pos={54,10},bodywidth=72,title="Type",font=$LIGHT,value="Marquee;Click;Draw;Grid;Somas;",proc=siPopProc
 			
 					//Disable the movement hook for marquee mode
 					ControlInfo/W=SIDisplay#ROIPanel roiType
@@ -2501,6 +2550,49 @@ Function siButtonProc(ba) : ButtonControl
 								ROI_Engaged = 1
 								
 								Button confirmROI win=SIDisplay#ROIPanel,title="Finish"
+							EndIf
+							break
+						case "Draw":
+							If(ROI_Engaged)
+								ROI_Engaged = 0 //set back to zero, finished creating ROIs
+								
+								Button confirmROI win=SIDisplay#ROIPanel,title="Start"						
+//								KillWindow/Z SIDisplay#ROIPanel
+								
+								//Set the window hook to the target window to null
+								SetWindow $target hook(zoomScrollHook) = $""
+								
+								//Enable the mouse movement hook for the SIDisplay window
+								SetWindow SIDisplay hook(zoomScrollHook) = zoomScrollHook	
+								
+								//Finish creating the ROI
+								ControlInfo/W=SIDisplay#ROIPanel roiName
+								baseName = S_Value
+								
+								ControlInfo/W=SIDisplay#ROIPanel roiGroupSelect
+								group = S_Value
+								Wave drawROIX = NTSI:drawROIX
+								Wave drawROIY = NTSI:drawROIY
+								
+								//Close the ROI loop
+								Variable dim = DimSize(drawROIX,0)
+								Redimension/N=(dim + 1) drawROIX,drawROIY
+								drawROIX[dim] = drawROIX[0]
+								drawROIY[dim] = drawROIY[0]
+								
+								CreateDrawnROI(drawROIX,drawROIY,target,group,baseName)
+						
+							Else
+								//Begin creating ROIs
+								ROI_Engaged = 1
+								
+								Button confirmROI win=SIDisplay#ROIPanel,title="Finish"
+								
+								//Reset the drawROI waves
+								Wave drawROIX = NTSI:drawROIX
+								Wave drawROIY = NTSI:drawROIY
+								Redimension/N=0 drawROIX,drawROIY
+								
 							EndIf
 							break
 					endswitch					
@@ -2893,11 +2985,11 @@ Function siSliderProc(sa) : SliderControl
 					strswitch(sa.ctrlName)
 						case "darkValueSlider":
 							ControlInfo/W=SIDisplay#control brightValueSlider
-							ModifyImage/W=$graphRef $StringFromList(0,list,";"),ctab={round(minVal + curval * (maxVal - minVal)),round(minVal + (V_Value/100) * (maxVal - minVal)),Grays,0}
+							ModifyImage/W=$graphRef $StringFromList(0,list,";"),ctab={minVal + curval * (maxVal - minVal),minVal + (V_Value/100) * (maxVal - minVal),Grays,0}
 							break
 						case "brightValueSlider":
 							ControlInfo/W=SIDisplay#control darkValueSlider
-							ModifyImage/W=$graphRef $StringFromList(0,list,";"),ctab={round(minVal + (V_Value/100) * (maxVal - minVal)),round(minVal + curval * (maxVal - minVal)),Grays,0}
+							ModifyImage/W=$graphRef $StringFromList(0,list,";"),ctab={minVal + (V_Value/100) * (maxVal - minVal),minVal + curval * (maxVal - minVal),Grays,0}
 						break
 					endswitch
 				EndFor
@@ -2933,6 +3025,18 @@ Function SwitchROIControls(roiType)
 			Button addROI,win=SIDisplay#ROIPanel,disable=1
 			Button confirmROI,win=SIDisplay#ROIPanel,pos={9,140},size={93,20},title="Start"
 			PopUpMenu roiGroupSelect,win=SIDisplay#ROIPanel,pos={5,95},bodywidth=72, disable=0
+			SetVariable pctFillThreshold,win=SIDisplay#ROIPanel,disable=1
+			
+			SetWindow SIDisplay hook(zoomScrollHook) = zoomScrollHook
+			break
+		case "Draw":
+			SetVariable roiWidth,win=SIDisplay#ROIPanel,disable=1
+			SetVariable roiHeight,win=SIDisplay#ROIPanel,disable=1
+			SetVariable ROIname,win=SIDisplay#ROIPanel,pos={3,35},disable=0
+			Button nudgeROI win=SIDisplay#ROIPanel,pos={9,77}
+			Button addROI,win=SIDisplay#ROIPanel,disable=0
+			Button confirmROI,win=SIDisplay#ROIPanel,pos={25,100},size={81,20},title="Start"
+			PopUpMenu roiGroupSelect,win=SIDisplay#ROIPanel,pos={5,55},bodywidth=72,disable=0
 			SetVariable pctFillThreshold,win=SIDisplay#ROIPanel,disable=1
 			
 			SetWindow SIDisplay hook(zoomScrollHook) = zoomScrollHook
@@ -4716,6 +4820,84 @@ Function CreateROIFromClick(mh,mv,width,height,target,group,baseName)
 	//Update lists
 	updateImageBrowserLists()
 	refreshROIGroupList()
+End
+
+//Creates an ROI according to the drawn shape on the image
+Function CreateDrawnROI(drawROIX,drawROIY,target,group,baseName)
+	Wave drawROIX,drawROIY
+	String target,group,baseName
+	
+	If(!DataFolderExists("root:Packages:NT:ScanImage:ROIs"))
+		NewDataFolder root:Packages:NT:ScanImage:ROIs
+	EndIf
+	
+	String software = whichImagingSoftware()
+	
+	strswitch(software)
+		case "ScanImage":
+			String roiFolder = "root:Packages:NT:ScanImage:ROIs:"
+			break
+		case "2PLSM":
+			roiFolder = "root:twoP_ROIS:"
+			break
+	endswitch
+	
+	DFREF saveDF = GetDataFolderDFR()
+	
+	//Make a new ROI group if selected
+	If(!cmpstr(group,"**NEW**"))
+		group = UniqueName("Group",11,0)
+		NewDataFolder $(roiFolder + group)
+	EndIf
+	
+	
+	DFREF NTR = $(roiFolder + group)
+	
+	//If the ROI group doesn't actually exist for some reason, create one with that name
+	If(!DataFolderRefStatus(NTR))
+		NewDataFolder $(roiFolder + group)
+		DFREF NTR = $(roiFolder + group)
+	EndIf
+	
+	//If no ROI name base was given
+	If(!strlen(baseName))
+		baseName = "ROI"
+	EndIf
+		
+	If(WaveExists($(roiFolder + group + ":" + basename + "_x")) || WaveExists($(roiFolder + group + ":" + basename + "_y")))
+		DoAlert/T="Overwrite ROI?" 1,"ROI already exists. Overwrite?"
+		If(V_flag == 2) //clicked no
+			return 0
+		EndIf
+	EndIf
+	
+	//Make the X and Y ROI waves
+	Make/O/N=(DimSize(drawROIX,0)) NTR:$(baseName + "_x") /Wave = roiX
+	Make/O/N=(DimSize(drawROIY,0)) NTR:$(baseName + "_y") /Wave = roiY
+	
+	roiX = drawROIX
+	roiY = drawROIY
+	
+	//Replace the temporary draw ROI waves with the new ROI waves
+	appendROIsToImage(group,baseName)
+	
+	SetDataFolder saveDF
+	
+	//Set the ROI Group Selector to the current group, in case ***NEW** group was created.
+	//This will allow you to click-create ROIs in a NEW group without having to choose the group that
+	//was just created. 
+	DFREF NTSI = root:Packages:NT:ScanImage
+	
+	updateImageBrowserLists()
+	refreshROIGroupList()
+	
+	SVAR ROIGroupList = NTSI:GroupList
+	Variable index = WhichListItem(group,ROIGroupList,";")
+	
+	If(index != -1)
+		PopUpMenu roiGroupSelect,win=SIDisplay#ROIPanel,mode=index+1
+		ControlUpdate/A
+	EndIf
 End
 
 //Create an ROI grid across an image
