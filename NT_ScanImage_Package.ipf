@@ -683,6 +683,8 @@ Function/Wave SI_GetROIGroups()
 	Wave/T listWave = StringListToTextWave(groups,";")
 	Sort/A listWave,listWave
 	
+	SetDataFolder saveDF
+	
 	return listWave
 End 
 
@@ -4804,10 +4806,10 @@ Function CreateROIFromClick(mh,mv,width,height,target,group,baseName)
 	Variable yCenter = AxisValFromPixel(target,yAxis,mv)
 	
 	Wave image = ImageNameToWaveRef(target,imageName)
-	Variable left = xCenter - (DimDelta(image,0) * width * 0.5)
-	Variable top  = yCenter - (DimDelta(image,1) * height * 0.5)
-	Variable right = xCenter + (DimDelta(image,0) * width * 0.5)
-	Variable bottom  = yCenter + (DimDelta(image,1) * height * 0.5)
+	Variable left = xCenter - (width * 10^-6) * 0.5
+	Variable top  = yCenter - (height * 10^-6) * 0.5
+	Variable right = xCenter + (width * 10^-6) * 0.5
+	Variable bottom  = yCenter + (height * 10^-6) * 0.5
 	
 	If(!strlen(baseName))
 		baseName = "ROI"

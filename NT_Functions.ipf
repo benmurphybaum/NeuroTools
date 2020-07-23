@@ -562,7 +562,7 @@ Function/WAVE NT_PSTH(ds)
 		strswitch(type)
 			case "Binned":	
 				numBins = floor((IndexToScale(theWave,DimSize(theWave,0)-1,0) - IndexToScale(theWave,0,0) )/ binSize) //number of bins in wave
-				String histName = ReplaceListItem(0,NameOfWave(theWave),"_","PSTH")
+				String histName = RemoveEnding(ReplaceListItem(0,NameOfWave(theWave),"_","PSTH"),"_")
 				Make/O/N=(numBins) $histName
 				Wave hist = $histName
 				
@@ -600,7 +600,7 @@ Function/WAVE NT_PSTH(ds)
 					raster[x2pnt(raster,spktm[j])] = 1
 				Endfor
 				
-				histName = ReplaceListItem(0,NameOfWave(theWave),"_","PSTH")
+				histName = RemoveEnding(ReplaceListItem(0,NameOfWave(theWave),"_","PSTH"),"_")
 				Duplicate/O template,$histName
 				Wave hist = $histName
 				

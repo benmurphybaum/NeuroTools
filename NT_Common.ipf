@@ -196,6 +196,9 @@ Function/WAVE getFolderWaves([depth])
 	itemList = ReplaceString(";",StringFromList(1,DataFolderDir(2),":"),"")
 	itemList = TrimString(itemList)
 	
+	//Alphanumeric Sort
+	itemList = SortList(itemList,",",16)
+	
 	Redimension/N=(ItemsInList(itemList,",")) WavesLB_ListWave,WavesLB_SelWave
 	
 	For(i=0;i<ItemsInList(itemList,",");i+=1)

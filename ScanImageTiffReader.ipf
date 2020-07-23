@@ -173,6 +173,9 @@ Function SI_LoadScans(path,fileList)
 		//MUST CHANGE, WHEN SELECTING CHANNELS TO LOAD. FOR NOW JUST DOING CH 1.
 		String ch = "ch1"
 		
+		//Microns per degree of mirror angle
+		Variable objResolution = str2num(GetSIParam("objectiveResolution",header)) * 1e-6
+		
 		For(i=0;i<numROIs;i+=1)
 			Wave theROI = roiWaveRefs[i]
 			Variable xPixels = theROI[FindDimLabel(theROI,0,"XPixels")]
@@ -182,8 +185,8 @@ Function SI_LoadScans(path,fileList)
 			String ROIname = baseName + "_R" + num2str(i) + "_" + ch
 			Make/N=(xPixels,yPixels,numTimeFrames)/O/W $ROIname/Wave=scanROI
 	
-			SetScale/I x,theROI[0] - (theROI[2] / 2),theROI[0] + (theROI[2] / 2),scanROI
-			SetScale/I y,theROI[1] - (theROI[3] / 2),theROI[1] + (theROI[3] / 2),scanROI
+			SetScale/I x,objResolution * (theROI[0] - (theROI[2] / 2)),objResolution * (theROI[0] + (theROI[2] / 2)),scanROI
+			SetScale/I y,objResolution * (theROI[1] - (theROI[3] / 2)),objResolution * (theROI[1] + (theROI[3] / 2)),scanROI
 			SetScale/P z,0,theROI[11],scanROI
 			
 			//Get the z plane of the scan ROI, and it's frame offset
