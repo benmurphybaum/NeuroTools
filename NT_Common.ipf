@@ -2442,7 +2442,7 @@ Function FlattenWave(inputWave)
 	inputWave -= V_avg
 
 	
-	KillWaves filterWave
+	KillWaves/Z filterWave,coefs
 End
 
 Function ResetAllTimers()

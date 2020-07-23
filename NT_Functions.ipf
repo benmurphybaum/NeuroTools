@@ -169,6 +169,14 @@ Function/WAVE ExecuteCommand(ds,cmd)
 			NT_PSTH(ds)
 			Wave/WAVE out = $""
 			break
+		case "Subtract Mean":
+			NT_SubtractMean(ds)
+			Wave/WAVE out = $""
+			break
+		case "Subtract Trend":
+			NT_SubtractTrend(ds)
+			Wave/WAVE out = $""
+			break
 		case "Duplicate Rename":
 			NT_DuplicateRename(ds)
 			Wave/WAVE out = $""
@@ -629,6 +637,36 @@ Function/WAVE NT_PSTH(ds)
 	While(ds.wsi < ds.numWaves)
 	
 End
+
+//Subtracts the overall average value from the wave
+Function NT_SubtractMean(ds)
+	STRUCT ds &ds
+	
+	ds.wsi = 0
+	Do
+		Wave theWave = ds.waves[ds.wsi]
+		
+		WaveStats/Q/M=1 theWave
+		theWave -= V_avg
+		
+		ds.wsi += 1
+	While(ds.wsi < ds.numWaves)
+End
+
+//Fits a low frequency trend to the data and subtracts it
+Function NT_SubtractTrend(ds)
+	STRUCT ds &ds
+	
+	ds.wsi = 0
+	Do
+		Wave theWave = ds.waves[ds.wsi]
+		
+		FlattenWave(theWave)
+		
+		ds.wsi += 1
+	While(ds.wsi < ds.numWaves)
+End
+
 
 Function NT_DuplicateRename(ds)
 	STRUCT ds &ds
@@ -1400,9 +1438,9 @@ Function NT_SpikeCount(theWave,startTm,endTm,threshold)
 		return -1
 	EndIf
 	
-	FindLevels/EDGE=1/R=(startTm,endTm) theWave,threshold
+	FindLevels/Q/EDGE=1/R=(startTm,endTm) theWave,threshold
 	spkct = V_LevelsFound
-	
+	KillWaves/Z W_FindLevels
 	return spkct
 End
 
