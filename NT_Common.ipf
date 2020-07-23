@@ -2294,10 +2294,10 @@ Function GetDataSetInfo(ds[,extFunc])
 					
 				Duplicate/FREE/T WavesLB_ListWave,listWave
 				For(i=DimSize(selWave,0) - 1;i > -1;i-=1) //go backwards
-					If(selWave[i] != 1)
-						DeletePoints/M=0 i,1,listWave
-					Else
+					If(selWave[i] > 0)
 						listWave[i] = cdf + listWave[i]
+					Else
+						DeletePoints/M=0 i,1,listWave
 					EndIf
 				EndFor
 	
