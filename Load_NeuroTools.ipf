@@ -517,6 +517,15 @@ Function MakePackageFolders()
 	SVAR dsNameInput = NTD:dsNameInput
 	dsNameInput = ""
 	
+	//Saved name list for quick access to often-used string lists
+	String/G NTF:savedNameList
+	SVAR savedNameList = NTF:savedNameList
+	
+	//Holds all of the saved name lists	
+	If(!WaveExists(NTF:savedNameTable))
+		Make/O/N=(1,2)/T NTF:savedNameTable
+	EndIf	
+	
 	//Current Command Menu selection
 	String/G NTF:selectedCmd
 	SVAR selectedCmd = NTF:selectedCmd
@@ -624,6 +633,22 @@ Function MakePackageFolders()
 	EndIf
 
 	return 1
+End
+
+//Returns a string list of all the saved names
+Function/S GetSavedNameList()
+	DFREF NTF = root:Packages:NT
+	String list = ""
+	
+	//This table holds all of the saved names
+	Wave/T savedNameTable = NTF:savedNameTable
+	
+	Variable i
+	For(i=0;i<DimSize(savedNameTable,0);i+=1)
+		list += savedNameTable[i][0] + ";"
+	EndFor
+	
+	return list
 End
 
 //Initializes the external functions module, and fills out a text wave with the data for each 
@@ -1182,7 +1207,7 @@ Function CreateControlLists()
 	controlAssignments[3][3] = "WaveSelectorTitle;"
 	
 	controlAssignments[4][0] = "Duplicate Rename"
-	controlAssignments[4][1] = "WaveListSelector;prefixName;groupName;SeriesName;SweepName;TraceName;killOriginals;"
+	controlAssignments[4][1] = "WaveListSelector;prefixName;groupName;SeriesName;SweepName;TraceName;killOriginals;savedNames;copyToClipboard;"
 	controlAssignments[4][2] = "300"
 	controlAssignments[4][3] = "WaveSelectorTitle;"
 	
@@ -1248,7 +1273,8 @@ Function CreateControls()
 	DFREF NTI = root:Packages:NT:Imaging
 	
 	SVAR DSNames = NTD:DSNames
-	
+	SVAR savedNameList = NTF:savedNameList
+	savedNameList = GetSavedNameList()
 	
 	//COMMON CONTROLS TO ALL FUNCTIONS
 	Button WaveListSelector win=NT,font=$LIGHT,pos={507,75},size={138,20},title="\\JL▼        Wave Match",fSize=12,disable=3,proc=ntButtonProc
@@ -1276,6 +1302,8 @@ Function CreateControls()
 	SetVariable sweepName win=NT,pos={624,100},size={55,20},title=" __",value=_STR:"",disable=1
 	SetVariable traceName win=NT,pos={679,100},size={55,20},title=" __",value=_STR:"",disable=1
 	Checkbox killOriginals win=NT,pos={464,120},size={100,20},title="Kill Originals",value=0,disable=1
+	PopUpMenu savedNames win=NT,pos={464,150},size={100,20},title="Saved Names",value=#"root:Packages:NT:savedNameList",disable=1
+	Button copyToClipboard win=NT,pos={464,170},size={100,20},title="To Clipboard",disable=1,proc=ntButtonProc
 	
 	//SET WAVE NOTE
 	SetVariable waveNote win=NT,size={274,0},pos={460,100},font=$LIGHT,fsize=12,title="Note:",value=_STR:"",disable=1

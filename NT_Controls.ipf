@@ -832,6 +832,21 @@ Function HandleButtonClick(ba)
 			
 			HDF5CloseFile/A fileID
 			break
+		case "copyToClipboard":
+			Wave/T savedNameTable = NTF:savedNameTable
+			ControlInfo/W=NT savedNames
+			
+			Variable index = tablematch(S_Value,savedNameTable)
+			
+			If(index == -1)
+				String str = ""
+			Else
+				str = savedNameTable[index][1]
+			EndIf
+			
+			//Copy the string to the clipboard
+			PutScrapText str
+			break
 	endswitch
 	return errorCode
 End
