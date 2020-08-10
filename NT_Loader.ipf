@@ -7,9 +7,16 @@ STRCONSTANT NTversion = "1.0"
 #if(DataFolderExists("root:Packages:twoP"))
 	//Adds #includes the external procedure files
 	Function NT_InsertIncludes()
-		String fileList = "twoP_Loader.ipf;Load_NeuroTools;NT_Common;NT_Controls;NT_DataSets;NT_Functions;NT_InsertTemplate;NT_ExternalFunctions;NT_Structures;json_functions;ABF_Loader;"
+		String fileList = "twoP_Loader.ipf;Load_NeuroTools;NT_Common;NT_Controls;NT_DataSets;NT_Functions;NT_InsertTemplate;NT_ExternalFunctions;NT_Structures;json_functions;NT_ABF_Loader;"
 		Variable numFiles,i
 		String theFile
+		
+		String info = IgorInfo(0)
+		Variable version = str2num(StringByKey("IGORVERS",info,":",";"))
+		
+		If(version < 8)
+			fileList = RemoveFromList("json_functions",fileList,";")
+		EndIf
 		
 		numFiles = ItemsInList(fileList,";")
 		
@@ -27,9 +34,16 @@ STRCONSTANT NTversion = "1.0"
 #else
 	//Adds #includes the external procedure files
 	Function NT_InsertIncludes()
-		String fileList = "Load_NeuroTools;NT_Common;NT_Controls;NT_DataSets;NT_Functions;NT_InsertTemplate;NT_ExternalFunctions;NT_Structures;json_functions;ABF_Loader;"
+		String fileList = "Load_NeuroTools;NT_Common;NT_Controls;NT_DataSets;NT_Functions;NT_InsertTemplate;NT_ExternalFunctions;NT_Structures;json_functions;NT_ABF_Loader;"
 		Variable numFiles,i
 		String theFile
+		
+		String info = IgorInfo(0)
+		Variable version = str2num(StringByKey("IGORVERS",info,":",";"))
+		
+		If(version < 8)
+			fileList = RemoveFromList("json_functions",fileList,";")
+		EndIf
 		
 		numFiles = ItemsInList(fileList,";")
 		

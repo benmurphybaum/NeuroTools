@@ -1236,7 +1236,7 @@ Function SeparateChannels(filepath,traceName,tempd,h,dataPtsPerSweep,whichChanne
 	EndIf
 	
 	For(j=0;j<ItemsInList(channelList,";");j+=1)
-		
+		 
 		Variable theChannel = str2num(StringFromList(j,channelList,";"))
 		
 		//Make the folder to put the waves in
@@ -1245,6 +1245,15 @@ Function SeparateChannels(filepath,traceName,tempd,h,dataPtsPerSweep,whichChanne
 		EndIf
 		
 		String outputFolder = ParseFilePath(0,filepath,":",1,1)
+		
+		//Check for initial numbers - Igor 7 doesn't like this
+		If(numtype(str2num(outputFolder[0])) == 2)
+			outputFolder = "Cell_" + outputFolder
+		EndIf
+		
+		outputFolder = ReplaceString(",",outputFolder,"_")
+		
+		outputFolder = ReplaceString(" ",outputFolder,"_")
 		
 		If(!DataFolderExists("root:Ephys:" + outputFolder))
 			NewDataFolder $"root:Ephys:" + outputFolder

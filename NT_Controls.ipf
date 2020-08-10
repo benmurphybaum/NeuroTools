@@ -876,7 +876,7 @@ Function HandleButtonClick(ba)
 					wsFileName = ParseFilePath(0,S_fileName,":",1,0)
 					Close/A
 					
-					String fullPath = wsFilePath + wsFileName
+					String fullPath = wsFilePath
 					NewPath/O/Q/Z ABFpath,fullpath
 					String fileList = IndexedFile(ABFpath,-1,".abf")
 					fileList = SortList(fileList,";",16)
