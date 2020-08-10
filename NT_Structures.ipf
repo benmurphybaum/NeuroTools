@@ -43,6 +43,26 @@ Structure ds
 	int16 numWaves //number of waves in the current wsn
 EndStructure
 
+//Data set info structure
+Structure ds_numOnly
+	int16 num //number of wave sets
+	int16 wsi //current wave set index
+	int16 wsn //current wave set number
+	int16 numWaves //number of waves in the current wsn6 
+	int16 value
+	int16 count
+	int16 steps
+	float increment
+EndStructure
+
+//Data set info structure
+Structure ds_progress_numOnly
+	int16 value
+	int16 count
+	int16 steps
+	float increment
+EndStructure
+
 //Structure to hold all of the filter terms, wave grouping terms, and match terms
 Structure filters
 	SVAR match

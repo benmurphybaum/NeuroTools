@@ -3067,10 +3067,22 @@ End
 //Saves the ds structure for later recall by an external function
 Function SaveStruct(ds)
 	STRUCT ds &ds
+	STRUCT ds_numOnly ds2
+	STRUCT ds_progress_numOnly progress2
+	
+	ds2.num = ds.num
+	ds2.wsi = ds.wsi
+	ds2.wsn = ds.wsn
+	ds2.numWaves = ds.numWaves
+	
+	progress2.value = ds.progress.value
+	progress2.count = ds.progress.count
+	progress2.steps = ds.progress.steps
+	progress2.increment = ds.progress.increment
 	
 	//numeric data gets saved
-	StructPut ds,root:Packages:NT:ds
-	StructPut ds.progress,root:Packages:NT:progress
+	StructPut ds2,root:Packages:NT:ds
+	StructPut progress2,root:Packages:NT:progress
 	
 	//waves and strings get saved
 	DFREF NTF = root:Packages:NT
