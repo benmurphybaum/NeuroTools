@@ -3100,13 +3100,26 @@ End
 //fills out the ds structure with the save data
 Function GetStruct(ds)
 	STRUCT ds &ds
+	STRUCT ds_numOnly ds2
+	STRUCT ds_progress_numOnly progress2
 	
 	DFREF NTF = root:Packages:NT
 	Wave/T ds_refs = NTF:ds_refs
 	
 	//fills numeric data
-	StructGet ds,root:Packages:NT:ds
-	StructGet ds.progress,root:Packages:NT:progress
+	StructGet ds2,root:Packages:NT:ds
+	StructGet progress2,root:Packages:NT:progress
+	
+	ds.num = ds2.num
+	ds.wsi = ds2.wsi
+	ds.wsn = ds2.wsn
+	ds.numWaves = ds2.numWaves
+	
+	ds.progress.value = progress2.value
+	ds.progress.count = progress2.count
+	ds.progress.steps = progress2.steps
+	ds.progress.increment = progress2.increment
+	
 	
 	Wave/T ds.listWave = $ds_refs[0]
 	SVAR ds.name = $ds_refs[1]
