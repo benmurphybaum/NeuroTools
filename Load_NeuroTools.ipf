@@ -739,7 +739,7 @@ Function MakeCommandList()
 	Wave/T controlListWave = NT:controlListWave
 	
 	controlListWave[0][0] = "Main"
-	controlListWave[0][1] = "Measure;Average;Errors;PSTH;Subtract Mean;Subtract Trend;-;Load WaveSurfer;-;Duplicate Rename;Kill Waves;Set Wave Note;Move To Folder;New Data Folder;Kill Data Folder;-;Run Cmd Line;External Function;"
+	controlListWave[0][1] = "Measure;Average;Errors;PSTH;Subtract Mean;Subtract Trend;-;Load WaveSurfer;Load pClamp;-;Duplicate Rename;Kill Waves;Set Wave Note;Move To Folder;New Data Folder;Kill Data Folder;-;Run Cmd Line;External Function;"
 
 	controlListWave[1][0] = "Imaging"
 	controlListWave[1][1] = "Get ROI;dF Map;"
@@ -1159,7 +1159,7 @@ Function CreateControlLists()
 	
    //Control Assignment wave will hold the control names assigned to each 
    //command function in the controlListWave
-   Make/O/T/N=(15,4) NTF:controlAssignments 
+   Make/O/T/N=(16,4) NTF:controlAssignments 
 	Wave/T controlAssignments = NTF:controlAssignments 
 	
 	//all of the text group titles that are in use
@@ -1260,6 +1260,11 @@ Function CreateControlLists()
 	controlAssignments[14][1] = "WaveListSelector;"
 	controlAssignments[14][2] = "210"
 	controlAssignments[14][3] = "WaveSelectorTitle;"
+	
+	controlAssignments[15][0] = "Load pClamp"
+	controlAssignments[15][1] = "BrowseFiles;ChannelSelector;sweepListBox;fileListBox;"
+	controlAssignments[15][2] = "270"
+	controlAssignments[15][3] = ""
 	
 	NVAR numMainCommands = NTF:numMainCommands
 	numMainCommands = DimSize(controlAssignments,0)

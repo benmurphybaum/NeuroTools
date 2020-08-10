@@ -66,6 +66,38 @@ Function RunCmd(cmd)
 			
 			NT_Load_WaveSurfer(filePathList,channels=S_Value)
 			return 0
+			break
+		case "Load pClamp":
+			SVAR wsFilePath = NTF:wsFilePath
+			SVAR wsFileName = NTF:wsFileName
+			ControlInfo/W=NT ChannelSelector
+			
+			Wave/T wsFileListWave = NTF:wsFileListWave
+			Wave wsFileSelWave = NTF:wsFileSelWave
+			
+			filePathList = ""
+
+			//Get the selected files
+			For(i=0;i<DimSize(wsFileListWave,0);i+=1)
+				If(wsFileSelWave[i] ==1)
+					filePathList += wsFilePath + wsFileListWave[i] + ";"
+				EndIf
+			EndFor
+			
+			//no selection, load all of them
+			If(sum(wsFileSelWave) == 0)
+				filePathList = ""
+				For(i=0;i<DimSize(wsFileListWave,0);i+=1)
+					filePathList += wsFilePath + wsFileListWave[i] + ";"
+				EndFor
+			EndIf
+			
+			For(i=0;i<ItemsInList(filePathList,";");i+=1)
+				String theFile = StringFromList(i,filePathList,";") + ".abf"
+				ABFLoader(theFile,S_Value,1)
+			EndFor
+			return 0
+			break
 		//Imaging package commands
 		case "Load Scans":
 		case "Population Vector Sum":
