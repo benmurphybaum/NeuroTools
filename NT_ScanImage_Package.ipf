@@ -86,6 +86,16 @@ Function SI_CreatePackage()
 	//when the Image Browser panel is first opened.
 	Variable/G NTSI:resizeTimeOut
 	
+	Make/O/N=5 NTSI:resizeListBoxPositions/Wave = resizeListBoxPositions
+	resizeListBoxPositions[0] = 90 //Cells
+	resizeListBoxPositions[1] = 180 //Scan Groups
+	resizeListBoxPositions[2] = 325 //Scan Fields
+	resizeListBoxPositions[3] = 390 //ROI Groups
+	resizeListBoxPositions[4] = 455 //ROIs
+	
+	Variable/G NTSI:columnDrag
+	NVAR columnDrag = NTSI:columnDrag
+	columnDrag = 0
 	
 	//list and selection waves for the ROI list box
 	//second layer will record the ROI Group assigned to each ROI...
@@ -150,7 +160,7 @@ Function SI_CreatePackage()
 	oldROIGroupName = ""
 	
 	//list and selection waves for loading SI files
-	Make/O/T/N=(0) NTSI:ScanLoadListWave /Wave = ScanLoadListWave
+	Make/O/T/N=(0,2) NTSI:ScanLoadListWave /Wave = ScanLoadListWave
 	Make/O/N=(0) NTSI:ScanLoadSelWave /Wave = ScanLoadSelWave
 	
 	String/G NTSI:ScanLoadPath
@@ -295,7 +305,7 @@ Function SI_CreateControls()
 	PopupMenu LoadChannel win=NT,pos={535,82},font=$LIGHT,fsize=10,size={50,20},title="Channel",value="1;2;Both;",disable=1
 	Wave/T ScanLoadListWave = NTSI:ScanLoadListWave
 	Wave ScanLoadSelWave = NTSI:ScanLoadSelWave
-	ListBox scanLoadListbox win=NT,pos={460,120},font=$LIGHT,fsize=10,size={225,350},listWave=ScanLoadListWave,selWave=ScanLoadSelWave,mode=9,disable=1,proc=siListBoxProc
+	ListBox scanLoadListbox win=NT,pos={460,120},font=$LIGHT,fsize=10,size={225,350},listWave=ScanLoadListWave,selWave=ScanLoadSelWave,userColumnResize=1,mode=9,disable=1,proc=siListBoxProc
 	Checkbox selectAllScans win=NT,pos={460,102},font=$LIGHT,fsize=10,size={75,20},title="Select All",disable=1,proc=siCheckBoxProc
 
 	//Population Vector Sum
@@ -334,6 +344,9 @@ Function SI_CreateControls()
 	templateList = GetTemplateList()
 	PopUpMenu SR_templatePopUp win=NT,pos={34+426,238+25},size={100,20},title="Templates",value=#"root:Packages:NT:ScanImage:Registration:templateList",proc=NT_ScanRegistryPopUpProc,disable=1
 //	CheckBox SR_UseAnalysisToolsCheck win=NT,pos={34+426,258},size={40,20},title="Use Scan List",disable=1
+
+	//Start a mouse hook for hovering over the in-between spaces between list boxes for resizing purposes
+	SetWindow SI hook(ImageBrowserMouseHook) = ImageBrowserMouseHook
 End
 
 
@@ -926,6 +939,9 @@ Function DisplayScanField(imageList[,add])
 	
 	//Bring panel to the front
 	DoWindow/F SIDisplay
+	
+	//Ensure that the image selection drop down list is filled with something.
+	PopUpMenu targetImage win=SI,mode=1
 
 End
 
@@ -933,6 +949,9 @@ End
 //handles resize events on the Image Browser
 Function resizeHook(s)
 	STRUCT WMWinHookStruct &s
+	DFREF NTSI = root:Packages:NT:ScanImage
+	Wave resizeListBoxPositions = NTSI:resizeListBoxPositions
+	
 	Variable hookResult = 0
 	switch(s.eventCode)
 		case 0: //Activate
@@ -948,19 +967,88 @@ Function resizeHook(s)
 			Variable height = s.winRect.bottom
 			height = (height < 125) ? 125 : height
 			
-			MoveWindow/W=SI V_left,V_top,V_left + 460/r,V_top + height/r
+			Variable width = s.winRect.right
+			width = (width < 460) ? 460 : width
+			
+			//MoveWindow/W=SI V_left,V_top,V_left + 460/r,V_top + height/r
+			MoveWindow/W=SI V_left,V_top,V_left + width/r,V_top + height/r
 			
 			Variable vSize = height - 45
 			Variable vPos = height - 19
 			
+			//Get the right edge of the ROI box to know how much width we need to expand to
+			ControlInfo/W=SI rois
+			Variable xExpand = width - (V_right + 5)
+			
+			//This distance is evenly divided by the 5 list boxes
+			Variable controlExpand = floor(xExpand / 5)
+
+			//Remainder Gets assigned to the Scan Fields list box
+			Variable remainder = mod(controlExpand,5)
+			
 			//Set the vertical size of the list boxes
-			ListBox scanFolders win=SI,size={85,vSize}
-			ListBox scanGroups win=SI,size={85,vSize}
-			ListBox scanFields win=SI,size={140,vSize-19}
-			ListBox roiGroups win=SI,size={60,vSize-19}
-			ListBox rois win=SI,size={60,vSize-19}
-			SetVariable scanFieldMatch win=SI,pos={185,vPos}
-			PopUpMenu targetImage win=SI,pos={330,vPos-3}
+			ControlInfo/W=SI scanFolders
+//			ListBox scanFolders win=SI,size={85,vSize}
+			resizeListBoxPositions[0] = V_right + controlExpand
+			ListBox scanFolders win=SI,size={V_width + controlExpand,vSize},pos = {5,V_top}
+			
+//			ListBox scanGroups win=SI,size={85,vSize}
+			ControlInfo/W=SI scanGroups
+			resizeListBoxPositions[1] = V_right + controlExpand
+			ListBox scanGroups win=SI,size={V_width + controlExpand,vSize},pos = {V_left + controlExpand,V_top}
+			
+//			ListBox scanFields win=SI,size={140,vSize-19}
+			ControlInfo/W=SI scanFields
+			resizeListBoxPositions[2] = V_right + controlExpand
+			ListBox scanFields win=SI,size={V_width + controlExpand,vSize-19},pos = {V_left + 2 * controlExpand,V_top}
+			
+//			ListBox roiGroups win=SI,size={60,vSize-19}
+			ControlInfo/W=SI roiGroups
+			resizeListBoxPositions[3] = V_right + controlExpand
+			ListBox roiGroups win=SI,size={V_width + controlExpand,vSize-19},pos = {V_left + 3 * controlExpand,V_top}
+			
+			
+//			ListBox rois win=SI,size={60,vSize-19}
+			ControlInfo/W=SI rois
+			resizeListBoxPositions[4] = V_right + controlExpand + remainder
+			ListBox rois win=SI,size={V_width + controlExpand + remainder,vSize-19},pos = {V_left + 4 * controlExpand,V_top}
+			
+			
+//			SetVariable scanFieldMatch win=SI,pos={185,vPos}
+			ControlInfo/W=SI scanFieldMatch
+			SetVariable scanFieldMatch win=SI,pos={V_left + 2 * controlExpand,vPos},size = {V_width + controlExpand,20}
+			
+			ControlInfo/W=SI targetImage
+//			PopUpMenu targetImage win=SI,pos={330,vPos-3}
+			PopUpMenu targetImage win=SI,pos={V_left + 3 * controlExpand + remainder,vPos-3}//,size = {V_width + 2 * controlExpand,20}
+			
+			
+			//Shift the checkboxes
+			ControlInfo/W=SI selectAllScanGroups
+			CheckBox selectAllScanGroups win=SI,pos = {V_left + controlExpand,V_top}
+							
+			ControlInfo/W=SI selectAllScanFields
+			CheckBox selectAllScanFields win=SI,pos = {V_left + controlExpand * 2,V_top}
+
+
+			//Set the drawn text labels
+			DrawAction/W=SI delete
+			
+			SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
+			DrawText/W=SI 34,39,"Cells"
+			
+			ControlInfo/W=SI selectAllScanFields				
+			SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
+			DrawText/W=SI V_left + 14,39,"Scans Fields"
+			
+			ControlInfo/W=SI selectAllScanGroups
+			SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
+			DrawText/W=SI V_left + 14,39,"Scan Groups"
+			
+			ControlInfo/W=SI roiGroups
+			SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
+			DrawText/W=SI V_right - 37,39,"ROI Groupings"
+			
 			break
 	endswitch
 	return hookResult
@@ -997,6 +1085,160 @@ Function killWindowHook(s)
 			KillWindow/Z dynamicROI
 			break
 	endswitch
+	return hookResult
+End
+
+
+Function ImageBrowserMouseHook(s)
+	STRUCT WMWinHookStruct &s
+	DFREF NTSI = root:Packages:NT:ScanImage
+	
+	//Are we currently resizing a column?
+	NVAR columnDrag = NTSI:columnDrag
+	
+	//Holds the current hook positions for resizing the Image Browser
+	Wave resizeListBoxPositions = NTSI:resizeListBoxPositions
+	String ctrlNames = "scanFolders;scanGroups;scanFields;roiGroups;rois;"
+	
+	Variable hookResult = 0
+	switch(s.eventCode)
+		case 0: //Activate
+			break
+		case 1: //Deactivate
+			break
+		case 4: //Mouse Moved
+			Variable xPos = s.mouseLoc.h
+			Variable i
+			
+			//Resizing list box
+			If(columnDrag > 0)
+				Variable r = ScreenResolution / 72
+				GetWindow SI wsize
+				
+				Variable height = s.winRect.bottom
+			
+				
+				Variable vSize = height - 45
+				Variable vPos = height - 19
+			
+				For(i=0;i<ItemsInList(ctrlNames,";");i+=1)
+					String theCtrl = StringFromList(i,ctrlNames,";")
+					
+					//Don't resize list boxes to the left of the resized list boxt
+					If(i < columnDrag - 1)
+						continue
+					EndIf
+					
+					//resize and shift list boxes to the right
+					ControlInfo/W=SI $theCtrl
+					If(i == columnDrag - 1)
+						Variable xExpand = xPos  - V_right
+						
+						
+						//Limit to the smallest width of any column						
+						If(V_width + xExpand < 60)
+							return 0
+						EndIf
+						
+						If(i > 1)
+							ListBox $theCtrl win=SI,size={V_width + xExpand,vSize-19},pos = {V_left,V_top}
+							
+						Else
+							ListBox $theCtrl win=SI,size={V_width + xExpand,vSize},pos = {V_left,V_top}							
+							
+						EndIf
+						
+					Else
+						ListBox $theCtrl win=SI,pos = {V_left + xExpand,V_top}
+					EndIf
+					
+					resizeListBoxPositions[i] = V_right + xExpand
+				EndFor
+				
+				//Shift checkboxes and text
+				DrawAction/W=SI delete
+				
+				If(columnDrag < 2)
+
+					ControlInfo/W=SI selectAllScanGroups
+					CheckBox selectAllScanGroups win=SI,pos = {V_left + xExpand,V_top}
+									
+					ControlInfo/W=SI selectAllScanFields
+					CheckBox selectAllScanFields win=SI,pos = {V_left + xExpand,V_top}
+
+				ElseIf(columnDrag < 3)
+					ControlInfo/W=SI selectAllScanFields
+					CheckBox selectAllScanFields win=SI,pos = {V_left + xExpand,V_top}
+
+				EndIf				
+				
+								
+				//Set the drawn text labels
+				SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
+				DrawText/W=SI 34,39,"Cells"
+				
+				ControlInfo/W=SI selectAllScanFields				
+				SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
+				DrawText/W=SI V_left + 14,39,"Scans Fields"
+				
+				ControlInfo/W=SI selectAllScanGroups
+				SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
+				DrawText/W=SI V_left + 14,39,"Scan Groups"
+				
+				ControlInfo/W=SI roiGroups
+				SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
+				DrawText/W=SI V_right - 37,39,"ROI Groupings"
+				
+				ControlInfo/W=SI scanFieldMatch
+				
+				If(columnDrag == 3)
+					SetVariable scanFieldMatch win=SI,pos = {V_left,V_top},size={V_width + xExpand,vSize}
+					ControlInfo/W=SI targetImage
+					PopUpMenu targetImage win=SI,pos={V_left + xExpand,vPos-3}
+				ElseIf(columnDrag < 3)
+					SetVariable scanFieldMatch win=SI,pos={V_left + xExpand,vPos}
+					ControlInfo/W=SI targetImage
+					PopUpMenu targetImage win=SI,pos={V_left + xExpand,vPos-3}
+				ElseIf(columnDrag < 4)
+					ControlInfo/W=SI targetImage
+					PopUpMenu targetImage win=SI,pos={V_left + xExpand,vPos-3},size={V_width + xExpand,vSize}
+				EndIf
+				
+				//Resize the panel as well
+				GetWindow SI wsize
+				height = s.winRect.bottom
+				Variable top = V_top
+				Variable left = V_left
+				Variable right = V_right
+				
+				MoveWindow/W=SI left,top,right + xExpand/r,top + height/r
+			Else
+				//Hovering
+				For(i=0;i<5;i+=1)
+					If(xPos > resizeListBoxPositions[i] && xPos < resizeListBoxPositions[i] + 5)
+						//Change the cursor to the left right drag icon
+						s.doSetCursor = 1
+						s.cursorCode = 5 //hand cursor	
+						break
+					EndIf
+				EndFor
+			EndIf
+		
+			break
+		case 3: //mouse down
+			xPos = s.mouseLoc.h
+			For(i=0;i<5;i+=1)
+				If(xPos > resizeListBoxPositions[i] && xPos < resizeListBoxPositions[i] + 5)
+					//which resize column was clicked?
+					columnDrag = i + 1
+				EndIf
+			EndFor
+			
+			break
+		case 5: //mouse up
+			columnDrag = 0
+	endswitch
+	
 	return hookResult
 End
 
@@ -1724,6 +1966,9 @@ Function updateImageBrowserLists()
 	Redimension/N=(DimSize(listWave,0),-1,-1) ScanFolderListWave,ScanFolderSelWave
 	ScanFolderListWave = listWave
 	
+	ControlInfo/W=SI scanFolders
+	Variable folderSelect = V_Value
+	
 	//If there are no scan folders, reset everything
 	If(DimSize(ScanFolderListWave,0) == 0)
 		Redimension/N=(0,-1,-1) ScanFolderListWave,ScanFolderSelWave,ScanGroupListWave,ScanGroupSelWave,ScanFieldListWave,ScanFieldSelWave
@@ -1740,7 +1985,7 @@ Function updateImageBrowserLists()
 		ScanFolderSelWave[0] = 1 
 	Else
 		String folder = SelectedScanFolder()
-		Wave/T groups = SI_GetScanGroups(folder=ScanFolderListWave[0][0][0])
+		Wave/T groups = SI_GetScanGroups(folder=ScanFolderListWave[folderSelect][0][0])
 	
 		Redimension/N=(DimSize(groups,0),-1,-1) ScanGroupListWave,ScanGroupSelWave
 		ScanGroupListWave = groups
@@ -1754,7 +1999,7 @@ Function updateImageBrowserLists()
 	EndIf
 	
 	String selGroups = SelectedScanGroups()
-	Wave/T fields = SI_GetScanFields(ScanFolderListWave[0][0][0],group=selGroups)
+	Wave/T fields = SI_GetScanFields(ScanFolderListWave[folderSelect][0][0],group=selGroups)
 	
 	//Matches the scan fields according to the match string
 	SVAR scanFieldMatchStr = NTSI:scanFieldMatchStr
@@ -1868,7 +2113,7 @@ Function siListBoxProc(lba) : ListBoxControl
 				case "roiGroups":
 					If(lba.eventMod == 16 || lba.eventMod == 17)
 						//Rename/Goto ROI contextual menu
-						PopupContextualMenu/C=(lba.mouseLoc.h, lba.mouseLoc.v) "Rename;GoTo;Delete;"
+						PopupContextualMenu/C=(lba.mouseLoc.h, lba.mouseLoc.v) "Rename;GoTo;Get Center;Delete;"
 						If(V_flag)
 							strswitch(S_Selection)
 								case "Rename":
@@ -1884,6 +2129,11 @@ Function siListBoxProc(lba) : ListBoxControl
 									Else
 										ModifyBrowser setDataFolder="root:Packages:NT:ScanImage:ROIs:" + roiGroup
 									EndIf
+									break
+								case "Get Center":
+									//find the center of mass coordinates of each ROI in the group and put it in a wave
+									roiGroup = ROIGroupListWave[row][0][1]
+									SI_GetCenter(group=roiGroup)
 									break
 								case "Delete":
 									DoAlert/T="Delete ROI Group" 1,"Are you sure you want to delete the ROI group?"
@@ -2330,6 +2580,7 @@ Function siButtonProc(ba) : ButtonControl
 					//displays the selected scanfield in a new panel
 					String imageList = GetSelectedImages()
 					DisplayScanField(imageList)
+					
 					break
 				case "updateImageBrowser":
 					//refreshes the list boxes in case of any deleted or loaded scans
@@ -2741,10 +2992,29 @@ Function siButtonProc(ba) : ButtonControl
 					fileList = SortList(fileList, ";", 16)
 					
 					Wave/T listWave = StringListToTextWave(fileList,";")
-					Redimension/N=(DimSize(listWave,0)) ScanLoadListWave,ScanLoadSelWave
-					ScanLoadListWave = listWave
+					Redimension/N=(DimSize(listWave,0),2) ScanLoadListWave
+					Redimension/N=(DimSize(listWave,0)) ScanLoadSelWave
+					ScanLoadListWave[][0] = listWave
+					
+					String stimFileList = IndexedFile(scanPath,-1,".h5")
+					//See if there is a corresponding stimulus h5 file
+					For(i=0;i<ItemsInList(fileList,";");i+=1)
+						String stimFile = StringFromList(i,stimFileList,";")
+						String matchedFile = RemoveEnding(stimFile,".h5") + ".tif"
+						Variable index = WhichListItem(matchedFile,fileList,";")
+						
+						If(index == -1)
+							break
+						EndIf
+						
+						String stimName = GetStimGenParameter(ScanLoadPath,stimFile,"Name")
+						
+						ScanLoadListWave[index][1] = stimName
+					EndFor
 					
 					Close/A
+					
+					
 					break
 			endswitch
 			break
@@ -3000,6 +3270,36 @@ Function siSliderProc(sa) : SliderControl
 	endswitch
 
 	return 0
+End
+
+
+//Opens the designated .h5 StimGen file, and returns the value of the parameter
+Function/S GetStimGenParameter(path,stimFile,param)
+	String path,stimFile,param
+	String value = ""
+	
+	STRUCT HDF5DataInfo di
+	InitHDF5DataInfo(di)
+	
+	NewPath/O/Z/Q stimPath,path
+	If(V_Flag)
+		return ""
+	EndIf
+
+	Variable fileID,groupID
+	HDF5OpenFile/P=stimPath/R/Z fileID as stimFile
+	
+	If(V_Flag)
+		return ""
+	EndIf
+	
+	HDF5LoadData/O/Q/N=stimGenAttribute/TYPE=1/A=param fileID,"/StimGen/Stimulus"
+	Wave/T stimGenAttribute = stimGenAttribute
+	value = stimGenAttribute[0]
+	KillWaves/Z stimGenAttribute
+	
+	HDF5CloseFile/Z fileID
+	return value
 End
 
 //Switches control display on the ROI Creation Panel according to ROI type
@@ -4263,8 +4563,22 @@ Function/WAVE NT_dFMap(ds)
 			case 1: //channel 1 only
 				Wave theScan = img.scan.ch1[i] //signal fluorescence
 				Wave theBgnd = img.scan.ch1[i] //background fluorescence
-				String suffix = "_dF"
-				String type = "∆F/F" //for the wave note at the end
+				
+				switch(img.mode)
+					case 1:
+						String suffix = "_dF"
+						String type = "∆F/F" //for the wave note at the end
+						break
+					case 2:
+						suffix = "_sd"
+						type = "Std. Dev."
+						break
+					case 3:
+						suffix = "_abs"
+						type = "Absolute"
+						break
+				endswitch
+
 				break
 			case 2: //channel 2 only
 				Wave theScan = img.scan.ch2[i]
@@ -4307,6 +4621,11 @@ Function/WAVE NT_dFMap(ds)
 				param = "_pk"
 		endswitch
 		
+		
+		//Manually set pre and post spatial filters
+		img.preFilter = 3
+		img.postFilter = 3
+		
 		//Wave dimensions
 		rows = DimSize(theScan,0)
 		cols = DimSize(theScan,1)
@@ -4329,7 +4648,7 @@ Function/WAVE NT_dFMap(ds)
 		Variable cleanNoiseThresh = 2
 		
 		//Don't use this for photon counting on the new rig.
-		Wave theWave = CleanUpNoise(theScan,cleanNoiseThresh)	//threshold is in sdevs above the mean
+		//Wave theWave = CleanUpNoise(theScan,cleanNoiseThresh)	//threshold is in sdevs above the mean
 		
 		//Get dendritic mask
 		Variable skip = 0
@@ -4385,11 +4704,30 @@ Function/WAVE NT_dFMap(ds)
 //		Multithread bgndBaseline = 0
 		
 		
-		//Eliminates the possibility of zero values in the dataset for dendrites in the mask, which all get converted to NaN at the end.
-		Multithread theScanTemp = (theScanTemp[p][q][r] == scanBaseline[p][q][0]) ? theScanTemp[p][q][r] + 1 : theScanTemp[p][q][r]
+		
 		
 		//Calculate the ∆F map
-		MultiThread dF = (theScanTemp[p][q][r] - scanBaseline[p][q][0]) / (bgndBaseline[p][q][0])
+		switch(img.mode)
+			case 1:
+				//dF/F
+				
+				//Eliminates the possibility of zero values in the dataset for dendrites in the mask, which all get converted to NaN at the end.
+				Multithread theScanTemp = (theScanTemp[p][q][r] == scanBaseline[p][q][0]) ? theScanTemp[p][q][r] + 1 : theScanTemp[p][q][r]
+				
+				//Calculates the dF/F
+				MultiThread dF = (theScanTemp[p][q][r] - scanBaseline[p][q][0]) / (bgndBaseline[p][q][0])
+				break
+			case 2:
+				//Std. Dev.
+//				 
+				break
+			case 3:
+				//Abs (background subtracted still). This only operates on the scan data channel, not the background channel if there is green and red imaging.
+				MultiThread dF = theScanTemp[p][q][r] - scanBaseline[p][q][0]
+				break
+		endswitch
+		
+		
 		
 		CopyScales/P theScan,dF
 				
@@ -5675,4 +6013,85 @@ Menu "roiRightClickMenu",contextualMenu,dynamic
 		"New Group;" + TextWaveToStringList(SI_GetROIGroups(),";")
 	End
 	"Delete;"
+End
+
+//Gets the middle point of an ROI defined by an x wave and a y wave
+Function SI_GetCenter([group])
+	String group
+	
+	Variable i
+	
+	If(ParamIsDefault(group))
+		//Selected ROIs and their group assignments
+		String roiList = SelectedROIs()
+		String roiGroupList = SelectedROIs(groups=1)
+	Else
+		Wave/T roiListWave = SI_GetROIs(group)
+		roiList = TextWaveToStringList(roiListWave,";")
+		roiGroupList = ""
+		For(i=0;i<ItemsInList(roiList,";");i+=1)
+			roiGroupList += group + ";"
+		EndFor
+	EndIf
+	
+	If(!strlen(roiList))
+		return 0
+	EndIf
+	
+	DFREF NTR = root:Packages:NT:ScanImage:ROIs:
+	
+	If(ParamIsDefault(group))
+		Make/O/N=(ItemsInList(roiList,";")) NTR:ROIx,NTR:ROIy
+		Wave ROIx = NTR:ROIx
+		Wave ROIy = NTR:ROIy
+	Else
+		Make/O/N=(ItemsInList(roiList,";")) NTR:$(group + "_ROIx"),NTR:$(group + "_ROIy")
+		Wave ROIx = NTR:$(group + "_ROIx")
+		Wave ROIy = NTR:$(group + "_ROIy")
+	EndIf
+
+	For(i=0;i<ItemsInList(roiList,";");i+=1)
+		DFREF NTR = root:Packages:NT:ScanImage:ROIs:$StringFromList(i,roiGroupList,";")
+		
+		String roi = StringFromList(i,roiList,";")
+		Wave yROI = NTR:$(roi + "_y")
+		Wave xROI = NTR:$(roi + "_x")
+		
+		If(DimSize(xROI,0) == 5) //square ROI
+			ROIx[i] = 0.5*(xROI[0] + xROI[2])
+			ROIy[i] = 0.5*(yROI[0] + yROI[2])
+		Else
+			ROIx[i] = median(xROI)
+			ROIy[i] = median(yROI)
+		EndIf
+
+	EndFor
+			
+//	Wave/T ROItable
+//	String ROIFolder
+//	Variable i,size
+//	String ROIStr
+//	size = DimSize(ROItable,0)
+//	
+//	If(numtype(size) == 2)
+//		return -1
+//	EndIf
+//	
+//	Make/O/N=(size) $(ROIFolder + ":ROIx"),$(ROIFolder + ":ROIy")
+//	Wave ROIx = $(ROIFolder + ":ROIx")
+//	Wave ROIy = $(ROIFolder + ":ROIy")
+//	
+//	For(i=0;i<size;i+=1)
+//		ROIStr = ROItable[i]
+//		Wave xWave = $(ROIfolder + ":" + ROIStr + "_x")
+//		Wave yWave = $(ROIfolder + ":" + ROIStr + "_y")
+//		
+//		If(DimSize(xWave,0) == 5) //square ROI
+//			ROIx[i] = 0.5*(xWave[0] + xWave[2])
+//			ROIy[i] = 0.5*(yWave[0] + yWave[2])
+//		Else
+//			ROIx[i] = median(xWave)
+//			ROIy[i] = median(yWave)
+//		EndIf
+//	EndFor	
 End

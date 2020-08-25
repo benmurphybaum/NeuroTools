@@ -276,3 +276,54 @@ Function NT_PrintFolders(DS_Data)
 		ds.wsi += 1
 	While(ds.wsi < ds.numWaves)
 End
+
+//Calculates the modulation index of two Ca signals. Calculates the peak first, then a % difference.
+Function NT_Modulation_Index(DS_Data,StartTime,EndTime)
+	String DS_Data
+	Variable StartTime,EndTime
+	
+	//Data set info structure
+	STRUCT ds ds 
+	
+	//Fills the data set structure
+	GetStruct(ds)
+	
+	//Reset wave set index
+	ds.wsi = 0
+	
+	DFREF saveDF = GetDataFolderDFR()
+	
+	If(ds.numWaves != 2)
+		Abort "This function requires 2 waves per wave set"
+	EndIf
+
+	//declare each wave in the wave set
+	Wave wave1 = ds.waves[0]
+	Wave wave2 = ds.waves[1]
+	
+	If(ds.wsn == 0)	
+		SetDataFolder GetWavesDataFolder(wave1,1)
+		Make/O/N=(ds.num) $"MI"/Wave=MI
+		Note/K MI,"Modulation Index (difference / sum)"
+		Note MI,"Waves:"
+		
+		SaveWaveRef(MI)
+	Else
+		Wave MI = recallSavedWaveRef()
+	EndIf
+	
+	//YOUR CODE GOES HERE....
+	Variable pk1,pk2,modulationIndex
+	pk1 = WaveMax(wave1,StartTime,EndTime)
+	pk2 = WaveMax(wave2,StartTime,EndTime)
+	
+	//Ensure no negative values
+	pk1 = (pk1 < 0) ? 0 : pk1
+	pk2 = (pk2 < 0) ? 0 : pk2
+	
+	MI[ds.wsn] = abs(pk2 - pk1) / (pk1 + pk2)
+	
+	Note MI,NameOfWave(wave1) + " vs. " + NameOfWave(wave2)
+	
+	SetDataFolder saveDF
+End

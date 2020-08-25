@@ -3153,6 +3153,28 @@ Function RunExternalFunction(cmd)
 	return 1
 End
 
+//Saves a wave reference variable of an input wave so that it can be recalled later.
+//Userful for external functions that output values according to wave set number as opposed
+//to wave set index
+Function saveWaveRef(theWave)
+	Wave theWave
+	
+	Make/O/N=1/WAVE root:Packages:NT:savedRefs
+	Wave/Wave savedRefs = root:Packages:NT:savedRefs
+	savedRefs[0] = theWave
+End
+
+//Pairs with saveWaveRef to recall that reference
+Function/WAVE recallSavedWaveRef()
+	Wave/Wave savedRefs = root:Packages:NT:savedRefs
+	
+	If(!WaveExists(savedRefs))
+		Abort "Must save a wave reference before recalling one"
+	EndIf
+	
+	return savedRefs[0]
+End
+
 //Switches the title of the function list in the 'External Functions' command window
 Function SwitchExternalFunction(cmd)
 	String cmd
@@ -3735,3 +3757,5 @@ Function/S whichImagingSoftware()
 		return "ScanImage"
 	EndIf
 End
+
+

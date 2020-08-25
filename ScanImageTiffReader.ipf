@@ -134,33 +134,59 @@ Function SI_LoadScans(path,fileList)
 		
 		//Was this a Z stack enabled scan?
 		Variable stackEnable = bool2int(GetSIParam("hStackManager.enable",header))
-
+		
+		//Is multiROI enabled?
+		Variable mroiEnable = str2num(GetSIParam("mroiEnable",header))
+		
 		If(stackEnable)
 			String stackMode = GetSIParam("stackDefinition",header)
 			
 			//arbitrary Zs were used
-			If(!cmpstr(stackMode,"'arbitrary'"))
-			
-				//get the Z levels
-				String zs = ReplaceString(" ",GetSIParam("zs",header),";")
-				zs = ReplaceString("]",ReplaceString("[",zs,""),";")
+			strswitch(stackMode)
+				case "'arbitrary'":
+					//get the Z levels
+					String zs = ReplaceString(" ",GetSIParam("zs",header),";")
+					zs = ReplaceString("]",ReplaceString("[",zs,""),";")
+					
+					//Number of Z levels
+					numZs = str2num(GetSIParam("actualNumSlices",header))
+					
+					//Number of time steps in each volume (i.e. number of frames)
+					Variable numTimeFrames = str2num(GetSIParam("actualNumVolumes",header))
+					
+					Variable framesPerSlice = str2num(GetSIParam("framesPerSlice",header))
+					
+					//Volume rate (i.e. frame rate)
+					Variable frameRate = str2num(GetSIParam("scanVolumeRate",header))
+					
+					break
+					
+				case "'uniform'":
+					//get the Z levels
+					zs = ReplaceString(" ",GetSIParam("zs",header),";")
+					zs = ReplaceString("]",ReplaceString("[",zs,""),";")
+					
+					//Number of Z levels
+					numZs = str2num(GetSIParam("actualNumSlices",header))
+					
+					//Number of time steps in each volume (i.e. number of frames)
+					numTimeFrames = str2num(GetSIParam("actualNumVolumes",header))
+					
+					framesPerSlice = str2num(GetSIParam("framesPerSlice",header))
+					
+					//Volume rate (i.e. frame rate)
+					frameRate = str2num(GetSIParam("scanVolumeRate",header))
+					break
 				
-				//Number of Z levels
-				numZs = str2num(GetSIParam("actualNumSlices",header))
-				
-				//Number of time steps in each volume (i.e. number of frames)
-				Variable numTimeFrames = str2num(GetSIParam("actualNumVolumes",header))
-				
-				//Volume rate (i.e. frame rate)
-				Variable frameRate = str2num(GetSIParam("scanVolumeRate",header))
-			EndIf
-		Else
-			zs = "0"
-			numZs = 1
-			numTimeFrames = str2num(GetSIParam("framesPerSlice",header))
-			frameRate = str2num(GetSIParam("scanFrameRate",header))
-		EndIf
+				default:
 		
+					zs = "0"
+					numZs = 1
+					numTimeFrames = str2num(GetSIParam("framesPerSlice",header))
+					frameRate = str2num(GetSIParam("scanFrameRate",header))
+					break
+			endswitch
+		EndIf
 
 		//Number of ROIs determines how many waves will be created
 		Variable i
@@ -183,7 +209,9 @@ Function SI_LoadScans(path,fileList)
 //			Variable frames = theROI[FindDimLabel(theROI,0,"Frames")]
 			
 			String ROIname = baseName + "_R" + num2str(i) + "_" + ch
-			Make/N=(xPixels,yPixels,numTimeFrames)/O/W $ROIname/Wave=scanROI
+			
+			numZs = (numZs == 0) ? 1 : numZs
+			Make/N=(xPixels,yPixels,(numFrames / numZs))/O/W $ROIname/Wave=scanROI
 	
 			SetScale/I x,objResolution * (theROI[0] - (theROI[2] / 2)),objResolution * (theROI[0] + (theROI[2] / 2)),scanROI
 			SetScale/I y,objResolution * (theROI[1] - (theROI[3] / 2)),objResolution * (theROI[1] + (theROI[3] / 2)),scanROI
@@ -200,14 +228,22 @@ Function SI_LoadScans(path,fileList)
 				offsetZ = 0
 			EndIf
 			
-			If(Z == prevZ)
-				offsetY = YPixels
-				Multithread scanROI[][][] = theImage[p][offsetY + q][offsetZ + r * numZs]
+			offsetY = (Z == prevZ) ? Ypixels : 0
+		
+			Variable k
+			If(framesPerSlice > 1)
+				//This will hold each block of frames per slice
+				Make/N=(xPixels,yPixels,framesPerSlice)/FREE sliceBlock
+				Redimension/S scanROI
+				For(k=0;k<numZs;k+=1)
+					Multithread sliceBlock = theImage[p][q][r + k * framesPerSlice]
+					MatrixOP/FREE avgSlice = sumBeams(sliceBlock) / framesPerSlice
+					Multithread scanROI[][][k] = avgSlice[p][q][0]
+				EndFor
 			Else
-				offsetY = 0
 				Multithread scanROI[][][] = theImage[p][offsetY + q][offsetZ + r * numZs]
 			EndIf
-			
+					
 			prevZ = Z
 			offsetY += yPixels
 		EndFor
