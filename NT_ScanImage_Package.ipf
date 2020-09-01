@@ -772,7 +772,7 @@ Function DisplayScanField(imageList[,add])
 	
 	Variable xPixels,yPixels,frames,xSize,ySize,xDim,yDim,sizeRatio,numCols,baseWidth
 	 
-	 baseWidth = 360
+	baseWidth = 360
 	 
 	//sizing of the panel
 	numCols = ceil(numImages / 3)
@@ -790,7 +790,7 @@ Function DisplayScanField(imageList[,add])
 		EndIf
 	EndIf
 	
-	xSize = numCols * (maxX / (str2num(StringFromList(maxXScan,yDimList,";"))/baseWidth)) //(numCols * ySize/numRows))) //set x size to the maximum sized scanfield since we're vertically stacking them
+	xSize = numCols * (maxX / (abs(str2num(StringFromList(maxXScan,yDimList,";")))/baseWidth)) //(numCols * ySize/numRows))) //set x size to the maximum sized scanfield since we're vertically stacking them
 	
 	Variable segmentY = floor(ySize/numImages)
 	Variable fractionY,fractionX

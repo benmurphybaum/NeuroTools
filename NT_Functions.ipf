@@ -324,6 +324,8 @@ Function/WAVE NT_Average(ds[,pass])
 			case 8: //signed 8 bit integer
 				Make/O/N=(DimSize(ds.waves[0],0),DimSize(ds.waves[0],1),DimSize(ds.waves[0],2))/B $outputName
 				break
+			case 16: //unsigned 16 bit word
+				Make/O/N=(DimSize(ds.waves[0],0),DimSize(ds.waves[0],1),DimSize(ds.waves[0],2))/W $outputName
 		endswitch
 		Wave outWave = $outputName
 	Else

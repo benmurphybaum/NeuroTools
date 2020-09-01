@@ -679,7 +679,7 @@ Function HandleButtonClick(ba)
 			
 			break
 		case "goToProcButton": //opens the procedure window of the current external function
-			String func = CurrentExtFunc()
+			String func = "NT_" + CurrentExtFunc()
 			DisplayProcedure/W=NT_ExternalFunctions func
 			break
 		case "measureType": //pop up menu for the Measure function 

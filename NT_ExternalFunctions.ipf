@@ -327,3 +327,50 @@ Function NT_Modulation_Index(DS_Data,StartTime,EndTime)
 	
 	SetDataFolder saveDF
 End
+
+Function NT_AvgZRange(DS_Data,StartLayer,EndLayer)
+	String DS_Data
+	Variable StartLayer,EndLayer
+	
+	//Data set info structure
+	STRUCT ds ds 
+	
+	//Fills the data set structure
+	GetStruct(ds)
+	
+	//Reset wave set index
+	ds.wsi = 0
+	
+	DFREF saveDF = GetDataFolderDFR()
+	
+	Do
+		//declare each wave in the wave set
+		Wave theWave = ds.waves[ds.wsi]
+		
+		//Make sure end layer isn't higher than wave dimensions
+		EndLayer = (EndLayer > DimSize(theWave,2)) ? DimSize(theWave,2) - 1 : EndLayer
+		
+		SetDataFolder GetWavesDataFolderDFR(theWave)
+		
+		//Make wave to hold extracted layers
+		Make/FREE/N=(DimSize(theWave,0),DimSize(theWave,1),EndLayer - StartLayer + 1) layerTemp
+		
+		Make/O/N=(DimSize(theWave,0),DimSize(theWave,1),1) $(NameOfWave(theWave) + "_L" + num2str(StartLayer) + "tL" + num2str(EndLayer))/Wave = outWave
+		CopyScales/P theWave,outWave
+		
+		//Extract the layers
+		Multithread layerTemp[][][] = theWave[p][q][r + StartLayer]
+		
+		//Average them
+		MatrixOP/O outWave = sumbeams(layerTemp)
+		Redimension/S outWave
+		outWave /= DimSize(layerTemp,2)
+		
+		CopyScales/P layerTemp,outWave
+		
+		ds.wsi += 1
+	While(ds.wsi < ds.numWaves)
+	
+		
+	SetDataFolder saveDF
+End

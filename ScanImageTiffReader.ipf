@@ -214,7 +214,9 @@ Function SI_LoadScans(path,fileList)
 			Make/N=(xPixels,yPixels,(numFrames / numZs))/O/W $ROIname/Wave=scanROI
 	
 			SetScale/I x,objResolution * (theROI[0] - (theROI[2] / 2)),objResolution * (theROI[0] + (theROI[2] / 2)),scanROI
-			SetScale/I y,objResolution * (theROI[1] - (theROI[3] / 2)),objResolution * (theROI[1] + (theROI[3] / 2)),scanROI
+			
+			//Reverse scaling from what I originally had, so now the image is oriented the same as in MATLAB when the data is taken
+			SetScale/I y,objResolution * (theROI[1] + (theROI[3] / 2)),objResolution * (theROI[1] - (theROI[3] / 2)),scanROI
 			SetScale/P z,0,theROI[11],scanROI
 			
 			//Get the z plane of the scan ROI, and it's frame offset
