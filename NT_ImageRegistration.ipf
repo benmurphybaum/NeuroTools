@@ -242,7 +242,13 @@ Function NT_ScanRegistryButtonProc(ba) : ButtonControl
 					SetDataFolder saveDF
 					
 					break
-			
+				case "SR_getRefScan":
+					String list = StringFromList(0,getSelectedItems(),";")
+					If(WaveDims($list) < 2)
+						list = ""
+					EndIf
+					SetVariable SR_referenceImage win=NT,value=_STR:StringFromList(0,list,";")
+					break
 			endswitch
 		case -1: // control being killed
 			break

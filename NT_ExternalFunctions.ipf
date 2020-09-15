@@ -278,9 +278,9 @@ Function NT_PrintFolders(DS_Data)
 End
 
 //Calculates the modulation index of two Ca signals. Calculates the peak first, then a % difference.
-Function NT_Modulation_Index(DS_Data,StartTime,EndTime)
+Function NT_Modulation_Index(DS_Data,StartTime,EndTime,PeakWidth)
 	String DS_Data
-	Variable StartTime,EndTime
+	Variable StartTime,EndTime,PeakWidth
 	
 	//Data set info structure
 	STRUCT ds ds 
@@ -314,8 +314,21 @@ Function NT_Modulation_Index(DS_Data,StartTime,EndTime)
 	
 	//YOUR CODE GOES HERE....
 	Variable pk1,pk2,modulationIndex
-	pk1 = WaveMax(wave1,StartTime,EndTime)
-	pk2 = WaveMax(wave2,StartTime,EndTime)
+	
+	PeakWidth /= 2
+	
+	WaveStats/Q/R=(StartTime,EndTime) wave1 //find the peak location
+	
+	//Get the average value ±PeakWidth around the peak location
+	pk1 = mean(wave1,V_maxLoc - PeakWidth,V_maxLoc + PeakWidth)
+	
+	WaveStats/Q/R=(StartTime,EndTime) wave2 //find the peak location
+	
+	//Get the average value ±PeakWidth around the peak location
+	pk2 = mean(wave2,V_maxLoc - PeakWidth,V_maxLoc + PeakWidth)
+	
+//	pk1 = WaveMax(wave1,StartTime,EndTime)
+//	pk2 = WaveMax(wave2,StartTime,EndTime)
 	
 	//Ensure no negative values
 	pk1 = (pk1 < 0) ? 0 : pk1

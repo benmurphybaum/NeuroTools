@@ -282,6 +282,7 @@ Function SI_CreateControls()
 	Variable pos = 100
 	
 	DFREF NTSI = root:Packages:NT:ScanImage
+	
 	//Get ROI
 	PopUpMenu channelSelect win=NT,size={120,20},bodywidth=50,pos={461,pos},title="Channel",value="1;2;1/2;2/1;",disable=1	
 	pos += 23
@@ -336,6 +337,11 @@ Function SI_CreateControls()
 	Button SR_saveTemplateButton win=NT,pos={145+426,213+25},size={60,20},title="Save",proc=NT_ScanRegistryButtonProc,disable=1
 	Button SR_applyTemplate win=NT,pos={176+426,237+25},size={50,20},title="Apply",proc=NT_ScanRegistryButtonProc,disable=1
 	
+	//Align Images
+	SetVariable SR_referenceImage win=NT,pos={465,110},size={210,20},title="Reference Image",value=_STR:"",disable=1
+//	CheckBox SR_useProjection win=NT,pos={465,130},size={75,20},title="Use Projection",disable=1
+	Button SR_getRefScan win=NT,pos={677,106},size={40,20},title="Grab",proc=NT_ScanRegistryButtonProc,disable=1
+	
 	If(!DataFolderExists("root:Packages:NT:ScanImage:Registration"))
 		NewDataFolder root:Packages:NT:ScanImage:Registration
 	EndIf
@@ -358,7 +364,7 @@ Function SI_CreateControlLists()
 	NVAR numMainCommands = NTF:numMainCommands
 	
 	//Resize for the Imaging package commands
-	Redimension/N=(numMainCommands + 8,4) controlAssignments
+	Redimension/N=(numMainCommands + 9,4) controlAssignments
 	
 	//SCANIMAGE PACKAGE
 	controlAssignments[numMainCommands][0] = "Load Scans" //command name
@@ -402,7 +408,11 @@ Function SI_CreateControlLists()
 	controlAssignments[numMainCommands+7][2] = "250"
 	controlAssignments[numMainCommands+7][3] = "WaveSelectorTitle"
 	
-	
+	controlAssignments[numMainCommands+8][0] = "Align Images"
+	controlAssignments[numMainCommands+8][1] = "WaveListSelector;"
+	controlAssignments[numMainCommands+8][1] += "SR_referenceImage;SR_getRefScan;"
+	controlAssignments[numMainCommands+8][2] = "280"
+	controlAssignments[numMainCommands+8][3] = "WaveSelectorTitle"
 End
 
 //Returns a text wave with all available scan folders (immediate subfolders within the root:Scans: directory)
@@ -5028,6 +5038,71 @@ End
 	SetDataFolder saveDF
 End
 
+//Registers the images to the indicated reference image
+Function NT_AlignImages(ds)
+	STRUCT ds &ds
+	
+	DFREF saveDF = GetDataFolderDFR()
+	
+	//Reference image
+	ControlInfo/W=NT SR_referenceImage
+	Wave ref = $S_value
+	
+	If(!WaveExists(ref))
+		Abort "Reference image does not exist, must enter full path to a reference image"
+	EndIf
+	
+	//Max projection if 3D
+	If(WaveDims(ref) == 3)
+		Wave refWave = NT_MaxProject(ref)
+	Else
+		Wave refWave = ref
+	EndIf
+	
+	//reset wsi
+	ds.wsi = 0
+	Do
+		Wave theWave = ds.waves[ds.wsi]
+		SetDataFolder $GetWavesDataFolder(theWave,1)
+		
+		If(WaveDims(theWave) == 3)
+			Wave testWave = NT_MaxProject(theWave)
+		Else
+			Wave testWave = theWave
+		EndIf
+		
+		ImageRegistration/Q/TRNS={1,1,0}/ROT={0,0,0}/REFM=0/TSTM=0  testWave=testWave,refWave=refWave
+		
+		Wave params = W_RegParams
+		
+		//Only make adjustments if the registration correction is > 1 pixel
+		Variable xOff = 0
+		Variable yOff = 0
+		
+		If(abs(params[0]) > 1)
+			xOff = DimOffset(testWave,0) + IndexToScale(testWave,params[0],0)
+		Else
+			xOff = DimOffset(testWave,0)
+		EndIf
+		
+		If(abs(params[1]) > 1)
+			yOff = DimOffset(testWave,1) + IndexToScale(testWave,params[1],1)
+		Else
+			yOff = DimOffset(testWave,1)
+		EndIf
+		
+		SetScale/P x,xOff,DimDelta(testWave,0),theWave
+		SetScale/P y,yOff,DimDelta(testWave,1),theWave
+		
+	
+//		KillWaves/Z params,W_RegOut,W_RegMaskOut,theWave
+		
+		ds.wsi += 1
+	While(ds.wsi < ds.numWaves)
+	
+	SetDataFolder saveDF
+End
+
 //Calculates the Max Projection of the 3D input wave
 Function/WAVE NT_MaxProject(w)
 	Wave w
@@ -6000,6 +6075,10 @@ Function RunCmd_ScanImagePackage(cmd)
 		case "Response Quality":
 			GetStruct(ds)
 			NT_ResponseQuality(ds)
+			break
+		case "Align Images":
+			GetStruct(ds)
+			NT_AlignImages(ds)
 			break
 	endswitch
 	

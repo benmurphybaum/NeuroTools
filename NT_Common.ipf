@@ -363,6 +363,7 @@ Function switchControls(currentCmd,prevCmd)
 		case "Max Project":
 		case "Response Quality":
 		case "Adjust Galvo Distortion":
+		case "Align Images":
 			switchWaveListSelectorMenu("Image Browser")
 			break
 		case "Run Cmd Line":

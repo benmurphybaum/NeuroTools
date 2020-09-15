@@ -16,15 +16,30 @@ Function ntListBoxProc(lba) : ListBoxControl
 	Variable errorCode = 0
 	
 	DFREF NTD = root:Packages:NT:DataSets
+	DFREF NTF = root:Packages:NT
+	
+	NVAR dragging = NTF:dragging
+	
 	Variable hookResult = 0
+	
 	switch( lba.eventCode )
 		case -1: // control being killed
 			break
 		case 1: // mouse down
+			//set a potential drag variable
+			
+			If(!cmpstr(lba.ctrlName,"waveListBox"))
+				dragging = 1
+				//freeze selection
+
+			EndIf
 			
 			break
 		case 2: // mouse up
 			//display the full path to the wave in a text box
+			
+			//reset the drag and drop variable on a mouse up
+			dragging = 0
 			
 			If(row > DimSize(selWave,0) - 1 || row == -1)
 				break
@@ -64,6 +79,10 @@ Function ntListBoxProc(lba) : ListBoxControl
 		case 7: // finish edit
 			break
 		case 12: //keyboard
+		
+			
+		
+		
 			//Detect ASCII for 'w' or 'q' 
 			//'q' jumps to previous waveset
 			//'w' jumpts to next waveset
@@ -1249,7 +1268,6 @@ Function MouseClickHooks(s)
 				EndIf		
 			EndIf	
 			break
-
 	endswitch
 
 	return hookResult

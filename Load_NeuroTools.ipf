@@ -125,6 +125,9 @@ Function LoadNT([left,top])
 	ModifyPanel/W=NT#navigatorPanel frameStyle=0
 	SetDrawEnv/W=NT#navigatorPanel textxjust=1
 	
+	//Drag and Drop variable for the navigator
+	Variable/G NTF:dragging = 0
+	
 	//Current data folder text
 	String/G NTF:currentDataFolder
 	SVAR cdf = NTF:currentDataFolder
@@ -745,7 +748,7 @@ Function MakeCommandList()
 	controlListWave[1][1] = "Get ROI;dF Map;"
 	
 	controlListWave[2][0] = "ScanImage"
-	controlListWave[2][1] = "Load Scans;Get ROI;dF Map;Max Project;Vector Sum Map;Population Vector Sum;Response Quality;Adjust Galvo Distortion;"
+	controlListWave[2][1] = "Load Scans;Get ROI;dF Map;Max Project;Vector Sum Map;Population Vector Sum;Response Quality;Adjust Galvo Distortion;Align Images;"
 	return 1
 End
 

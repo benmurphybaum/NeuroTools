@@ -333,6 +333,7 @@ Function/S updateDSNameList()
 		case "Max Project":
 		case "Response Quality":
 		case "Adjust Galvo Distortion":
+		case "Align Images":
 			DSNames = "Image Browser;Wave Match;Navigator;--;"
 			break
 		default:

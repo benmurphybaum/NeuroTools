@@ -250,6 +250,7 @@ Function/WAVE ExecuteCommand(ds,cmd)
 		case "Get ROI":
 		case "dF Map":
 		case "Response Quality":
+		case "Align Images":
 			SaveStruct(ds)
 			Execute/Q/Z "RunCmd_ScanImagePackage(\"" + cmd + "\"" + ")"
 			break
@@ -398,6 +399,10 @@ Function/WAVE NT_Average(ds[,pass])
 			ds.wsi += 1
 		While(ds.wsi < ds.numWaves)
 		
+		If(WaveType(outWave) > 7) //any type of integer
+			Redimension/S outWave
+		EndIf
+		
 		Multithread outWave /= ds.numWaves
 	EndIf
 		
@@ -436,17 +441,27 @@ Function/WAVE NT_Error(ds[,pass])
 	//Set the output data folder
 	DFREF cdf = GetDataFolderDFR()
 	
+	
+	
 	//Which data folder should we put the output waves?
 	ControlInfo/W=NT outFolder
 	String folder = S_Value
-	If(strlen(folder))
-		If(!DataFolderExists(GetWavesDataFolder(ds.waves[0],1) + folder))
-			NewDataFolder $(GetWavesDataFolder(ds.waves[0],1) + folder)
-		EndIf
-	EndIf
-		
-	SetDataFolder GetWavesDataFolder(ds.waves[0],1) + folder
 	
+	//If it's a full path folder
+	If(stringmatch(folder,"root*"))
+		If(!DataFolderExists(folder))
+			NewDataFolder $folder
+		EndIf
+		SetDataFolder folder
+	Else
+		If(strlen(folder))
+			If(!DataFolderExists(GetWavesDataFolder(ds.waves[0],1) + folder))
+				NewDataFolder $(GetWavesDataFolder(ds.waves[0],1) + folder)
+			EndIf
+		EndIf
+		SetDataFolder GetWavesDataFolder(ds.waves[0],1) + folder
+	EndIf
+
 	
 	ControlInfo/W=NT errType 
 	String suffix = S_Value
@@ -937,6 +952,7 @@ Function NT_RunCmdLine()
 				numWaves = WaveMax(wsDimSize)
 				
 			Else
+				theWaveSet = ""
 				numWaves = 1
 			EndIf
 			
@@ -975,8 +991,16 @@ Function NT_RunCmdLine()
 					
 					//if its a full path, don't add a path to the name
 					If(strlen(outWaveName) && !stringmatch(outWaveName,"root:*"))
-						firstWave = StringFromList(0,theWaveSet,";")
-						folder = GetWavesDataFolder($firstWave,1)
+					
+						//Get the data folder of the wave in the waveset, but if no waveset is being referenced,
+						//use the current data folder
+						If(!strlen(theWaveSet))
+							folder = GetDataFolder(1)
+						Else
+							firstWave = StringFromList(0,theWaveSet,";")
+							folder = GetWavesDataFolder($firstWave,1)
+						EndIf
+						
 					
 						//full path to output wave
 						outWaveName = folder + outWaveName
@@ -991,9 +1015,15 @@ Function NT_RunCmdLine()
 					EndIf
 					
 					If(strlen(outWaveName) && !WaveExists($outWaveName))
-						//doesn't exist, make it with correct dimensions
-						Make/O/N=(numWaves) $outWaveName
-					ElseIf(strlen(outWaveName) && WaveExists($outWaveName))
+						If(!strlen(theWaveSet))
+							//Make the wave with default dimensioning if no wave set is referenced
+							Make/O $outWaveName
+						Else
+							//doesn't exist, make it with correct dimensions
+							//Use wave set dimensions for wave length if there is a waveset referenced
+							Make/O/N=(numWaves) $outWaveName
+						EndIf
+					ElseIf(strlen(outWaveName) && WaveExists($outWaveName) && strlen(theWaveSet))
 						//already exists, correct any incorrect dimensions
 						Redimension/N=(numWaves) $outWaveName
 					EndIf 
