@@ -5254,6 +5254,9 @@ Function CreateDrawnROI(drawROIX,drawROIY,target,group,baseName)
 			break
 		case "2PLSM":
 			roiFolder = "root:twoP_ROIS:"
+			If(!DataFolderExists(RemoveEnding(roiFolder,":")))
+				NewDataFolder $RemoveEnding(roiFolder,":")
+			EndIf
 			break
 	endswitch
 	
@@ -5339,6 +5342,9 @@ Function CreateROIGrid(w,h,threshold,target,group,baseName)
 			break
 		case "2PLSM":
 			roiFolder = "root:twoP_ROIS:"
+			If(!DataFolderExists(RemoveEnding(roiFolder,":")))
+				NewDataFolder $RemoveEnding(roiFolder,":")
+			EndIf
 			break
 	endswitch
 	
