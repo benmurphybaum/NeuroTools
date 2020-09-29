@@ -1561,3 +1561,32 @@ Function NT_VectorSum(theWave,angles,returnItem)
 			break
 	endswitch
 End
+
+//Same as SaveGraphCopy, but does it iteratively for an entire layout page
+Function SaveLayoutCopy()
+	
+	//Gets the top layout
+	String theLayout = StringFromList(0,WinList("*",";","WIN:4"),";")
+	
+	//Get a list of all the graphs in the current layout page	
+	String info = LayoutInfo(theLayout,"Layout")
+	Variable numObjects = str2num(StringByKey("NUMOBJECTS",info,":",";"))
+	
+	Variable i
+	String graphName = ""
+	
+	
+	
+	//This is the path that the new pxp will be saved in
+	String path = SpecialDirPath("Desktop",0,0,0) + "Layouts"
+	NewPath/O/Z/Q savePath,path
+	
+	info = ""
+	For(i=0;i<numObjects;i+=1)
+		info = LayoutInfo(theLayout,num2str(i))
+		graphName = StringByKey("NAME",info,":",";")
+		
+		//Save a graph copy to a new experiment file
+		SaveGraphCopy/O/P=savePath/W=$graphName as graphName
+	EndFor
+End

@@ -39,6 +39,9 @@ Function SI_LoadScans(path,fileList)
 			NewDataFolder root:Scans
 		EndIf
 		
+		//Remove any whitespaces
+		folder = ReplaceString(" ",folder,"")
+		
 		If(!DataFolderExists(folder))
 			NewDataFolder $folder
 		EndIf
@@ -186,6 +189,9 @@ Function SI_LoadScans(path,fileList)
 					frameRate = str2num(GetSIParam("scanFrameRate",header))
 					break
 			endswitch
+		
+		Else
+			zs = ""
 		EndIf
 
 		//Number of ROIs determines how many waves will be created

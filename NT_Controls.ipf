@@ -1482,7 +1482,9 @@ Function openParameterFold([size])
 		case "Run Cmd Line":
 		case "New Data Folder":
 		case "Kill Data Folder":
+			break
 		case "Load Scans":
+			ListBox scanLoadListbox, win=NT,disable=0
 			break
 		case "External Function":
 			BuildExtFuncControls(CurrentExtFunc())
@@ -1530,7 +1532,7 @@ Function closeParameterFold([size])
 		ListBox ROIListBox win=NT,disable=3
 		ListBox sweepListBox win=NT,disable=3
 		ListBox fileListBox win=NT,disable=3
-		
+		ListBox scanLoadListbox, win=NT,disable=3
 	Else
 		//shift text label if there is a non-zero size
 		SetDrawEnv/W=NT  fstyle= 0

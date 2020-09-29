@@ -782,7 +782,7 @@ Function DisplayScanField(imageList[,add])
 	
 	Variable xPixels,yPixels,frames,xSize,ySize,xDim,yDim,sizeRatio,numCols,baseWidth
 	 
-	baseWidth = 360
+	baseWidth = 490
 	 
 	//sizing of the panel
 	numCols = ceil(numImages / 3)
@@ -946,6 +946,7 @@ Function DisplayScanField(imageList[,add])
 	
 	Slider darkValueSlider win=SIDisplay#control,pos={367,5},size={75,20},vert=0,side=0,limits={0,100,1},value=0,proc=siSliderProc
 	Slider brightValueSlider win=SIDisplay#control,pos={367,25},size={75,20},vert=0,side=0,limits={0,100,1},value=100,proc=siSliderProc
+	Button scale94pct win=SIDisplay#control,pos={449,12},size={36,20},title="94%",proc=siButtonProc
 	
 	//Bring panel to the front
 	DoWindow/F SIDisplay
@@ -3025,6 +3026,10 @@ Function siButtonProc(ba) : ButtonControl
 					Close/A
 					
 					
+					break
+				case "scale94pct":
+					//auto-stretches the image to 94% margins
+					autoStretch(94)
 					break
 			endswitch
 			break
@@ -6179,4 +6184,87 @@ Function SI_GetCenter([group])
 //			ROIy[i] = median(yWave)
 //		EndIf
 //	EndFor	
+End
+
+//Auto stretches the image to the given percent values on the histogram
+Function autoStretch(pct)
+	Variable pct
+
+	DFREF NTSI = root:Packages:NT:ScanImage
+	NVAR numImages = NTSI:numImages
+	NVAR imagePlane = NTSI:imagePlane
+	
+	String software = whichImagingSoftware()
+	
+	numImages = getNumImages("SIDisplay","image")
+	
+	//Get name of selected graph window in the drop down menu
+	ControlInfo/W=SI targetImage
+	String graphName = S_Value
+	
+	//ROI color table wave
+	Wave color = NTSI:ROI_ColorTable
+	
+	pct = 0.5 * (100-pct)/100
+	
+	Variable i,j
+	
+	//Check it's SIDisplay or another image plot
+	If(!cmpstr("SIDisplay",graphName))
+		DoWindow SIDisplay
+		
+		If(V_flag == 0)
+			return 0
+		EndIf
+		
+		//in case of errors in image number
+		If(numImages == 0)
+			numImages = 1
+		EndIf
+		
+		Make/FREE/N=(numImages)/WAVE imageRefs
+		
+		For(i=0;i<numImages;i+=1)
+		
+			String subpanel = "image" + num2str(i)
+			String graph = "graph" + num2str(i)
+			
+			String imageList = ImageNameList("SIDisplay#" + subpanel + "#" + graph,";")
+			
+			//assumes 1 image per graph slot in SIDisplay
+			imageRefs[i] = ImageNameToWaveRef("SIDisplay#" + subpanel + "#" + graph,StringFromList(j,StringFromList(0,imageList,";"),";"))
+		
+		EndFor
+	Else
+		imageList = ImageNameList(graphName,";")
+		If(!strlen(imageList))
+			return 0
+		EndIf
+		imageRefs[i] = ImageNameToWaveRef(graphName,StringFromList(j,StringFromList(0,imageList,";"),";"))
+	EndIf
+	
+	For(i=0;i<DimSize(imageRefs,0);i+=1)
+		Wave theImage = imageRefs[i]
+		
+		If(DimSize(theImage,2) > 1)	
+			ImageHistogram/I/P=(imagePlane) theImage
+		Else
+			ImageHistogram/I theImage
+		EndIf
+		
+		Wave hist = W_ImageHist
+		Integrate hist/D=cumHist
+		Variable minLevel=cumHist[0]
+		Variable maxLevel=cumHist[dimsize(cumHist,0)-1]
+		Variable range=maxLevel-minLevel
+		FindLevel/Q cumHist, minLevel + range*pct
+		Variable lowerThreshold=V_levelX 
+		FindLevel/Q cumHist,minLevel+range*(1-pct)
+		Variable upperThreshold=V_levelX
+		
+		ModifyImage/W=SIDisplay#$subpanel#$graph $NameOfWave(theImage) ctab= {lowerThreshold,upperThreshold,Grays,0}
+
+	EndFor
+//
+//	
 End

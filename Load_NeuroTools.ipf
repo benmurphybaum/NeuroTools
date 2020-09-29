@@ -132,7 +132,7 @@ Function LoadNT([left,top])
 	String/G NTF:currentDataFolder
 	SVAR cdf = NTF:currentDataFolder
 	cdf = GetDataFolder(1)
-	SetVariable NT_cdf win=NT#navigatorPanel,pos={0,28*hf},size={200,20},fsize=10,font=$LIGHT,value=cdf,title=" ",disable=2,frame=0
+	SetVariable NT_cdf win=NT#navigatorPanel,pos={0,28*hf},size={300,20},fsize=10,font=$LIGHT,value=cdf,title=" ",disable=2,frame=0
 	
 	//Back Button
 	Button Back win=NT#navigatorPanel,size={30,20},pos={1,49*hf},font=$REG,fsize=9,title="Back",proc=ntButtonProc,disable=0
