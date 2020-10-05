@@ -1400,6 +1400,8 @@ Function NT_Load_WaveSurfer(String fileList[,String channels])
 			NewDataFolder root:Ephys
 		EndIf
 		
+		folder = ReplaceString(" ",folder,"")
+		
 		If(!DataFolderExists(folder))
 			NewDataFolder $folder
 		EndIf
