@@ -1348,7 +1348,7 @@ Function NT_Load_WaveSurfer(String fileList[,String channels])
 		path = path[1,strlen(path)-1]
 	EndIf
 	
-	Variable k
+	Variable k,m
 	For(k=0;k<ItemsInList(fileList,";");k+=1)
 		String theFile = StringFromList(k,fileList,";")
 		
@@ -1406,6 +1406,10 @@ Function NT_Load_WaveSurfer(String fileList[,String channels])
 			NewDataFolder $folder
 		EndIf
 		
+		//Get the stimulus data, if available
+		GetStimulusData(fileID)
+		Wave/T stimData = root:Packages:NT:wsStimulusDataListWave
+		
 		SetDataFolder $folder
 		
 		//Load the sweeps into waves
@@ -1460,22 +1464,34 @@ Function NT_Load_WaveSurfer(String fileList[,String channels])
 				endswitch
 				
 				If(!cmpstr(ch[j],channels) || !cmpstr(channels,"All"))	
-						Multithread data[j][] = ( (data[j][q] / scale[j]) * coef[j][1] + (coef[j][0] / scale[j]) ) * mult
-						
-						//Split the channels - puts wave into a folder that is the immediate subfolder
-						//of the file.
-						
-						
-						String channelName = "Im_" + theSweep + "_1_1_" + num2str(j + 1)
-						Make/O/N=(DimSize(data,1))/S $channelName
-						Wave channel = $channelName
-						
-						Multithread channel = data[j][p]
-						SetScale/P x,0,1/rate[0],channel
-						
-						//Set the wave note
-						Note/K channel,"Path: " + path
-						Note channel,"Protocol: " + protocol
+					Multithread data[j][] = ( (data[j][q] / scale[j]) * coef[j][1] + (coef[j][0] / scale[j]) ) * mult
+					
+					//Split the channels - puts wave into a folder that is the immediate subfolder
+					//of the file.
+					
+					
+					String channelName = "Im_" + theSweep + "_1_1_" + num2str(j + 1)
+					Make/O/N=(DimSize(data,1))/S $channelName
+					Wave channel = $channelName
+					
+					Multithread channel = data[j][p]
+					SetScale/P x,0,1/rate[0],channel
+					
+					//Set the wave note
+					Note/K channel,"Path: " + path
+					Note channel,"Protocol: " + protocol
+					
+					//Set the stimulus data note, extracting any sequences
+					If(DimSize(stimData,0) > 0)
+						For(m=0;m<DimSize(stimData,0);m+=1)
+							String line = stimData[m][1]
+							If(ItemsInList(line,";") > 1)
+								Note channel,stimData[m][0] + ": " + StringFromList(i,line,";")
+							Else
+								Note channel,stimData[m][0] + ": " + line
+							EndIf	
+						EndFor
+					EndIf
 				EndIf 
 			EndFor
 			

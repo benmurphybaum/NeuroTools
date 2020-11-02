@@ -602,6 +602,7 @@ Function MakePackageFolders()
 	Make/O/N=0 NTF:wsSelWave
 	Make/O/N=0/T NTF:wsFileListWave
 	Make/O/N=0 NTF:wsFileSelWave
+	Make/O/N=(0,2)/T NTF:wsStimulusDataListWave
 	
 	String/G NTF:wsFilePath
 	String/G NTF:wsFileName
@@ -1181,10 +1182,10 @@ Function CreateControlLists()
 	textGroups[1][4] = "10"
 	
 	textGroups[2][0] = "waveSurferTitle"
-	textGroups[2][1] = "Sweeps;Files;"
-	textGroups[2][2] = "640;515;"
-	textGroups[2][3] = "112;112;"
-	textGroups[2][4] = "10;10"
+	textGroups[2][1] = "Files;"//"Sweeps;Files;"
+	textGroups[2][2] = "515"//"640;515;"
+	textGroups[2][3] = "112"//"112;112;"
+	textGroups[2][4] = "10"//"10;10"
 	
 	
 	
@@ -1250,7 +1251,7 @@ Function CreateControlLists()
 	controlAssignments[11][3] = "WaveSelectorTitle;measureTypeTitle;"
 	
 	controlAssignments[12][0] = "Load WaveSurfer"
-	controlAssignments[12][1] = "BrowseFiles;ChannelSelector;sweepListBox;fileListBox;"
+	controlAssignments[12][1] = "BrowseFiles;ChannelSelector;fileListBox;stimulusData;"
 	controlAssignments[12][2] = "270"
 	controlAssignments[12][3] = "waveSurferTitle;"
 	
@@ -1372,10 +1373,12 @@ Function CreateControls()
 	PopupMenu ChannelSelector win=NT,pos={515,80},font=$LIGHT,fsize=10,size={50,20},title="Channel",value="Im;Vm",disable=1
 	Wave/T wsSweepListWave = NTF:wsSweepListWave
 	Wave/T wsFileListWave = NTF:wsFileListWave
-	Wave wsFileSelWave = NTF:wsFileSelWave
-	ListBox fileListBox win=NT,pos={460,120},font=$LIGHT,fsize=10,size={120,200},listWave=wsFileListWave,selWave=wsFileSelWave,mode=4,disable=1,proc=ntListBoxProc
-	ListBox sweepListBox win=NT,pos={585,120},font=$LIGHT,fsize=10,size={120,200},listWave=wsSweepListWave,mode=0,disable=1
+	Wave/T wsFileSelWave = NTF:wsFileSelWave
+	Wave/T wsStimulusDataListWave = NTF:wsStimulusDataListWave
 	
+	ListBox fileListBox win=NT,pos={460,120},font=$LIGHT,fsize=10,size={240,200},listWave=wsFileListWave,selWave=wsFileSelWave,mode=9,disable=1,proc=ntListBoxProc
+	ListBox sweepListBox win=NT,pos={585,120},font=$LIGHT,fsize=10,size={120,200},listWave=wsSweepListWave,mode=0,disable=1
+	ListBox stimulusData win=NT,pos={460,330},font=$LIGHT,fsize=10,size={240,170},listWave=wsStimulusDataListWave,mode=0,userColumnResize=1,disable=1
 End
 
 //SETTINGS PANEL----------------------------------------------------------------------------------

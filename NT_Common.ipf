@@ -3510,7 +3510,7 @@ Function UpdateWaveSurferLists(fileID,path,file)
 	Wave wsFileSelWave = NTF:wsFileSelWave
 	
 	//Fill the file list box
-	NewPath/O wsPath,path
+	NewPath/O/Q wsPath,path
 	
 	String fileList = IndexedFile(wsPath,-1,".h5")
 	Wave/T listWave = StringListToTextWave(fileList,";")
@@ -3541,8 +3541,6 @@ Function UpdateWaveSurferLists(fileID,path,file)
 	PopUpMenu ChannelSelector win=NT,value=#channelList
 	
 	KillWaves/Z channels
-	HDF5CloseFile/A fileID
-
 
 End
 
@@ -3759,4 +3757,227 @@ Function/S whichImagingSoftware()
 	EndIf
 End
 
+//Retrieves stimulus data from a WaveSurfer HDF5 file that has logged StimGen data
+Function GetStimulusData(fileID)
+	Variable fileID
+	
+	Wave/T wsStimulusDataListWave = root:Packages:NT:wsStimulusDataListWave
+	
+	//Get the groups in the file
+	HDF5ListGroup/F/R/TYPE=1 fileID,"/"
+	S_HDF5ListGroup = ListMatch(S_HDF5ListGroup,"/StimGen*",";")
+	
+	If(!strlen(S_HDF5ListGroup))
+		Redimension/N=(0,2) wsStimulusDataListWave
+		return 0
+	EndIf
+	
+	HDF5ListGroup/TYPE=1/Z fileID,"/StimGen/Stimulus"
+	Variable numGroups = ItemsInList(S_HDF5ListGroup,";")
+	
+	HDF5ListAttributes/TYPE=1/Z fileID,"/StimGen/Stimulus/0"
+	Variable numAttr = ItemsInList(S_HDF5ListAttributes,";")
+	
+	Variable i,j
+	
+	//Get the stimulus name
+	String path = "/StimGen/Stimulus"
+	HDF5LoadData/Z/Q/O/A="Name"/TYPE=1/N=stimData fileID, path
+	Wave/T data = $StringFromList(0,S_waveNames,";")
+	String stimName = data[0]
+	KillWaves/Z data
+	
+	Redimension/N=(numAttr + 1,numGroups + 1) wsStimulusDataListWave
+	
+	wsStimulusDataListWave[0][0] = "Stimulus"
+	wsStimulusDataListWave[0][1] = stimName
+	
+	For(j=0;j<numGroups;j+=1)
+		Variable objectNum = str2num(StringFromList(j,S_HDF5ListGroup,";"))
+		For(i=0;i<numAttr;i+=1)
+			String attr = StringFromList(i,S_HDF5ListAttributes,";")
+			String value = GetAttribute(fileID,objectNum,attr)
+			wsStimulusDataListWave[i+1][0] = attr //+1 leaves room at the top for the stimulus name
+			wsStimulusDataListWave[i+1][j + 1] = value	
+		EndFor
+	EndFor
+	
+	Variable cleanup = 1
+	If(cleanup)
+		cleanStimData(wsStimulusDataListWave,fileID)
+	EndIf
+End
 
+//Returns an attribute
+Function/S GetAttribute(fileID,objectNum,attr)
+	Variable fileID,objectNum
+	String attr
+	
+	DFREF saveDF = GetDataFolderDFR()
+	SetDataFolder root:Packages:NT
+	
+	String path = "/StimGen/Stimulus/" + num2str(objectNum)
+	
+	HDF5LoadData/Z/Q/O/A=attr/TYPE=1/N=stimData fileID, path
+	String stimWave = StringFromList(0,S_waveNames,";")
+	
+	Variable type = WaveType($stimWave,1)
+	
+	switch(type)
+		case 0:
+			return ""
+			break
+		case 1:
+			Wave data = $stimWave
+			String value = num2str(data[0])
+			break
+		case 2:
+			Wave/T textData = $stimWave
+			value = textData[0]
+			break
+	endswitch
+	
+	KillWaves/Z data,textData
+	SetDataFolder saveDF
+	
+	return value
+End
+
+//Returns a list of stimulus attributes for the given stimulus object
+Function/S refineAttributeList(stimData,attrList)
+	Wave/T stimData //table of full stimulus data
+	String attrList
+	
+	//Is their temporal modulation?
+	Variable index = WhichListItem("modulationType",attrList,";")
+	If(cmpstr(stimData[tableMatch("modulationType",stimData)][1],"Static"))
+		attrList = AddListItem("modulationFreq",attrList,";",index+1)
+	EndIf
+	
+	//Is there motion?
+	index = WhichListItem("motionType",attrList,";")
+	If(cmpstr(stimData[tableMatch("motionType",stimData)][1],"Static"))
+		attrList = AddListItem("startRad",attrList,";",index+1)
+		attrList = AddListItem("speed",attrList,";",index+2)
+		attrList = AddListItem("angle",attrList,";",index+1)
+	EndIf
+	
+	return attrList
+End
+
+//Redimensions and fills the stimulus data table according to the attribute list
+Function refineStimDataTable(stimData,attrList)
+	Wave/T stimData
+	String attrList
+	
+	//Create a duplicate working stimulus data wave
+	Duplicate/FREE/T stimData,temp
+	
+	Redimension/N=(ItemsInList(attrList,";"),2) stimData
+	stimData = ""
+	
+	Variable i
+	For(i=0;i<ItemsInList(attrList,";");i+=1)
+		String attr = StringFromList(i,attrList,";")
+ 		String value = temp[tableMatch(attr,temp)][1]
+ 		stimData[i][0] = attr
+ 		stimData[i][1] = value
+	EndFor
+	
+End
+
+Function fillSequenceAssignments(stimData,attrList,fileID)
+	Wave/T stimData
+	String attrList
+	Variable fileID
+	
+	String path = "/StimGen/Sequence Assignments/0"
+	
+	Variable i,index
+	For(i=0;i<ItemsInList(attrList,";");i+=1)
+		String attr = StringFromList(i,attrList,";")
+		HDF5LoadData/Z/Q/O/A=attr/TYPE=1/N=stimData fileID, path
+		
+		If(strlen(S_waveNames))
+			Wave/T data = $StringFromList(0,S_waveNames,";")
+			String seqName = data[0]
+			KillWaves/Z data
+			
+			If(cmpstr(seqName,"None"))
+				String sequence = GetSequence(seqName,fileID)
+				
+				//put the sequence into the appropriate slot in the stimulus data table
+				index = tableMatch(attr,stimData)
+				stimData[index][1] = sequence
+			EndIf
+		EndIf
+	EndFor
+End
+
+Function/S GetSequence(seqName,fileID)
+	String seqName
+	Variable fileID
+	String sequence = ""
+	
+	String path = "/StimGen/Sequences"
+	HDF5LoadData/Z/Q/O/A=seqName/TYPE=1/N=stimData fileID, path
+	
+	If(strlen(S_waveNames))
+		Wave/T data = $StringFromList(0,S_waveNames,";")
+		sequence = data[0]
+	EndIf
+	
+	//format the sequence into semi-colon list
+	sequence = ReplaceString("'",sequence,"")
+	sequence = ReplaceString("[",sequence,"")
+	sequence = ReplaceString("]",sequence,"")
+	sequence = ReplaceString(",",sequence,";")
+	sequence = ReplaceString(" ",sequence,"")
+	
+	return sequence
+End
+
+Function cleanStimData(stimData,fileID)
+	Wave/T stimData
+	Variable fileID //open HDF5 file that contains stimulus data
+
+	//What type of object is it?
+	Variable index = tableMatch("objectType",stimData)
+	If(index == -1)
+		return 0
+	EndIf
+	
+	String type = stimData[index][1]
+	
+	String value = ""
+	
+	strswitch(type)
+		case "Circle":
+		
+			//Diameter
+	 		String attrList = "Stimulus;objectType;diameter;xPos;yPos;contrastType;contrast;modulationType;motionType;delay;duration;trialTime;"
+	 		
+			break
+		case "Rectangle":
+		
+			//Diameter
+	 		attrList = "Stimulus;objectType;length;width;orientation;xPos;yPos;contrastType;contrast;modulationType;motionType;delay;duration;trialTime;"
+	 		
+			break
+		case "Grating":
+			//Diameter
+	 		attrList = "Stimulus;objectType;gratingType;spatialFreq;spatialPhase;orientation;xPos;yPos;contrastType;contrast;modulationType;motionType;delay;duration;trialTime;"
+	 		
+			break
+	endswitch
+	
+	//Adds motion and modulation parameters to the attribute list according to the stimulus
+	attrList = refineAttributeList(stimData,attrList)
+	
+	//Fills out the stimulus data table according to the refined attribute list
+	refineStimDataTable(stimData,attrList)
+	
+	//Fill out any sequence assignments
+	fillSequenceAssignments(stimData,attrList,fileID)
+	
+End

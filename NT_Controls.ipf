@@ -45,12 +45,16 @@ Function ntListBoxProc(lba) : ListBoxControl
 				break
 			EndIf
 			
-			If(!cmpstr(lba.ctrlName,"MatchListBox") || !cmpstr(lba.ctrlName,"DataSetWavesListBox"))
-				DrawAction/W=NT getGroup=fullPathText,delete
-				SetDrawEnv/W=NT fname=$LIGHT,fstyle=2,fsize=10,xcoord=abs,ycoord=abs, textxjust= 0,gname=fullPathText,gstart
-				DrawText/W=NT 14,464,listWave[row][0][1]
-				SetDrawEnv/W=NT gstop
-			EndIf
+			strswitch(lba.ctrlName)
+				case "MatchListBox":
+				case "DataSetWavesListBox":
+					DrawAction/W=NT getGroup=fullPathText,delete
+					SetDrawEnv/W=NT fname=$LIGHT,fstyle=2,fsize=10,xcoord=abs,ycoord=abs, textxjust= 0,gname=fullPathText,gstart
+					DrawText/W=NT 14,464,listWave[row][0][1]
+					SetDrawEnv/W=NT gstop
+					break
+			endswitch
+			
 			break
 		case 3: // double click
 			If(HandleLBDoubleClick(lba))
@@ -346,6 +350,8 @@ Function HandleLBSelection(ctrlName,listWave,row,mouseHor,mouseVert,eventMod)
 					
 					UpdateWaveSurferLists(fileID,wsFilePath,wsFileName)
 					
+					GetStimulusData(fileID)
+
 					HDF5CloseFile/A fileID
 					break
 				case "Load pClamp":
@@ -369,8 +375,6 @@ Function HandleLBSelection(ctrlName,listWave,row,mouseHor,mouseVert,eventMod)
 					Close refnum
 					break
 			endswitch
-			
-			
 			break
 	endswitch
 	return errorCode
@@ -1491,9 +1495,11 @@ Function openParameterFold([size])
 			Button WaveListSelector win=NT,disable=3
 			break
 		case "Load WaveSurfer":
-			ListBox sweepListBox win=NT,disable=0
+//			ListBox sweepListBox win=NT,disable=0
 			ListBox fileListBox win=NT,disable=0
 			Button WaveListSelector win=NT,disable=3
+			ListBox stimulusData win=NT,disable=0
+			
 			break
 		case "Population Vector Sum":
 			break
@@ -1532,6 +1538,7 @@ Function closeParameterFold([size])
 		ListBox ROIListBox win=NT,disable=3
 		ListBox sweepListBox win=NT,disable=3
 		ListBox fileListBox win=NT,disable=3
+		ListBox stimulusData win=NT,disable=3
 		ListBox scanLoadListbox, win=NT,disable=3
 	Else
 		//shift text label if there is a non-zero size
