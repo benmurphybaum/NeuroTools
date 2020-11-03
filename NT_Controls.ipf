@@ -1501,6 +1501,11 @@ Function openParameterFold([size])
 			ListBox stimulusData win=NT,disable=0
 			
 			break
+		case "Load pClamp":
+			ListBox fileListBox win=NT,disable=0
+			Button WaveListSelector win=NT,disable=3
+			ListBox sweepListBox win=NT,disable=0
+			break
 		case "Population Vector Sum":
 			break
 		case "Get ROI":
@@ -1556,6 +1561,7 @@ Function closeParameterFold([size])
 		case "Kill Data Folder":
 		case "External Function":
 		case "Load WaveSurfer":
+		case "Load pClamp":
 		case "Load Scans":
 		case "Population Vector Sum":
 			Button WaveListSelector win=NT,disable=3
