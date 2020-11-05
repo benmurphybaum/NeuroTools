@@ -293,15 +293,15 @@ Function switchControls(currentCmd,prevCmd)
 			closeParameterFold(size = panelWidth)
 		EndIf
 		
-		//Make the controls visible
-		controlsVisible(visibleList,0)
-		
 		//Adjust the visible text groups
 		updateTextGroups(currentCmd)
 		
 		//Measure command must go through further setup, since it has variable subcontrols depending on the measurement selection
 		If(stringmatch(visibleList,"*measureType*"))
 			setupMeasureControls(CurrentMeasureType())
+		Else
+			//Make the controls visible
+			controlsVisible(visibleList,0)
 		EndIf
 		
 		selectedCmd = currentCmd
@@ -335,13 +335,13 @@ Function switchControls(currentCmd,prevCmd)
 		
 		//Adjust the visible text groups
 		updateTextGroups(currentCmd)
-
-		//make current controls visible 
-		controlsVisible(visibleList,0)
 				
 		//Measure command must go through further setup, since it has variable subcontrols depending on the measurement selection
 		If(stringmatch(visibleList,"*measureType*"))
 			setupMeasureControls(CurrentMeasureType())
+		Else
+			//make current controls visible 
+			controlsVisible(visibleList,0)	
 		EndIf
 		
 		
@@ -653,40 +653,72 @@ End
 Function controlsVisible(list,visible)
 	String list
 	Variable visible //0 is visible,1 is invisible
-	Variable i
+	Variable i,offset = 105
+	SVAR selectedCmd = root:Packages:NT:selectedCmd
 	
 	For(i=0;i<ItemsInList(list,";");i+=1)
 		String ctrl = StringFromList(i,list,";")
 		ControlInfo/W=NT $ctrl
 		Variable type = V_flag
 		
+		If(!cmpstr(ctrl,"WaveListSelector"))
+			Button $ctrl win=NT,disable=visible,pos={507,75}
+			continue
+		EndIf
+		
+		//Some special cases
+		strswitch(selectedCmd)
+			case "Run Cmd Line":
+			case "External Function":
+			case "Load pClamp":
+			case "Load WaveSurfer":
+			case "Load Scans":
+			case "Adjust Galvo Distortion":
+			case "Align Images":
+				offset = V_top
+				break
+
+		endswitch
+		
 		switch(type)
-			case 1: //Button
-				Button $ctrl win=NT,disable=visible
+			case 1: //Button	
+				Button $ctrl win=NT,disable=visible,pos={V_pos,offset}
 				break
 			case -5: //SetVariable
 			case 5:
-				SetVariable $ctrl win=NT,disable=visible
+				If(!cmpstr(selectedCmd,"Duplicate Rename"))
+					SetVariable $ctrl win=NT,disable=visible,pos={V_pos,105}
+					
+					If(cmpstr(ctrl,"traceName"))
+						continue
+					EndIf
+				Else
+					SetVariable $ctrl win=NT,disable=visible,pos={V_pos,offset}
+				EndIf
 				break
 			case -3: //PopUpMenu
 			case 3: 
-				PopUpMenu $ctrl win=NT,disable=visible
+				PopUpMenu $ctrl win=NT,disable=visible,pos={V_pos,offset}//,pos={503,pos}
 				break
 			case 7: //Slider
-				Slider $ctrl win=NT,disable=visible
+				Slider $ctrl win=NT,disable=visible,pos={V_pos,offset}//,pos={461,pos}
 				break
 			case -4: //ValDisplay	
 			case 4:
-				ValDisplay $ctrl win=NT,disable=visible
+				ValDisplay $ctrl win=NT,disable=visible,pos={V_pos,offset}//,pos={461,pos}
 				break
 			case 11: //ListBox
-				ListBox $ctrl win=NT,disable=visible
+				ListBox $ctrl win=NT,disable=visible//,pos={V_pos,offset}//,pos={461,pos}
 				break
 			case 2: //CheckBox
-				CheckBox $ctrl win=NT,disable=visible
+				CheckBox $ctrl win=NT,disable=visible,pos={V_pos,offset}//,pos={461,pos}
 				break
 		endswitch
+		
+		offset+= 23
 	EndFor
+	
+	DoUpdate/W=NT
 End
 
 

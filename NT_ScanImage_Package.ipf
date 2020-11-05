@@ -287,6 +287,7 @@ Function SI_CreateControls()
 	PopUpMenu channelSelect win=NT,size={120,20},bodywidth=50,pos={461,pos},title="Channel",value="1;2;1/2;2/1;",disable=1	
 	pos += 23
 	PopUpMenu dFSelect win=NT,size={120,20},bodywidth=50,pos={461,pos},title="Mode",value="∆F/F;SD;Abs;",disable=1
+	PopUpMenu measurePopUp win=NT,size={170,20},bodywidth=100,pos={461,pos},title="Measure",value=	"Peak;Peak Location;Mean;Median;Area;Area/Peak;Peak/Area;",disable=1
 	pos += 23
 	SetVariable baselineSt win=NT,size={120,20},bodywidth=40,pos={461,pos},limits={0,inf,0.1},title="Baseline Start (s)",value=_NUM:0,disable=1
 	pos += 20
@@ -300,6 +301,9 @@ Function SI_CreateControls()
 //	pos += 20
 	SetVariable filterSize win=NT,size={120,20},bodywidth=40,pos={461,pos},limits={-1,inf,2},title="Filter Size",value=_NUM:9,disable=1,proc=siVarProc
 	pos += 20	
+	
+	
+	
 	
 	//Load Scans
 	Button BrowseScans win=NT,pos={460,80},font=$LIGHT,fsize=10,size={50,20},title="Browse",disable=1,proc=siButtonProc
@@ -373,12 +377,12 @@ Function SI_CreateControlLists()
 	controlAssignments[numMainCommands][3] = ""//these are the titles of text groups to include in the display			
 	
 	controlAssignments[numMainCommands+1][0] = "Get ROI"
-	controlAssignments[numMainCommands+1][1] = "WaveListSelector;baselineSt;baselineEnd;peakSt;peakEnd;filterSize;channelSelect;dFSelect;"
+	controlAssignments[numMainCommands+1][1] = "WaveListSelector;dFSelect;channelSelect;baselineSt;baselineEnd;filterSize;"
 	controlAssignments[numMainCommands+1][2] = "250"
 	controlAssignments[numMainCommands+1][3] = "WaveSelectorTitle;"
 	
 	controlAssignments[numMainCommands+2][0] = "dF Map"
-	controlAssignments[numMainCommands+2][1] = "WaveListSelector;baselineSt;baselineEnd;peakSt;peakEnd;filterSize;channelSelect;dFSelect;"
+	controlAssignments[numMainCommands+2][1] = "WaveListSelector;dFSelect;measurePopUp;channelSelect;baselineSt;baselineEnd;peakSt;peakEnd;filterSize;"
 	controlAssignments[numMainCommands+2][2] = "250"
 	controlAssignments[numMainCommands+2][3] = "WaveSelectorTitle;"
 	
@@ -4717,9 +4721,6 @@ Function/WAVE NT_dFMap(ds)
 		
 		//photon counting is so sparse, set to zero 
 //		Multithread bgndBaseline = 0
-		
-		
-		
 		
 		//Calculate the ∆F map
 		switch(img.mode)

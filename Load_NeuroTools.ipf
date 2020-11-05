@@ -786,20 +786,20 @@ Function/S setupMeasureControls(selection)
 	String invisibleList = "measureStart;measureEnd;angleWave;measureWidth;measureThreshold;vectorSumReturn;sortOutput;"
 	controlsVisible(invisibleList,1)
 	
-	String visibleList = ""
+	String visibleList = "measureType;"
 	
 	strswitch(selection)
 		case "Vector Sum":
-			visibleList = "angleWave;vectorSumReturn;"
+			visibleList += "angleWave;vectorSumReturn;"
 			break
 		case "Peak":
-			visibleList = "measureStart;measureEnd;measureWidth;sortOutput;"
+			visibleList += "measureStart;measureEnd;measureWidth;sortOutput;"
 			break
 		case "# Spikes":
-			visibleList = "measureStart;measureEnd;measureThreshold;sortOutput;"
+			visibleList += "measureStart;measureEnd;measureThreshold;sortOutput;"
 			break
 		default:
-			visibleList = "measureStart;measureEnd;sortOutput;"
+			visibleList += "measureStart;measureEnd;sortOutput;"
 			break	
 	endswitch
 	
@@ -888,6 +888,39 @@ Function LoadScanImagePackage()
 End
 
 
+Function LoadNeuroLive()
+	DFREF NTF = root:Packages:NT
+	SVAR loadedPackages = NTF:loadedPackages
+	If(!stringmatch(loadedPackages,"*NeuroLive*"))
+	
+		//LOAD - supports Vidrio's ScanImage software
+		loadedPackages += "NeuroLive;"
+		
+		//Load procedures
+		Execute/P/Q/Z "INSERTINCLUDE \"NeuroLive\""
+		Execute/P/Q/Z "COMPILEPROCEDURES "
+		
+		//Load the controls, etc.
+		//Executes command string to avoid compilation prior to loading the package.
+		Execute/Q/P "Load_NeuroLive()"
+	Else
+		//UNLOAD
+		loadedPackages = RemoveFromList("NeuroLive;",loadedPackages,";")
+		
+		Execute/P/Q/Z "DELETEINCLUDE \"NeuroLive\""
+		Execute/P/Q/Z "COMPILEPROCEDURES "
+		
+		KillWindow/Z NL
+		
+		//return to a main menu function
+		SVAR selectedCmd = NTF:selectedCmd
+		switchCommandMenu("Measure")
+		SwitchControls("Measure",selectedCmd)
+		switchHelpMessage("Measure")
+	EndIf
+	
+End
+
 
 //Contextual menu for the wave list selector in the parameters panel
 Menu "WaveListSelectorMenu",contextualMenu,dynamic
@@ -903,6 +936,7 @@ Menu "Macros",dynamic
 	Submenu "Load Packages"
 //		 LoadUnload("Imaging"),LoadImagingPackage()
 		 LoadUnload("ScanImage"),LoadScanImagePackage()
+		 LoadUnload("NeuroLive"),LoadNeuroLive()
 	End
 	
 	Submenu "Shortcuts"
@@ -1196,12 +1230,12 @@ Function CreateControlLists()
 	controlAssignments[0][3] = "WaveSelectorTitle;"	//these are the titles of text groups to include in the display								
 	
 	controlAssignments[1][0] = "Errors"
-	controlAssignments[1][1] = "WaveListSelector;errType;outFolder;polarCheck;"
+	controlAssignments[1][1] = "WaveListSelector;outFolder;errType;polarCheck;"
 	controlAssignments[1][2] = "210"
 	controlAssignments[1][3] = "WaveSelectorTitle;"
 	
 	controlAssignments[2][0] = "PSTH"
-	controlAssignments[2][1] = "WaveListSelector;binSize;spkThreshold;histType;outFolder;flattenWaveCheck;startTmPSTH;endTmPSTH;"
+	controlAssignments[2][1] = "WaveListSelector;outFolder;histType;startTmPSTH;endTmPSTH;binSize;spkThreshold;flattenWaveCheck;"
 	controlAssignments[2][2] = "210"
 	controlAssignments[2][3] = "WaveSelectorTitle;"
 	
@@ -1344,13 +1378,13 @@ Function CreateControls()
 	
 	//MEASURE
 	Button measureType win=NT,pos={492,105},font=$LIGHT,fsize=12,size={125,20},title="\\JL▼              " + "Peak",disable=3,proc=ntButtonProc
-	SetVariable measureStart win=NT,pos={490,130},bodywidth=40,font=$LIGHT,fsize=10,size={40,20},title="Start",limits={0,inf,0.1},value=_NUM:0,disable=1
-	SetVariable measureEnd win=NT,pos={490,150},bodywidth=40,font=$LIGHT,fsize=10,size={40,20},title="End",limits={0,inf,0.1},value=_NUM:0,disable=1
-	SetVariable measureWidth win=NT,pos={490,170},bodywidth=40,font=$LIGHT,fsize=10,size={40,20},title="Width",limits={0,inf,0.1},value=_NUM:0,disable=1
-	SetVariable measureThreshold win=NT,pos={490,170},bodywidth=60,font=$LIGHT,fsize=10,size={60,20},title="Thresh.",limits={-inf,inf,5e-12},value=_NUM:50e-12,disable=1
-	SetVariable angleWave win=NT,pos={530,130},bodywidth=80,font=$LIGHT,fsize=10,size={40,20},title="Angles",value=_STR:"45 * x",disable=1
-	PopUpMenu vectorSumReturn win=NT,pos={530,150},bodywidth=80,font=$LIGHT,fsize=10,size={40,20},title="Return",value="Angle;Resultant;DSI;",disable=3
-	PopUpMenu sortOutput win=NT,pos={530,190},bodywidth=80,font=$LIGHT,fsize=10,size={40,20},title="Sort",value="Linear;Alternating;",disable=3
+	SetVariable measureStart win=NT,pos={490,105},bodywidth=40,font=$LIGHT,fsize=10,size={40,20},title="Start",limits={0,inf,0.1},value=_NUM:0,disable=1
+	SetVariable measureEnd win=NT,pos={490,105},bodywidth=40,font=$LIGHT,fsize=10,size={40,20},title="End",limits={0,inf,0.1},value=_NUM:0,disable=1
+	SetVariable measureWidth win=NT,pos={490,105},bodywidth=40,font=$LIGHT,fsize=10,size={40,20},title="Width",limits={0,inf,0.1},value=_NUM:0,disable=1
+	SetVariable measureThreshold win=NT,pos={490,105},bodywidth=60,font=$LIGHT,fsize=10,size={60,20},title="Thresh.",limits={-inf,inf,5e-12},value=_NUM:50e-12,disable=1
+	SetVariable angleWave win=NT,pos={530,105},bodywidth=80,font=$LIGHT,fsize=10,size={40,20},title="Angles",value=_STR:"45 * x",disable=1
+	PopUpMenu vectorSumReturn win=NT,pos={530,105},bodywidth=80,font=$LIGHT,fsize=10,size={40,20},title="Return",value="Angle;Resultant;DSI;",disable=3
+	PopUpMenu sortOutput win=NT,pos={530,105},bodywidth=80,font=$LIGHT,fsize=10,size={40,20},title="Sort",value="Linear;Alternating;",disable=3
 	
 	//Toggle the 'Sweeps:' title if WavesurferListBox is to be invisible
 	String func = CurrentCommand()
