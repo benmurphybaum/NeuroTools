@@ -252,6 +252,120 @@ Function navigateBack()
 	EndIf
 End
 
+//Browse the files prior to loading
+Function BrowseEphys(fileType)
+	String fileType
+	
+	DFREF NTF = root:Packages:NT
+	Variable fileID
+	
+	SVAR wsFilePath = NTF:wsFilePath
+	SVAR wsFileName = NTF:wsFileName
+			
+	strswitch(fileType)
+		case "WaveSurfer":
+			HDF5OpenFile/I/R fileID as "theWave"
+			
+			If(V_flag == -1) //cancelled
+				return 0
+			EndIf
+			
+			wsFilePath = S_path
+			wsFileName = S_fileName
+	
+			UpdateWaveSurferLists(fileID,wsFilePath,wsFileName)
+			
+			HDF5CloseFile/A fileID
+			break
+			
+		case "PClamp":	
+			Variable refnum
+			String extension = ".abf"
+			String message = "Select the data folder to index"
+			String fileFilters = "All Files:.abf;"
+			Open/D/R/F=fileFilters/M=message refnum
+			
+			wsFilePath = ParseFilePath(1,S_fileName,":",1,0)
+			wsFileName = ParseFilePath(0,S_fileName,":",1,0)
+			Close/A
+			
+			String fullPath = wsFilePath
+			NewPath/O/Q/Z loadPath,fullpath
+			String fileList = IndexedFile(loadPath,-1,extension)
+			
+			If(!strlen(fileList))
+				return 0
+			EndIf
+			
+			fileList = SortList(fileList,";",16)
+			
+			fileList = ReplaceString(extension,fileList,"")
+			
+			Wave/T wsFileListWave = NTF:wsFileListWave
+			Wave wsFileSelWave = NTF:wsFileSelWave
+			
+			Wave/T textWave = StringListToTextWave(fileList,";")
+			Redimension/N=(DimSize(textWave,0) - 1) wsFileListWave,wsFileSelWave
+			wsFileListWave = textWave
+			wsFileSelWave[0] = 1
+			
+			//What channels are available for the selected file
+			
+			fullPath = wsFilePath + wsFileName
+			ABFLoader(fullPath,"1",0)
+			
+			Wave/T dTable_Values = root:ABFvar:dTable_Values
+			
+			String chList = dTable_Values[4]
+			
+			String quote = "\""
+			String channelList = quote + "All;" + ResolveListItems(chList,";") + quote
+
+			PopUpMenu ChannelSelector win=NT,value=#channelList
+			
+			break
+		case "Presentinator":
+			extension = ".phys"
+			message = "Select the data folder to index"
+			fileFilters = "All Files:.phys;"
+			Open/D/R/F=fileFilters/M=message refnum
+			
+			wsFilePath = ParseFilePath(1,S_fileName,":",1,0)
+			wsFileName = ParseFilePath(0,S_fileName,":",1,0)
+			Close/A
+			
+			fullPath = wsFilePath
+			NewPath/O/Q/Z loadPath,fullpath
+			fileList = IndexedFile(loadPath,-1,extension)
+			
+			If(!strlen(fileList))
+				return 0
+			EndIf
+			
+			fileList = SortList(fileList,";",16)
+			
+			fileList = ReplaceString(extension,fileList,"")
+			
+			Wave/T wsFileListWave = NTF:wsFileListWave
+			Wave wsFileSelWave = NTF:wsFileSelWave
+			
+			Wave/T textWave = StringListToTextWave(fileList,";")
+			Redimension/N=(DimSize(textWave,0) - 1) wsFileListWave,wsFileSelWave
+			wsFileListWave = textWave
+			wsFileSelWave[0] = 1
+			
+			//What channels are available for the selected file
+			GetPresentinatorChannels("")
+			
+			break
+	endswitch	
+	
+End
+
+
+
+
+
 //Switches the listed controls to those of the selected command in the Command Menu
 Function switchControls(currentCmd,prevCmd)
 	String currentCmd,prevCmd
@@ -670,6 +784,7 @@ Function controlsVisible(list,visible)
 		strswitch(selectedCmd)
 			case "Run Cmd Line":
 			case "External Function":
+			case "Load Ephys":
 			case "Load pClamp":
 			case "Load WaveSurfer":
 			case "Load Scans":

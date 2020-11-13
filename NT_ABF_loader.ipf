@@ -361,10 +361,11 @@ Function ABFLoader(filepath,whichChannel,doLoad)
 		
 		//Prefix
 		If(StringMatch(h.recChUnits[0],"mV"))
-			dTable_Values[0] = "Vmon"
+			dTable_Values[0] = "Vm"
 		Else
-			dTable_Values[0] = "Imon"
+			dTable_Values[0] = "Im"
 		EndIf
+		
 		//Group
 		dTable_Values[1] = "1"
 		//Series
@@ -620,6 +621,12 @@ Function ABFLoader(filepath,whichChannel,doLoad)
 			EndFor
 			
 			
+			If(StringMatch(h.recChUnits[0],"mV"))
+				String prefix = "Vm"
+			Else
+				prefix = "Im"
+			EndIf
+			
 			//Loads the data
 			Make/O/N=(dataPtsPerSweep) root:ABFvar:tempd
 			Wave tempd = root:ABFvar:tempd
@@ -628,7 +635,7 @@ Function ABFLoader(filepath,whichChannel,doLoad)
 				fSetPos refnum,selectedSegStartInPts[i]
 				FBInRead/B=3/F=(bitFormat) refnum,tempd	
 				//Scale traces
-				String traceName = GenerateTraceName(filepath,i,whichChannel)
+				String traceName = GenerateTraceName(filepath,i,whichChannel,prefix)
 				SeparateChannels(filepath,traceName,tempd,h,dataPtsPerSweep,whichChannel,chInd)
 			EndFor
 			
@@ -1247,7 +1254,8 @@ Function SeparateChannels(filepath,traceName,tempd,h,dataPtsPerSweep,whichChanne
 		String outputFolder = ParseFilePath(0,filepath,":",1,1)
 		
 		//Check for initial numbers - Igor 7 doesn't like this
-		If(numtype(str2num(outputFolder[0])) == 2)
+		Variable isAlpha = str2num(outputFolder[0])
+		If(numtype(isAlpha) != 2)
 			outputFolder = "Cell_" + outputFolder
 		EndIf
 		
@@ -1266,6 +1274,10 @@ Function SeparateChannels(filepath,traceName,tempd,h,dataPtsPerSweep,whichChanne
 		
 		outWave[] = d[p][theChannel-1]
 		SetScale/P x,0,h.si/(1e6),"s",outWave
+		
+		String chScale = StringFromList(j,h.recChUnits,";")[1]
+		SetScale/P y,0,1,chScale,outWave
+		
 		Note/K outWave,filepath
 		
 //		//Append stimulus name
@@ -1279,20 +1291,19 @@ Function SeparateChannels(filepath,traceName,tempd,h,dataPtsPerSweep,whichChanne
 
 End
 
-Function/S GenerateTraceName(filepath,i,whichChannel)
+Function/S GenerateTraceName(filepath,i,whichChannel,prefix)
 	String filepath
 	Variable i
-	String whichChannel
-	String prefix,group,series,sweep,trace,traceName,traceByComma
+	String whichChannel,prefix
+	String group,series,sweep,trace,traceName,traceByComma
 	Variable totalChannels,j
 	
-	prefix = "Imon"
-	group = "1"
-	series = ParseFilePath(0,filePath,":",1,0)
-	series = ParseFilePath(0,series,"_",1,0)
-	series = ParseFilePath(0,series,".",0,0)
-	series = num2str(str2num(series))
-	sweep = num2str(i+1)
+	group = ParseFilePath(0,filePath,":",1,0)
+	group = ParseFilePath(0,group,"_",1,0)
+	group = ParseFilePath(0,group,".",0,0)
+	group = num2str(str2num(group))
+	series = num2str(i+1)
+	sweep = "1"
 	//trace = num2str(whichChannel)
 	
 	traceName = ""

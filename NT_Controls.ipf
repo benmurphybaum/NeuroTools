@@ -334,10 +334,11 @@ Function HandleLBSelection(ctrlName,listWave,row,mouseHor,mouseVert,eventMod)
 			String fullPath = wsFilePath + wsFileName
 			
 			//What file type are we opening?
-			String fileType = CurrentCommand()
+			ControlInfo/W=NT fileType
+			String fileType = S_Value
 			
 			strswitch(fileType)
-				case "Load WaveSurfer":
+				case "WaveSurfer":
 					HDF5OpenFile/R fileID as fullPath
 			
 					If(V_flag == -1) //cancelled
@@ -354,25 +355,27 @@ Function HandleLBSelection(ctrlName,listWave,row,mouseHor,mouseVert,eventMod)
 
 					HDF5CloseFile/A fileID
 					break
-				case "Load pClamp":
-					Variable refnum
-					fullPath = RemoveEnding(fullPath,".abf") + ".abf"
-					Open/R/Z=2 refnum as fullPath
-
-					fSetPos refnum,12
-					
-					Variable numSweeps = 0					
-					FBInRead/B=3/F=3/U refnum,numSweeps
-					
-					Wave/T wsSweepListWave = NTF:wsSweepListWave
-					Redimension/N=(numSweeps) wsSweepListWave
-					
-					Variable i
-					For(i=0;i<numSweeps;i+=1)
-						wsSweepListWave[i] = "Sweep " + num2str(i + 1)
-					EndFor
-					
-					Close refnum
+				case "PClamp":
+//					Variable refnum
+//					fullPath = RemoveEnding(fullPath,".abf") + ".abf"
+//					Open/R/Z=2 refnum as fullPath
+//
+//					fSetPos refnum,12
+//					
+//					Variable numSweeps = 0					
+//					FBInRead/B=3/F=3/U refnum,numSweeps
+//					
+//					Wave/T wsSweepListWave = NTF:wsSweepListWave
+//					Redimension/N=(numSweeps) wsSweepListWave
+//					
+//					Variable i
+//					For(i=0;i<numSweeps;i+=1)
+//						wsSweepListWave[i] = "Sweep " + num2str(i + 1)
+//					EndFor
+//					
+//					Close refnum
+					break
+				case "Presentinator":
 					break
 			endswitch
 			break
@@ -869,65 +872,68 @@ Function HandleButtonClick(ba)
 			SVAR wsFileName = NTF:wsFileName
 			
 			//What file type are we opening?
-			String fileType = CurrentCommand()
+			ControlInfo/W=NT fileType
+			String fileType = S_Value
 			
-			strswitch(fileType)
-				case "Load WaveSurfer":
-					HDF5OpenFile/I/R fileID as "theWave"
-					
-					If(V_flag == -1) //cancelled
-						return 0
-					EndIf
-					
-					wsFilePath = S_path
-					wsFileName = S_fileName
+			BrowseEphys(fileType)
 			
-					UpdateWaveSurferLists(fileID,wsFilePath,wsFileName)
-					
-					HDF5CloseFile/A fileID
-					break
-					
-				case "Load pClamp":	
-					Variable refnum
-					String message = "Select the data folder to index"
-					String fileFilters = "All Files:.*;"
-					Open/D/R/F=fileFilters/M=message refnum
-					
-					wsFilePath = ParseFilePath(1,S_fileName,":",1,0)
-					wsFileName = ParseFilePath(0,S_fileName,":",1,0)
-					Close/A
-					
-					String fullPath = wsFilePath
-					NewPath/O/Q/Z ABFpath,fullpath
-					String fileList = IndexedFile(ABFpath,-1,".abf")
-					fileList = SortList(fileList,";",16)
-					
-					fileList = ReplaceString(".abf",fileList,"")
-					
-					Wave/T wsFileListWave = NTF:wsFileListWave
-					Wave wsFileSelWave = NTF:wsFileSelWave
-					
-					Wave/T textWave = StringListToTextWave(fileList,";")
-					Redimension/N=(DimSize(textWave,0) - 1) wsFileListWave,wsFileSelWave
-					wsFileListWave = textWave
-					wsFileSelWave[0] = 1
-					
-					//What channels are available for the selected file
-					
-					fullPath = wsFilePath + wsFileName
-					ABFLoader(fullPath,"1",0)
-					
-					Wave/T dTable_Values = root:ABFvar:dTable_Values
-					
-					String chList = dTable_Values[4]
-					
-					String quote = "\""
-					String channelList = quote + "All;" + ResolveListItems(chList,";") + quote
-	
-					PopUpMenu ChannelSelector win=NT,value=#channelList
-					
-					break
-			endswitch
+//			strswitch(fileType)
+//				case "Load WaveSurfer":
+//					HDF5OpenFile/I/R fileID as "theWave"
+//					
+//					If(V_flag == -1) //cancelled
+//						return 0
+//					EndIf
+//					
+//					wsFilePath = S_path
+//					wsFileName = S_fileName
+//			
+//					UpdateWaveSurferLists(fileID,wsFilePath,wsFileName)
+//					
+//					HDF5CloseFile/A fileID
+//					break
+//					
+//				case "Load pClamp":	
+//					Variable refnum
+//					String message = "Select the data folder to index"
+//					String fileFilters = "All Files:.*;"
+//					Open/D/R/F=fileFilters/M=message refnum
+//					
+//					wsFilePath = ParseFilePath(1,S_fileName,":",1,0)
+//					wsFileName = ParseFilePath(0,S_fileName,":",1,0)
+//					Close/A
+//					
+//					String fullPath = wsFilePath
+//					NewPath/O/Q/Z ABFpath,fullpath
+//					String fileList = IndexedFile(ABFpath,-1,".abf")
+//					fileList = SortList(fileList,";",16)
+//					
+//					fileList = ReplaceString(".abf",fileList,"")
+//					
+//					Wave/T wsFileListWave = NTF:wsFileListWave
+//					Wave wsFileSelWave = NTF:wsFileSelWave
+//					
+//					Wave/T textWave = StringListToTextWave(fileList,";")
+//					Redimension/N=(DimSize(textWave,0) - 1) wsFileListWave,wsFileSelWave
+//					wsFileListWave = textWave
+//					wsFileSelWave[0] = 1
+//					
+//					//What channels are available for the selected file
+//					
+//					fullPath = wsFilePath + wsFileName
+//					ABFLoader(fullPath,"1",0)
+//					
+//					Wave/T dTable_Values = root:ABFvar:dTable_Values
+//					
+//					String chList = dTable_Values[4]
+//					
+//					String quote = "\""
+//					String channelList = quote + "All;" + ResolveListItems(chList,";") + quote
+//	
+//					PopUpMenu ChannelSelector win=NT,value=#channelList
+//					
+//					break
+//			endswitch
 			
 			break
 		case "copyToClipboard":
@@ -1494,6 +1500,7 @@ Function openParameterFold([size])
 			BuildExtFuncControls(CurrentExtFunc())
 			Button WaveListSelector win=NT,disable=3
 			break
+		case "Load Ephys":
 		case "Load WaveSurfer":
 //			ListBox sweepListBox win=NT,disable=0
 			ListBox fileListBox win=NT,disable=0
@@ -1560,6 +1567,7 @@ Function closeParameterFold([size])
 		case "New Data Folder":
 		case "Kill Data Folder":
 		case "External Function":
+		case "Load Ephys":
 		case "Load WaveSurfer":
 		case "Load pClamp":
 		case "Load Scans":

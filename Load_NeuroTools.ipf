@@ -743,7 +743,7 @@ Function MakeCommandList()
 	Wave/T controlListWave = NT:controlListWave
 	
 	controlListWave[0][0] = "Main"
-	controlListWave[0][1] = "Measure;Average;Errors;PSTH;Subtract Mean;Subtract Trend;-;Load WaveSurfer;Load pClamp;-;Duplicate Rename;Kill Waves;Set Wave Note;Move To Folder;New Data Folder;Kill Data Folder;-;Run Cmd Line;External Function;"
+	controlListWave[0][1] = "Measure;Average;Errors;PSTH;Subtract Mean;Subtract Trend;-;Load Ephys;-;Duplicate Rename;Kill Waves;Set Wave Note;Move To Folder;New Data Folder;Kill Data Folder;-;Run Cmd Line;External Function;"
 
 	controlListWave[1][0] = "Imaging"
 	controlListWave[1][1] = "Get ROI;dF Map;"
@@ -1197,7 +1197,7 @@ Function CreateControlLists()
 	
    //Control Assignment wave will hold the control names assigned to each 
    //command function in the controlListWave
-   Make/O/T/N=(16,4) NTF:controlAssignments 
+   Make/O/T/N=(17,4) NTF:controlAssignments 
 	Wave/T controlAssignments = NTF:controlAssignments 
 	
 	//all of the text group titles that are in use
@@ -1304,6 +1304,11 @@ Function CreateControlLists()
 	controlAssignments[15][2] = "270"
 	controlAssignments[15][3] = ""
 	
+	controlAssignments[16][0] = "Load Ephys"
+	controlAssignments[16][1] = "BrowseFiles;fileListBox;stimulusData;fileType;"
+	controlAssignments[16][2] = "305"
+	controlAssignments[16][3] = ""
+	
 	NVAR numMainCommands = NTF:numMainCommands
 	numMainCommands = DimSize(controlAssignments,0)
 End
@@ -1403,16 +1408,19 @@ Function CreateControls()
 	//----------------------------------------------------
 	
 	//LOAD WAVESURFER
-	Button BrowseFiles win=NT,pos={460,80},font=$LIGHT,fsize=10,size={50,20},title="Browse",disable=1,proc=ntButtonProc
-	PopupMenu ChannelSelector win=NT,pos={515,80},font=$LIGHT,fsize=10,size={50,20},title="Channel",value="Im;Vm",disable=1
+	Button BrowseFiles win=NT,pos={464,76},font=$LIGHT,fsize=10,size={20,20},title="...",disable=1,proc=ntButtonProc
+	PopupMenu ChannelSelector win=NT,pos={618,96},font=$LIGHT,fsize=10,size={50,20},title="Channel",value="Im;Vm",disable=1
 	Wave/T wsSweepListWave = NTF:wsSweepListWave
 	Wave/T wsFileListWave = NTF:wsFileListWave
 	Wave/T wsFileSelWave = NTF:wsFileSelWave
 	Wave/T wsStimulusDataListWave = NTF:wsStimulusDataListWave
 	
-	ListBox fileListBox win=NT,pos={460,120},font=$LIGHT,fsize=10,size={240,200},listWave=wsFileListWave,selWave=wsFileSelWave,mode=9,disable=1,proc=ntListBoxProc
-	ListBox sweepListBox win=NT,pos={585,120},font=$LIGHT,fsize=10,size={120,200},listWave=wsSweepListWave,mode=0,disable=1
-	ListBox stimulusData win=NT,pos={460,330},font=$LIGHT,fsize=10,size={240,170},listWave=wsStimulusDataListWave,mode=0,userColumnResize=1,disable=1
+	ListBox fileListBox win=NT,pos={460,100},font=$LIGHT,fsize=10,size={280,220},listWave=wsFileListWave,selWave=wsFileSelWave,mode=9,disable=1,proc=ntListBoxProc
+	ListBox sweepListBox win=NT,pos={585,100},font=$LIGHT,fsize=10,size={120,200},listWave=wsSweepListWave,mode=0,disable=1
+	ListBox stimulusData win=NT,pos={460,330},font=$LIGHT,fsize=10,size={280,170},listWave=wsStimulusDataListWave,mode=0,userColumnResize=1,disable=1
+	
+	//Load Ephys
+	PopUpMenu fileType win=NT,pos={490,76},font=$LIGHT,fsize=10,size={50,20},title="Type",value="PClamp;WaveSurfer;Presentinator;",disable=1
 End
 
 //SETTINGS PANEL----------------------------------------------------------------------------------

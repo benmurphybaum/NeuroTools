@@ -7,7 +7,7 @@ STRCONSTANT NTversion = "1.0"
 #if(DataFolderExists("root:Packages:twoP"))
 	//Adds #includes the external procedure files
 	Function NT_InsertIncludes()
-		String fileList = "twoP_Loader.ipf;Load_NeuroTools;NT_Common;NT_Controls;NT_DataSets;NT_Functions;NT_InsertTemplate;NT_ExternalFunctions;NT_Structures;json_functions;NT_ABF_Loader;"
+		String fileList = "twoP_Loader.ipf;Load_NeuroTools;NT_Common;NT_Controls;NT_DataSets;NT_Functions;NT_InsertTemplate;NT_ExternalFunctions;NT_Structures;json_functions;NT_ABF_Loader;NT_Presentinator;"
 		Variable numFiles,i
 		String theFile
 		
@@ -34,7 +34,7 @@ STRCONSTANT NTversion = "1.0"
 #else
 	//Adds #includes the external procedure files
 	Function NT_InsertIncludes()
-		String fileList = "Load_NeuroTools;NT_Common;NT_Controls;NT_DataSets;NT_Functions;NT_InsertTemplate;NT_ExternalFunctions;NT_Structures;json_functions;NT_ABF_Loader;"
+		String fileList = "Load_NeuroTools;NT_Common;NT_Controls;NT_DataSets;NT_Functions;NT_InsertTemplate;NT_ExternalFunctions;NT_Structures;json_functions;NT_ABF_Loader;NT_Presentinator;"
 		Variable numFiles,i
 		String theFile
 		

@@ -38,34 +38,39 @@ Function RunCmd(cmd)
 		case "Max Project":
 			error = GetDataSetInfo(ds)
 			break
-		case "Load WaveSurfer":
-			SVAR wsFilePath = NTF:wsFilePath
-			SVAR wsFileName = NTF:wsFileName
-			ControlInfo/W=NT ChannelSelector
+		case "Load Ephys":
+			NT_LoadEphys()
 			
-			Wave/T wsFileListWave = NTF:wsFileListWave
-			Wave wsFileSelWave = NTF:wsFileSelWave
-			
-			Variable i
-			String filePathList = ""
-
-			//Get the selected files
-			For(i=0;i<DimSize(wsFileListWave,0);i+=1)
-				If(wsFileSelWave[i] ==1)
-					filePathList += wsFilePath + wsFileListWave[i] + ";"
-				EndIf
-			EndFor
-			
-			//no selection, load all of them
-			If(sum(wsFileSelWave) == 0)
-				filePathList = ""
-				For(i=0;i<DimSize(wsFileListWave,0);i+=1)
-					filePathList += wsFilePath + wsFileListWave[i] + ";"
-				EndFor
-			EndIf
-			
-			NT_Load_WaveSurfer(filePathList,channels=S_Value)
 			return 0
+			break
+		case "Load WaveSurfer":
+//			SVAR wsFilePath = NTF:wsFilePath
+//			SVAR wsFileName = NTF:wsFileName
+//			ControlInfo/W=NT ChannelSelector
+//			
+//			Wave/T wsFileListWave = NTF:wsFileListWave
+//			Wave wsFileSelWave = NTF:wsFileSelWave
+//			
+//			Variable i
+//			String filePathList = ""
+//
+//			//Get the selected files
+//			For(i=0;i<DimSize(wsFileListWave,0);i+=1)
+//				If(wsFileSelWave[i] ==1)
+//					filePathList += wsFilePath + wsFileListWave[i] + ";"
+//				EndIf
+//			EndFor
+//			
+//			//no selection, load all of them
+//			If(sum(wsFileSelWave) == 0)
+//				filePathList = ""
+//				For(i=0;i<DimSize(wsFileListWave,0);i+=1)
+//					filePathList += wsFilePath + wsFileListWave[i] + ";"
+//				EndFor
+//			EndIf
+//			
+//			NT_Load_WaveSurfer(filePathList,channels=S_Value)
+//			return 0
 			break
 		case "Load pClamp":
 			SVAR wsFilePath = NTF:wsFilePath
@@ -75,8 +80,9 @@ Function RunCmd(cmd)
 			Wave/T wsFileListWave = NTF:wsFileListWave
 			Wave wsFileSelWave = NTF:wsFileSelWave
 			
-			filePathList = ""
-
+			String filePathList = ""
+			Variable i
+			
 			//Get the selected files
 			For(i=0;i<DimSize(wsFileListWave,0);i+=1)
 				If(wsFileSelWave[i] ==1)
@@ -1333,6 +1339,71 @@ Function NT_Measure(ds)
 End
 
 
+Function NT_LoadEphys()
+	DFREF NTF = root:Packages:NT
+	SVAR wsFilePath = NTF:wsFilePath
+	SVAR wsFileName = NTF:wsFileName
+	
+	
+	Wave/T wsFileListWave = NTF:wsFileListWave
+	Wave wsFileSelWave = NTF:wsFileSelWave
+	
+	Variable i
+	String filePathList = ""
+
+	//Get the selected files
+	For(i=0;i<DimSize(wsFileListWave,0);i+=1)
+		If(wsFileSelWave[i] > 0)
+			filePathList += wsFilePath + wsFileListWave[i] + ";"
+		EndIf
+	EndFor
+	
+	//no selection, load all of them
+	If(sum(wsFileSelWave) == 0)
+		filePathList = ""
+		For(i=0;i<DimSize(wsFileListWave,0);i+=1)
+			filePathList += wsFilePath + wsFileListWave[i] + ";"
+		EndFor
+	EndIf
+	
+	ControlInfo/W=NT fileType
+	String type = S_Value
+	
+	ControlInfo/W=NT ChannelSelector
+	String ch = S_Value
+	
+	NewPath/O/Q/Z filePath,wsFilePath
+	
+	strswitch(type)
+		case "PClamp":
+			LoadPClamp(filePathList)
+			break
+		case "WaveSurfer":
+			NT_Load_WaveSurfer(filePathList,channels=ch)
+			break
+		case "Presentinator":
+			LoadPresentinator(filePathList)
+			break
+	endswitch
+End
+
+Function LoadPClamp(filePathList)
+	String filePathList
+
+	If(!strlen(filePathList))
+		return 0
+	EndIf
+	
+	Variable i
+	For(i=0;i<ItemsInList(filePathList,";");i+=1)
+		String theFile = StringFromList(i,filePathList,";") + ".abf"
+		ABFLoader(theFile,"All",1)
+	EndFor
+	
+	//clean up
+	KillDataFolder/Z root:ABFvar
+End
+
 //Loads and scales sweeps loaded from an HDF5 file made by WaveSurfer electrophysiology software
 Function NT_Load_WaveSurfer(String fileList[,String channels])
 
@@ -1445,6 +1516,7 @@ Function NT_Load_WaveSurfer(String fileList[,String channels])
 			Variable mult
 			For(j=0;j<DimSize(data,0);j+=1)
 				String theUnit = unit[j]
+				String prefix = ""
 				
 				//multiplier to get the units correct to Amps or Volts
 				strswitch(theUnit[0])
@@ -1463,6 +1535,17 @@ Function NT_Load_WaveSurfer(String fileList[,String channels])
 					default:
 				endswitch
 				
+				strswitch(theUnit[1])
+					case "A":
+						//current
+						prefix = "Im"
+						break
+					case "V":
+						//voltage
+						prefix = "Vm"
+						break
+				endswitch
+				
 				If(!cmpstr(ch[j],channels) || !cmpstr(channels,"All"))	
 					Multithread data[j][] = ( (data[j][q] / scale[j]) * coef[j][1] + (coef[j][0] / scale[j]) ) * mult
 					
@@ -1470,12 +1553,13 @@ Function NT_Load_WaveSurfer(String fileList[,String channels])
 					//of the file.
 					
 					
-					String channelName = "Im_" + theSweep + "_1_1_" + num2str(j + 1)
+					String channelName = prefix + "_" + theSweep + "_1_1_" + num2str(j + 1)
 					Make/O/N=(DimSize(data,1))/S $channelName
 					Wave channel = $channelName
 					
 					Multithread channel = data[j][p]
-					SetScale/P x,0,1/rate[0],channel
+					SetScale/P x,0,1/rate[0],"s",channel
+					SetScale/P y,0,1,theUnit[1],channel
 					
 					//Set the wave note
 					Note/K channel,"Path: " + path
