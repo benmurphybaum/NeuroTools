@@ -160,24 +160,12 @@ Function SI_CreatePackage()
 	oldROIGroupName = ""
 	
 	//list and selection waves for loading SI files
-	Wave/T ScanLoadListWave = NTSI:ScanLoadListWave
-	
-	If(!WaveExists(ScanLoadListWave))
-		Make/O/T/N=(0,2) NTSI:ScanLoadListWave /Wave = ScanLoadListWave
-		Make/O/N=(0) NTSI:ScanLoadSelWave /Wave = ScanLoadSelWave
-	Else
-		Wave ScanLoadSelWave = NTSI:ScanLoadSelWave
-		Redimension/N=(DimSize(ScanLoadListWave,0)) ScanLoadSelWave
-	EndIf
+	Make/O/T/N=(0,2) NTSI:ScanLoadListWave /Wave = ScanLoadListWave
+	Make/O/N=(0) NTSI:ScanLoadSelWave /Wave = ScanLoadSelWave
 	
 	String/G NTSI:ScanLoadPath
 	SVAR ScanLoadPath = NTSI:ScanLoadPath
 	ScanLoadPath = ""
-	
-	//Scan monitor path string
-	String/G NTSI:scanMonitorPath
-	SVAR scanMonitorPath = NTSI:scanMonitorPath
-	scanMonitorPath = ""
 	
 	String/G NTSI:measure
 	
@@ -272,9 +260,6 @@ Function SI_CreatePackage()
 	Button displayScanField win=SI,pos={4,1},size={60,20},title="Display",font=$LIGHT,proc=siButtonProc,disable=0
 	Button updateImageBrowser win=SI,pos={70,1},size={70,20},title="Refresh",font=$LIGHT,proc=siButtonProc,disable=0 
 	
-	CheckBox monitorScans win=SI,pos={150,4},size={70,20},title="Monitor New Scans",font=$LIGHT,proc=siCheckBoxProc,disable=0
-	Button browseMonitorFolder win=SI,pos={275,1},size={20,20},title="...",font=$LIGHT,proc=siButtonProc,disable=0
-
 	SI_CreateControls()
 	SI_CreateControlLists()
 	
@@ -301,7 +286,7 @@ Function SI_CreateControls()
 	//Get ROI
 	PopUpMenu channelSelect win=NT,size={120,20},bodywidth=50,pos={461,pos},title="Channel",value="1;2;1/2;2/1;",disable=1	
 	pos += 23
-	PopUpMenu dFSelect win=NT,size={120,20},bodywidth=50,pos={461,pos},title="Mode",value="∆F/F;SD;Abs;",disable=1
+	PopUpMenu dFSelect win=NT,size={120,20},bodywidth=50,pos={461,pos},title="Mode",value="∆F/F;Abs;",disable=1
 	PopUpMenu measurePopUp win=NT,size={170,20},bodywidth=100,pos={461,pos},title="Measure",value=	"Peak;Peak Location;Mean;Median;Area;Area/Peak;Peak/Area;",disable=1
 	pos += 23
 	SetVariable baselineSt win=NT,size={120,20},bodywidth=40,pos={461,pos},limits={0,inf,0.1},title="Baseline Start (s)",value=_NUM:0,disable=1
@@ -314,10 +299,13 @@ Function SI_CreateControls()
 	pos += 30
 //	PopUpMenu filterType win=NT,size={120,20},pos={491,pos},bodywidth=120,value="None;Savitsky-Golay",title="Filter Type",disable=1
 //	pos += 20
-	SetVariable filterSize win=NT,size={120,20},bodywidth=40,pos={461,pos},limits={-1,inf,2},title="Filter Size",value=_NUM:9,disable=1,proc=siVarProc
+
+	
+	SetVariable filterSize win=NT,size={120,20},bodywidth=40,pos={461,pos},limits={-1,inf,2},title="Temporal Filter",value=_NUM:9,disable=1,proc=siVarProc
 	pos += 20	
-	
-	
+	SetVariable spatialPreFilter  win=NT,size={120,20},bodywidth=40,pos={461,pos},limits={-1,inf,2},title="Spatial Pre-Filter",value=_NUM:3,disable=1,proc=siVarProc
+	pos += 20
+	SetVariable spatialPostFilter  win=NT,size={120,20},bodywidth=40,pos={461,pos},limits={-1,inf,2},title="Spatial Post-Filter",value=_NUM:3,disable=1,proc=siVarProc
 	
 	
 	//Load Scans
@@ -397,7 +385,7 @@ Function SI_CreateControlLists()
 	controlAssignments[numMainCommands+1][3] = "WaveSelectorTitle;"
 	
 	controlAssignments[numMainCommands+2][0] = "dF Map"
-	controlAssignments[numMainCommands+2][1] = "WaveListSelector;dFSelect;measurePopUp;channelSelect;baselineSt;baselineEnd;peakSt;peakEnd;filterSize;"
+	controlAssignments[numMainCommands+2][1] = "WaveListSelector;dFSelect;measurePopUp;channelSelect;baselineSt;baselineEnd;peakSt;peakEnd;filterSize;spatialPreFilter;spatialPostFilter;"
 	controlAssignments[numMainCommands+2][2] = "250"
 	controlAssignments[numMainCommands+2][3] = "WaveSelectorTitle;"
 	
@@ -801,53 +789,39 @@ Function DisplayScanField(imageList[,add])
 	
 	Variable xPixels,yPixels,frames,xSize,ySize,xDim,yDim,sizeRatio,numCols,baseWidth
 	 
-	baseWidth = 375
+	baseWidth = 490
 	 
 	//sizing of the panel
 	numCols = ceil(numImages / 3)
 	If(numCols > 1)
-		
-		baseWidth = baseWidth - 50 * numCols
 		Variable numRows = 3
-//		baseWidth *= 0.9
-//		xSize = numCols * (maxX / (abs(str2num(StringFromList(maxXScan,yDimList,";")))/baseWidth)) //(numCols * ySize/numRows))) //set x size to the maximum sized scanfield since we're vertically stacking them
-		
-		xSize = baseWidth * numCols
-		
-//		ySize = ceil(baseWidth * numRows)
-		ySize = ceil((xSize/numCols) * numRows)
+		baseWidth *= 0.9
+		ySize = ceil(baseWidth * numRows)
 	Else
 		numRows = numImages
-//		xSize = numCols * (maxX / (abs(str2num(StringFromList(maxXScan,yDimList,";")))/baseWidth)) //(numCols * ySize/numRows))) //set x size to the maximum sized scanfield since we're vertically stacking them
-		
-		xSize = baseWidth
-		
-		ySize = ceil(xSize * numImages)
-//		
-//		If(numRows < 3)
-////			ySize = ceil(baseWidth * numImages)// full size panel width if it's a single column of images
-//			ySize = ceil(xSize * numImages)
-//		Else
-////			baseWidth *= 0.9
-////			ySize = ceil(baseWidth * numImages)
-//			ySize = ceil(xSize * numImages)
-//		EndIf
+		If(numRows < 3)
+			ySize = ceil(baseWidth * numImages)// full size panel width if it's a single column of images
+		Else
+			baseWidth *= 0.9
+			ySize = ceil(baseWidth * numImages)
+		EndIf
 	EndIf
 	
+	xSize = numCols * (maxX / (abs(str2num(StringFromList(maxXScan,yDimList,";")))/baseWidth)) //(numCols * ySize/numRows))) //set x size to the maximum sized scanfield since we're vertically stacking them
 	
 	Variable segmentY = floor(ySize/numImages)
 	Variable fractionY,fractionX
 	
 	//put the new image panel next to the Image Browser window
 	GetWindow/Z SI wsize
-	Variable leftOffset = V_right
-	
+	Variable leftOffset = V_left + 285
+
 	//Make a new SI Display panel
 	NewPanel/K=1/W=(leftOffset,0,leftOffset + xSize,ySize)/N=SIDisplay as "Scanfield Display"	
 	ModifyPanel/W=SIDisplay frameStyle=0
 	
 	//Make the image part of the panel
-	DefineGuide/W=SIDisplay imageDivide = {FT,50}
+	DefineGuide/W=SIDisplay imageDivide = {FT,40}
 	
 	//Make the control bar part of the panel
 	NewPanel/HOST=SIDisplay/N=control/FG=(FL,FT,FR,imageDivide)
@@ -977,9 +951,9 @@ Function DisplayScanField(imageList[,add])
 	color[1,*][2] = 65535
 	color[1,*][3] = 16384
 	
-	Slider darkValueSlider win=SIDisplay#control,pos={5,25},size={75,20},vert=0,side=0,limits={0,100,1},value=0,proc=siSliderProc
-	Slider brightValueSlider win=SIDisplay#control,pos={5,35},size={75,20},vert=0,side=0,limits={0,100,1},value=100,proc=siSliderProc
-	Button scale94pct win=SIDisplay#control,pos={90,23},size={36,20},title="94%",proc=siButtonProc
+	Slider darkValueSlider win=SIDisplay#control,pos={367,5},size={75,20},vert=0,side=0,limits={0,100,1},value=0,proc=siSliderProc
+	Slider brightValueSlider win=SIDisplay#control,pos={367,25},size={75,20},vert=0,side=0,limits={0,100,1},value=100,proc=siSliderProc
+	Button scale94pct win=SIDisplay#control,pos={449,12},size={36,20},title="94%",proc=siButtonProc
 	
 	//Bring panel to the front
 	DoWindow/F SIDisplay
@@ -1299,7 +1273,7 @@ Function zoomScrollHook(s)
 	Wave/Wave clickedROIRef = NTSI:clickedROIRef
 	Wave drawROIX = NTSI:drawROIX
 	Wave drawROIY = NTSI:drawROIY
-									
+								
 	Variable hookResult = 0
 	switch(s.eventCode)
 		case 0: //Activate
@@ -1484,7 +1458,7 @@ Function zoomScrollHook(s)
 					Else
 						//always autoscales to the data limits
 						maxVal = 0
-						SetAxis/Z/W=dynamicROI left,dROI_min,dROI_max
+						SetAxis/W=dynamicROI left,dROI_min,dROI_max
 					EndIf
 										
 //					//Get the ROI number we are hovering over
@@ -1638,10 +1612,10 @@ Function zoomScrollHook(s)
 			GetAxis/W=$graphRef/Q left
 			delta = (V_max - V_min) * 0.06
 			
-			If(s.wheeldy > 0)
+			If(s.wheeldy == 1)
 				newMin = V_min + delta
 				newMax = V_max - delta
-			ElseIf(s.wheeldy < 0)
+			ElseIf(s.wheeldy == -1)
 				newMin = V_min - delta
 				newMax = V_max + delta
 			Else
@@ -1653,10 +1627,10 @@ Function zoomScrollHook(s)
 			GetAxis/W=$graphRef/Q top
 			delta = (V_max - V_min) * 0.06
 
-			If(s.wheeldy > 0)
+			If(s.wheeldy == 1)
 				newMin = V_min + delta
 				newMax = V_max - delta
-			ElseIf(s.wheeldy < 0)
+			ElseIf(s.wheeldy == -1)
 				newMin = V_min - delta
 				newMax = V_max + delta
 			Else
@@ -1894,7 +1868,7 @@ Function StepFrame()
 	DrawAction/W=SIDisplay#control getgroup=frameCountText, delete
 	GetWindow/Z SIDisplay wsize
 	SetDrawEnv/W=SIDisplay#control textxjust=0,gstart,gname=frameCountText
-	DrawText/W=SIDisplay#control 150,40,"Frame: " + num2str(plane) + ", " + num2str(plane * DimDelta(theImage,2)) + "s"
+	DrawText/W=SIDisplay#control 5,40,"Frame: " + num2str(plane) + ", " + num2str(plane * DimDelta(theImage,2)) + "s"
 	SetDrawEnv/W=SIDisplay#control gstop
 	return 0
 	
@@ -1961,7 +1935,7 @@ Function playFramesBackroundTask(s)
 	DrawAction/W=SIDisplay#control getgroup=frameCountText,delete
 	GetWindow/Z SIDisplay wsize
 	SetDrawEnv/W=SIDisplay#control textxjust=0,gstart,gname=frameCountText
-	DrawText/W=SIDisplay#control 150,40,"Frame: " + num2str(plane) + ", " + num2str(plane * DimDelta(theImage,2)) + "s"
+	DrawText/W=SIDisplay#control 5,40,"Frame: " + num2str(plane) + ", " + num2str(plane * DimDelta(theImage,2)) + "s"
 	SetDrawEnv/W=SIDisplay#control gstop
 	return 0
 End
@@ -2716,21 +2690,8 @@ Function siButtonProc(ba) : ButtonControl
 						PopUpMenu targetImage,win=SI,value="SIDisplay"
 					EndIf
 					
-					 i = 0
-					
 					If(!cmpstr(target,"SIDisplay"))
-						Do
-							GetWindow/Z $("SIDisplay#image" + num2str(i) + "#graph" + num2str(i)) activeSW
-							
-							If(!strlen(S_Value))
-								V_flag = 0
-								break
-							EndIf
-							
-							GetMarquee/W=$("SIDisplay#image" + num2str(i) + "#graph" + num2str(i))/K left,top
-							i += 1
-						While(!V_flag)
-						
+						GetMarquee/W=$("SIDisplay#image0#graph0")/K left,top
 					Else
 						GetMarquee/W=$target/K/Z left,top
 					EndIf
@@ -2978,8 +2939,36 @@ Function siButtonProc(ba) : ButtonControl
 					//Get max projection of every image in the SIDisplay
 					SVAR SIDisplay_ImagePaths = root:Packages:NT:ScanImage:SIDisplay_ImagePaths
 					
-					GetMaxProj(SIDisplay_ImagePaths)
 					
+					For(i=0;i<ItemsInList(SIDisplay_ImagePaths,";");i+=1)
+						Wave theImage = $StringFromList(i,SIDisplay_ImagePaths,";")
+						
+						If(!WaveExists(theImage))
+							continue
+						EndIf
+						
+						String outName = "maxProj" + num2str(i)
+						
+						MatrixOP/O NTSI:$outName = sumBeams(theImage)
+						Wave maxProj = NTSI:$outName
+						
+						Redimension/S maxProj //must be 32 bit float to be divided by 200 
+						maxProj /= DimSize(theImage,2)
+						
+						CopyScales/P theImage,maxProj
+						
+						subpanel = "image" + num2str(i)
+						graph = "graph" + num2str(i)
+						ReplaceWave/W=SIDisplay#$subpanel#$graph image=$NameOfWave(theImage),maxProj
+				
+						ModifyImage/Z/W=SIDisplay#$subpanel#$graph $NameOfWave(maxProj),ctab={*,*,$"",0}
+						
+						//Put a copy in the image's home folder
+						Duplicate/O maxProj,$(GetWavesDataFolder(theImage,2) + "_max")
+					
+					EndFor
+					
+					isMaxProj = 1 
 					break
 				case "dynamicROI":
 					//Sets up live viewing of time-varying according to the mouse position over the image
@@ -3049,26 +3038,6 @@ Function siButtonProc(ba) : ButtonControl
 					//auto-stretches the image to 94% margins
 					autoStretch(94)
 					break
-					
-				case "browseMonitorFolder":
-					SVAR scanMonitorPath = NTSI:scanMonitorPath
-					SVAR ScanLoadPath = NTSI:ScanLoadPath
-					
-					//Set the default dialog path
-					PathInfo/S scanMonitorPath
-					
-					//Pick a folder
-					NewPath/O monitorPath
-					
-					PathInfo monitorPath
-					scanMonitorPath = S_path
-					ScanLoadPath = scanMonitorPath
-					
-					If(!strlen(scanMonitorPath))
-						return 0
-					EndIf
-					
-					break
 			endswitch
 			break
 		case -1: // control being killed
@@ -3125,30 +3094,6 @@ Function siCheckBoxProc(cba) : CheckBoxControl
 				case "CumulativeScale":
 					NVAR scaleCumulative = NTSI:scaleCumulative
 					scaleCumulative = checked
-				case "monitorScans":
-					SVAR scanMonitorPath = NTSI:scanMonitorPath
-					SVAR ScanLoadPath = NTSI:ScanLoadPath
-					
-					//If no monitor folder is set, browse
-					If(!strlen(scanMonitorPath))
-						//Set the default dialog path
-						PathInfo/S scanMonitorPath
-						
-						//Pick a folder
-						NewPath/O monitorPath
-						
-						PathInfo monitorPath
-						scanMonitorPath = S_path
-						ScanLoadPath = scanMonitorPath
-					EndIf
-					
-					//Start the background task to look for new scans
-					If(checked)
-						StartScanMonitor()
-					Else
-						StopScanMonitor()
-					EndIf
-					break
 			endswitch
 			break
 		case -1: // control being killed
@@ -3158,117 +3103,6 @@ Function siCheckBoxProc(cba) : CheckBoxControl
 	return 0
 End
 
-Function ScanMonitor(s)
-	STRUCT WMBackgroundSTruct &s
-	
-	DFREF NTSI = root:Packages:NT:ScanImage
-	
-	SVAR ScanLoadPath = NTSI:ScanLoadPath
-	SVAR scanMonitorPath = NTSI:scanMonitorPath 
-	
-	Wave/T ScanLoadListWave = NTSI:ScanLoadListWave
-	Wave ScanLoadSelWave = NTSI:ScanLoadSelWave
-		
-	//All the tifs in the monitored folder
-	String fileList = IndexedFile(monitorPath,-1,".tif")
-	
-	//Put the scans into the scan list
-	fileList = SortList(fileList, ";", 16)
-					
-	Wave/T listWave = StringListToTextWave(fileList,";")
-	Redimension/N=(DimSize(listWave,0),2) ScanLoadListWave
-	Redimension/N=(DimSize(listWave,0)) ScanLoadSelWave
-	
-	Variable i
-	
-	String stimFileList = IndexedFile(monitorPath,-1,".h5")
-	
-	//See if there is a corresponding stimulus h5 file
-	For(i=0;i<ItemsInList(fileList,";");i+=1)
-		String stimFile = StringFromList(i,stimFileList,";")
-		String matchedFile = RemoveEnding(stimFile,".h5") + ".tif"
-		Variable index = WhichListItem(matchedFile,fileList,";")
-		
-		If(index == -1)
-			ScanLoadListWave[i][1] = ""
-			break
-		EndIf
-		
-		String stimName = GetStimGenParameter(scanMonitorPath,stimFile,"Name")
-		
-		//Is this scan a new scan?
-		Variable match = tableMatch(StringFromList(i,fileList,";"),ScanLoadListWave)
-		
-
-		
-		If(match == -1)
-			String newScan = StringFromList(i,fileList,";")
-			//Load the new file
-			String imageList = SI_LoadScans(scanMonitorPath,newScan)
-			
-			If(!strlen(imageList))
-				return 0
-			EndIf
-			
-			//Update the image browser lists
-			updateImageBrowserLists()
-			
-			//Update the selection in the Image Browser
-			Wave ScanGroupSelWave = NTSI:ScanGroupSelWave
-			ScanGroupSelWave = 0
-			ScanGroupSelWave[i] = 1
-			
-			//Update the image browser lists
-			updateImageBrowserLists()
-			
-			//Display the new scan
-			DisplayScanField(imageList)
-			
-			//auto stretch
-			autoStretch(94)
-			
-			//start the play button
-			StartFramePlay()
-			
-			//Start the live ROI display
-			//Sets up live viewing of time-varying according to the mouse position over the image
-			SVAR SIDisplay_ImagePaths = NTSI:SIDisplay_ImagePaths
-			Wave theImage = $StringFromList(0,SIDisplay_ImagePaths,";")
-			NVAR isDynamicROI = NTSI:isDynamicROI
-			
-			If(isDynamicROI)
-				isDynamicROI = 0
-				KillWindow/Z dynamicROI
-				return 1
-			Else
-				isDynamicROI = 1
-			EndIf
-			
-			StartDynamicROI(theImage)
-			
-			ScanLoadListWave[index][0] = matchedFile
-			ScanLoadListWave[index][1] = stimName
-			
-		EndIf
-
-	EndFor
-	
-	
-	
-	Close/A
-	
-	return 0 //continue background task
-End
-
-Function StartScanMonitor()
-	Variable numTicks = 2 * 60 //run every two seconds
-	CtrlNamedBackground monitor, period=numTicks,proc=ScanMonitor
-	CtrlNamedBackground monitor, start
-End
-
-Function StopScanMonitor()
-	CtrlNamedBackground monitor, stop
-End
 
 //Handles the variable inputs on the SI display panel
 Function siVarProc(sva) : SetVariableControl
@@ -3568,10 +3402,10 @@ Function StartDynamicROI(theImage)
 	KillWindow/Z dynamicROI
 	
 	If(!V_flag)
-		Display/N=dynamicROI/W=(V_left,V_top,V_right,V_bottom)/K=2 as "Dynamic ROI"
+		Display/N=dynamicROI/W=(V_left,V_top,V_right,V_bottom)/K=1 as "Dynamic ROI"
 	Else
 		GetWindow/Z SIDisplay wsize
-		Display/N=dynamicROI/W=(V_right,V_top,V_right+300,V_top+200)/K=2 as "Dynamic ROI"
+		Display/N=dynamicROI/W=(V_right,V_top,V_right+300,V_top+200)/K=1 as "Dynamic ROI"
 	EndIf
 	
 	ControlBar/T/W=dynamicROI 20
@@ -4809,11 +4643,6 @@ Function/WAVE NT_dFMap(ds)
 				param = "_pk"
 		endswitch
 		
-		
-		//Manually set pre and post spatial filters
-		img.preFilter = 3
-		img.postFilter = 3
-		
 		//Wave dimensions
 		rows = DimSize(theScan,0)
 		cols = DimSize(theScan,1)
@@ -4857,17 +4686,19 @@ Function/WAVE NT_dFMap(ds)
 		Multithread theScanTemp = theScan
 		Multithread theBgndTemp = theBgnd
 		
-		//Spatial filter for each layer of the scan and bgnd channels.
-		For(k=0;k<frames;k+=1)
-			MatrixOP/O/FREE theLayer = layer(theScanTemp,k)
-			MatrixFilter/N=(img.preFilter) gauss theLayer
-			Multithread theScanTemp[][][k] = theLayer[p][q][0]
-			
-			MatrixOP/O/FREE theLayer = layer(theBgndTemp,k)
-			MatrixFilter/N=(img.preFilter) gauss theLayer
-			Multithread theBgndTemp[][][k] = theLayer[p][q][0]
-		EndFor
-		
+		//Spatial pre filter for each layer of the scan and bgnd channels.
+		If(img.preFilter >= 3)
+			For(k=0;k<frames;k+=1)
+				MatrixOP/O/FREE theLayer = layer(theScanTemp,k)
+				MatrixFilter/N=(img.preFilter) gauss theLayer
+				Multithread theScanTemp[][][k] = theLayer[p][q][0]
+				
+				MatrixOP/O/FREE theLayer = layer(theBgndTemp,k)
+				MatrixFilter/N=(img.preFilter) gauss theLayer
+				Multithread theBgndTemp[][][k] = theLayer[p][q][0]
+			EndFor
+		EndIf
+				
 		//Get baseline fluorescence maps
 		Make/FREE/O/N=(rows,cols) scanBaseline,bgndBaseline
 		Multithread scanBaseline = 0
@@ -4993,9 +4824,9 @@ Function/WAVE NT_dFMap(ds)
 		CopyScales/P theScan,dFMeasure
 		
 		//Masking and final filtering
-		MatrixFilter/N=(3)/R=mask median dF
+		MatrixFilter/N=(img.postFilter)/R=mask median dF
 		
-		MatrixFilter/N=(3)/R=mask median dFMeasure
+		MatrixFilter/N=(img.postFilter)/R=mask median dFMeasure
 		
 		If(!skip)
 			Multithread dFMeasure *= mask[p][q]
@@ -6127,6 +5958,12 @@ Function initParam(img,ds)
 	ControlInfo/W=NT filterSize
 	img.filter = V_Value
 	
+	ControlInfo/W=NT spatialPreFilter
+	img.prefilter = V_Value
+	
+	ControlInfo/W=NT spatialPostFilter
+	img.postFilter = V_Value
+	
 	//holds the measurement string
 	ControlInfo/W=NT measurePopUp
 	SVAR img.measure = NTSI:measure 
@@ -6356,54 +6193,6 @@ Function SI_GetCenter([group])
 //	EndFor	
 End
 
-Function/WAVE GetMaxProj(imageList[,noReplace])
-	String imageList
-	Variable noReplace
-	
-	If(ParamIsDefault(noReplace))
-		noReplace = 0
-	EndIf
-	
-	DFREF NTSI = root:Packages:NT:ScanImage
-	NVAR isMaxProj = NTSI:isMaxProj
-	
-	Variable i
-	
-	For(i=0;i<ItemsInList(imageList,";");i+=1)
-		Wave theImage = $StringFromList(i,imageList,";")
-		
-		If(!WaveExists(theImage))
-			continue
-		EndIf
-		
-		String outName = "maxProj" + num2str(i)
-		
-		MatrixOP/O NTSI:$outName = sumBeams(theImage)
-		Wave maxProj = NTSI:$outName
-		
-		Redimension/S maxProj //must be 32 bit float to be divided by 200 
-		maxProj /= DimSize(theImage,2)
-		
-		CopyScales/P theImage,maxProj
-		
-		If(!noReplace)
-			String subpanel = "image" + num2str(i)
-			String graph = "graph" + num2str(i)
-			ReplaceWave/W=SIDisplay#$subpanel#$graph image=$NameOfWave(theImage),maxProj
-	
-			ModifyImage/Z/W=SIDisplay#$subpanel#$graph $NameOfWave(maxProj),ctab={*,*,$"",0}
-		EndIf
-				
-		//Put a copy in the image's home folder
-		Duplicate/O maxProj,$(GetWavesDataFolder(theImage,2) + "_max")
-	
-	EndFor
-	
-	isMaxProj = 1 
-	
-	return maxProj
-End
-
 //Auto stretches the image to the given percent values on the histogram
 Function autoStretch(pct)
 	Variable pct
@@ -6411,7 +6200,6 @@ Function autoStretch(pct)
 	DFREF NTSI = root:Packages:NT:ScanImage
 	NVAR numImages = NTSI:numImages
 	NVAR imagePlane = NTSI:imagePlane
-	NVAR isMaxProj = NTSI:isMaxProj
 	
 	String software = whichImagingSoftware()
 	
@@ -6465,24 +6253,12 @@ Function autoStretch(pct)
 	For(i=0;i<DimSize(imageRefs,0);i+=1)
 		Wave theImage = imageRefs[i]
 		
-		If(!isMaxProj)
-			Wave maxImage = GetMaxProj(GetWavesDataFolder(theImage,2),noReplace=1)			
-			isMaxProj = 0
-		EndIf
-		
-		subpanel = "image" + num2str(i)
-		graph = "graph" + num2str(i)
-		
-		If(!isMaxProj)
-			ImageHistogram/I maxImage
+		If(DimSize(theImage,2) > 1)	
+			ImageHistogram/I/P=(imagePlane) theImage
 		Else
-			If(DimSize(theImage,2) > 1)	
-				ImageHistogram/I/P=(imagePlane) theImage
-			Else
-				ImageHistogram/I theImage
-			EndIf	
+			ImageHistogram/I theImage
 		EndIf
-				
+		
 		Wave hist = W_ImageHist
 		Integrate hist/D=cumHist
 		Variable minLevel=cumHist[0]
@@ -6493,20 +6269,9 @@ Function autoStretch(pct)
 		FindLevel/Q cumHist,minLevel+range*(1-pct)
 		Variable upperThreshold=V_levelX
 		
-		
-		Variable sliderLeft,sliderRight
-
 		ModifyImage/W=SIDisplay#$subpanel#$graph $NameOfWave(theImage) ctab= {lowerThreshold,upperThreshold,Grays,0}
-		
-		//Set the slider positions
-		ImageStats/Q theImage
-		
-		sliderLeft = round(100 * (lowerThreshold - V_min)/range)
-		sliderRight = round(100 * (upperThreshold - V_min)/range)
-		
-		Slider darkValueSlider win=SIDisplay#control,value=sliderLeft
-		Slider brightValueSlider win=SIDisplay#control,value=sliderRight
+
 	EndFor
 //
-	KillWaves hist,cumHist
+//	
 End

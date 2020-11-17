@@ -3,7 +3,7 @@
 
 //Loads ScanImage tiff files into 3D waves
 //Takes a folder path, and a semi-colon list of file names within that folder
-Function SI_LoadScans(path,fileList)
+Function/S SI_LoadScans(path,fileList)
 	String path,fileList
 	
 	Variable fileRef
@@ -21,6 +21,8 @@ Function SI_LoadScans(path,fileList)
 	ds.progress.count = 0
 	ValDisplay progress win=NT,disable=0
 	ControlUpdate/W=NT progress
+	
+	String imageList = ""
 	
 	For(j=0;j<numFiles;j+=1)
 	
@@ -58,8 +60,15 @@ Function SI_LoadScans(path,fileList)
 		//Open the file
 		path = RemoveEnding(path,":") + ":" //ensures ending colon
 		NewPath/O/Q image,path
-		Open/P=image/R fileRef as file
 		
+		//Can't open the file if MATLAB is currently writing to it.
+		try
+			Open/P=image/R fileRef as file
+			AbortOnRTE
+		catch
+			return ""
+		endtry	
+			
 		//Read binary data, little endian, 64 bit integer (8 byte)
 		String str = ""
 		Variable var
@@ -128,6 +137,7 @@ Function SI_LoadScans(path,fileList)
 		Wave theImage = $(folder + ":'" + file + "'")
 		
 		SetDataFolder GetWavesDataFolder(theImage,1)
+		
 		
 		//Number of frames will be a multiple of the # Z levels
 		Variable frame,numFrames = DimSize(theImage,2)
@@ -218,7 +228,9 @@ Function SI_LoadScans(path,fileList)
 			
 			numZs = (numZs == 0) ? 1 : numZs
 			Make/N=(xPixels,yPixels,(numFrames / numZs))/O/W $ROIname/Wave=scanROI
-	
+				
+			imageList += GetWavesDataFolder(scanROI,2) + ";"	
+			
 			SetScale/I x,objResolution * (theROI[0] - (theROI[2] / 2)),objResolution * (theROI[0] + (theROI[2] / 2)),scanROI
 			
 			//Reverse scaling from what I originally had, so now the image is oriented the same as in MATLAB when the data is taken
@@ -266,6 +278,8 @@ Function SI_LoadScans(path,fileList)
 	EndFor
 	
 	ValDisplay progress win=NT,disable=1
+	
+	return imageList
 End
 
 
