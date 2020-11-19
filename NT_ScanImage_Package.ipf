@@ -253,8 +253,8 @@ Function SI_CreatePackage()
 	ListBox rois win=SI,pos={395,40},size={60,180},title="",listWave=ROIListWave,selWave=ROISelWave,mode=9,proc=siListBoxProc,disable=0
 	SetVariable scanFieldMatch win=SI,pos={185,226},size={140,20},title=" ",value=scanFieldMatchStr,proc=siVarProc,disable=0
 	
-	CheckBox selectAllScanFields win=SI,pos={204,23},size={20,20},title="",value=0,proc=siCheckBoxProc,disable=0
-	CheckBox selectAllScanGroups win=SI,pos={88,23},size={20,20},title="",value=0,proc=siCheckBoxProc,disable=0
+	CheckBox selectAllScanFields win=SI,pos={190,23},font="Calibri Light",fsize=12,size={20,20},title="Scan Fields",value=0,proc=siCheckBoxProc,disable=0
+	CheckBox selectAllScanGroups win=SI,pos={96,23},font="Calibri Light",fsize=12,size={20,20},title="Scan Groups",value=0,proc=siCheckBoxProc,disable=0
 	
 	PopUpMenu targetImage win=SI,pos={330,224},size={120,20},bodywidth=120,font=$LIGHT,title="",mode=1,value=#"root:Packages:NT:ScanImage:availableImages",proc=siPopProc
 //	Button appendToTop win=SI,pos={395,223},size={60,20},title="Append",disable=0,proc=siButtonProc
@@ -262,17 +262,18 @@ Function SI_CreatePackage()
 	
 	SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
 	DrawText/W=SI 34,39,"Cells"
-	SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
-	DrawText/W=SI 102,39,"Scan Groups"
-	SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
-	DrawText/W=SI 218,39,"Scans Fields"
+//	SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
+//	DrawText/W=SI 102,39,"Scan Groups"
+//	SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
+//	DrawText/W=SI 218,39,"Scans Fields"
 	SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
 	DrawText/W=SI 353,39,"ROI Groupings"
 	
 	Button displayScanField win=SI,pos={4,1},size={60,20},title="Display",font=$LIGHT,proc=siButtonProc,disable=0
 	Button updateImageBrowser win=SI,pos={70,1},size={70,20},title="Refresh",font=$LIGHT,proc=siButtonProc,disable=0 
 	
-	CheckBox monitorScans win=SI,pos={150,4},size={70,20},title="Monitor New Scans",font=$LIGHT,proc=siCheckBoxProc,disable=0
+	Button getNewScans win=SI,pos={140,1},size={100,20},title="Get New Scans",font=$LIGHT,proc=siButtonProc,disable=0
+	CheckBox monitorScans win=SI,pos={150,4},size={70,20},title="Monitor New Scans",font=$LIGHT,proc=siCheckBoxProc,disable=1
 	Button browseMonitorFolder win=SI,pos={275,1},size={20,20},title="...",font=$LIGHT,proc=siButtonProc,disable=0
 
 	SI_CreateControls()
@@ -806,8 +807,6 @@ Function DisplayScanField(imageList[,add])
 	//sizing of the panel
 	numCols = ceil(numImages / 3)
 	If(numCols > 1)
-		
-		baseWidth = baseWidth - 50 * numCols
 		Variable numRows = 3
 //		baseWidth *= 0.9
 //		xSize = numCols * (maxX / (abs(str2num(StringFromList(maxXScan,yDimList,";")))/baseWidth)) //(numCols * ySize/numRows))) //set x size to the maximum sized scanfield since we're vertically stacking them
@@ -819,19 +818,15 @@ Function DisplayScanField(imageList[,add])
 	Else
 		numRows = numImages
 //		xSize = numCols * (maxX / (abs(str2num(StringFromList(maxXScan,yDimList,";")))/baseWidth)) //(numCols * ySize/numRows))) //set x size to the maximum sized scanfield since we're vertically stacking them
-		
-		xSize = baseWidth
-		
-		ySize = ceil(xSize * numImages)
-//		
-//		If(numRows < 3)
-////			ySize = ceil(baseWidth * numImages)// full size panel width if it's a single column of images
-//			ySize = ceil(xSize * numImages)
-//		Else
-////			baseWidth *= 0.9
-////			ySize = ceil(baseWidth * numImages)
-//			ySize = ceil(xSize * numImages)
-//		EndIf
+		xsize = baseWidth
+		If(numRows < 3)
+//			ySize = ceil(baseWidth * numImages)// full size panel width if it's a single column of images
+			ySize = ceil(xSize * numImages)
+		Else
+			baseWidth *= 0.9
+//			ySize = ceil(baseWidth * numImages)
+			ySize = ceil(xSize * numImages)
+		EndIf
 	EndIf
 	
 	
@@ -839,8 +834,9 @@ Function DisplayScanField(imageList[,add])
 	Variable fractionY,fractionX
 	
 	//put the new image panel next to the Image Browser window
+	Variable r = ScreenResolution / 72
 	GetWindow/Z SI wsize
-	Variable leftOffset = V_right
+	Variable leftOffset = V_right * r + 10
 	
 	//Make a new SI Display panel
 	NewPanel/K=1/W=(leftOffset,0,leftOffset + xSize,ySize)/N=SIDisplay as "Scanfield Display"	
@@ -996,6 +992,11 @@ Function resizeHook(s)
 	DFREF NTSI = root:Packages:NT:ScanImage
 	Wave resizeListBoxPositions = NTSI:resizeListBoxPositions
 	
+	DFREF NTSI = root:Packages:NT:ScanImage
+	
+	//Are we currently resizing a column?
+	NVAR columnDrag = NTSI:columnDrag
+	
 	Variable hookResult = 0
 	switch(s.eventCode)
 		case 0: //Activate
@@ -1013,6 +1014,10 @@ Function resizeHook(s)
 			
 			Variable width = s.winRect.right
 			width = (width < 460) ? 460 : width
+			
+			If(width == 460 && columnDrag)
+				break
+			EndIf
 			
 			//MoveWindow/W=SI V_left,V_top,V_left + 460/r,V_top + height/r
 			MoveWindow/W=SI V_left,V_top,V_left + width/r,V_top + height/r
@@ -1081,13 +1086,13 @@ Function resizeHook(s)
 			SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
 			DrawText/W=SI 34,39,"Cells"
 			
-			ControlInfo/W=SI selectAllScanFields				
-			SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
-			DrawText/W=SI V_left + 14,39,"Scans Fields"
-			
-			ControlInfo/W=SI selectAllScanGroups
-			SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
-			DrawText/W=SI V_left + 14,39,"Scan Groups"
+//			ControlInfo/W=SI selectAllScanFields				
+//			SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
+//			DrawText/W=SI V_left + 14,39,"Scans Fields"
+//			
+//			ControlInfo/W=SI selectAllScanGroups
+//			SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
+//			DrawText/W=SI V_left + 14,39,"Scan Groups"
 			
 			ControlInfo/W=SI roiGroups
 			SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
@@ -1160,7 +1165,6 @@ Function ImageBrowserMouseHook(s)
 				GetWindow SI wsize
 				
 				Variable height = s.winRect.bottom
-			
 				
 				Variable vSize = height - 45
 				Variable vPos = height - 19
@@ -1173,16 +1177,32 @@ Function ImageBrowserMouseHook(s)
 						continue
 					EndIf
 					
+					
+					
 					//resize and shift list boxes to the right
 					ControlInfo/W=SI $theCtrl
 					If(i == columnDrag - 1)
 						Variable xExpand = xPos  - V_right
 						
 						
-						//Limit to the smallest width of any column						
-						If(V_width + xExpand < 60)
-							return 0
-						EndIf
+						//Limit to the smallest width of any column
+						//custom minimum sizes for each list box
+						switch(i)
+							case 0:
+							case 3:
+							case 4:
+								If(V_width + xExpand < 60)
+									return 0
+								EndIf
+								break
+							case 1:
+							case 2:
+								If(V_width + xExpand < 80)
+									return 0
+								EndIf
+							break
+						endswitch
+
 						
 						If(i > 1)
 							ListBox $theCtrl win=SI,size={V_width + xExpand,vSize-19},pos = {V_left,V_top}
@@ -1221,13 +1241,13 @@ Function ImageBrowserMouseHook(s)
 				SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
 				DrawText/W=SI 34,39,"Cells"
 				
-				ControlInfo/W=SI selectAllScanFields				
-				SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
-				DrawText/W=SI V_left + 14,39,"Scans Fields"
-				
-				ControlInfo/W=SI selectAllScanGroups
-				SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
-				DrawText/W=SI V_left + 14,39,"Scan Groups"
+//				ControlInfo/W=SI selectAllScanFields				
+//				SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
+//				DrawText/W=SI V_left + 14,39,"Scans Fields"
+//				
+//				ControlInfo/W=SI selectAllScanGroups
+//				SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
+//				DrawText/W=SI V_left + 14,39,"Scan Groups"
 				
 				ControlInfo/W=SI roiGroups
 				SetDrawEnv/W=SI fname=$LIGHT,fsize=12,xcoord=abs,ycoord=abs
@@ -3069,6 +3089,30 @@ Function siButtonProc(ba) : ButtonControl
 					EndIf
 					
 					break
+				case "getNewScans":
+					SVAR scanMonitorPath = NTSI:scanMonitorPath
+					SVAR ScanLoadPath = NTSI:ScanLoadPath
+					
+					//If no monitor folder is set, browse
+					If(!strlen(scanMonitorPath))
+						//Set the default dialog path
+						PathInfo/S scanMonitorPath
+						
+						//Pick a folder
+						NewPath/O monitorPath
+						
+						PathInfo monitorPath
+						scanMonitorPath = S_path
+						ScanLoadPath = scanMonitorPath
+						
+						If(!strlen(S_path))
+							break
+						EndIf
+					EndIf
+					
+					ScanMonitor()
+						
+					break
 			endswitch
 			break
 		case -1: // control being killed
@@ -3158,8 +3202,8 @@ Function siCheckBoxProc(cba) : CheckBoxControl
 	return 0
 End
 
-Function ScanMonitor(s)
-	STRUCT WMBackgroundSTruct &s
+Function ScanMonitor()
+//	STRUCT WMBackgroundStruct &s
 	
 	DFREF NTSI = root:Packages:NT:ScanImage
 	
@@ -3199,7 +3243,6 @@ Function ScanMonitor(s)
 		//Is this scan a new scan?
 		Variable match = tableMatch(StringFromList(i,fileList,";"),ScanLoadListWave)
 		
-
 		
 		If(match == -1)
 			String newScan = StringFromList(i,fileList,";")
@@ -3221,30 +3264,7 @@ Function ScanMonitor(s)
 			//Update the image browser lists
 			updateImageBrowserLists()
 			
-			//Display the new scan
-			DisplayScanField(imageList)
 			
-			//auto stretch
-			autoStretch(94)
-			
-			//start the play button
-			StartFramePlay()
-			
-			//Start the live ROI display
-			//Sets up live viewing of time-varying according to the mouse position over the image
-			SVAR SIDisplay_ImagePaths = NTSI:SIDisplay_ImagePaths
-			Wave theImage = $StringFromList(0,SIDisplay_ImagePaths,";")
-			NVAR isDynamicROI = NTSI:isDynamicROI
-			
-			If(isDynamicROI)
-				isDynamicROI = 0
-				KillWindow/Z dynamicROI
-				return 1
-			Else
-				isDynamicROI = 1
-			EndIf
-			
-			StartDynamicROI(theImage)
 			
 			ScanLoadListWave[index][0] = matchedFile
 			ScanLoadListWave[index][1] = stimName
@@ -3254,7 +3274,33 @@ Function ScanMonitor(s)
 	EndFor
 	
 	
+	//Display the last new scan
+	DisplayScanField(imageList)
 	
+	//Get max projection of every image in the SIDisplay
+	SVAR SIDisplay_ImagePaths = root:Packages:NT:ScanImage:SIDisplay_ImagePaths			
+	GetMaxProj(SIDisplay_ImagePaths)
+					
+	//auto stretch
+	autoStretch(94)
+
+	
+	//Start the live ROI display
+	//Sets up live viewing of time-varying according to the mouse position over the image
+	SVAR SIDisplay_ImagePaths = NTSI:SIDisplay_ImagePaths
+	Wave theImage = $StringFromList(0,SIDisplay_ImagePaths,";")
+	NVAR isDynamicROI = NTSI:isDynamicROI
+	
+	If(isDynamicROI)
+		isDynamicROI = 0
+		KillWindow/Z dynamicROI
+		return 1
+	Else
+		isDynamicROI = 1
+	EndIf
+	
+	StartDynamicROI(theImage)
+			
 	Close/A
 	
 	return 0 //continue background task

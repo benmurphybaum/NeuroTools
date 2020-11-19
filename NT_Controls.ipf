@@ -1213,6 +1213,11 @@ Function MouseClickHooks(s)
 		case 3:
 			//handle mouse down
 			
+			//List box resizes and WaveMatch/DataSet List box positions
+			NVAR WM_Position = NTF:WM_Position
+			NVAR DSW_Position = NTF:DSW_Position
+			
+			
 			//Extract the current size of the parameter panel from here
 			//We'll need to shift the right-side mouse click area according to the selected command
 			Wave/T controlAssignments = NTF:controlAssignments
@@ -1242,9 +1247,9 @@ Function MouseClickHooks(s)
 				foldStatus = 0
 				
 			//mouse hook for toggling the listbox focus	
-			ElseIf(V_left > 0 && V_left < 182 && V_top > 99*hf && V_top < 123*hf) //Wave Match Click
+			ElseIf(V_left > 0 && V_left < WM_Position && V_top > 99*hf && V_top < 123*hf) //Wave Match Click
 				changeFocus("WaveMatch",1)
-			ElseIf(V_left > 182 && V_left < 438 && V_top > 99*hf && V_top < 123*hf) //Data Set Click
+			ElseIf(V_left > WM_Position && V_left < DSW_Position + 83 && V_top > 99*hf && V_top < 123*hf) //Data Set Click
 				changeFocus("DataSet",1)
 			ElseIf(V_left < 58 && V_top > 469*hf && V_top < 486*hf)//Grouping Click
 				PopUpContextualMenu/C=(10,486*hf)/N "GroupingMenu"
@@ -1274,7 +1279,144 @@ Function MouseClickHooks(s)
 					//Set the Viewer hook
 					SetWindow NT, hook(viewerHook)=$""
 				EndIf		
-			EndIf	
+			EndIf
+			
+			
+			//Resizing list boxes
+			NVAR WM_Resize = NTF:WM_Resize
+			NVAR DS_Resize = NTF:DS_Resize
+			NVAR Folders_Resize = NTF:Folders_Resize
+			NVAR Folders_Position = NTF:Folders_Position
+			
+			//Wave Match click
+			If(s.mouseLoc.h < WM_Position + 5 && s.mouseLoc.h > WM_Position - 5 && s.mouseLoc.v > 123 && s.mouseLoc.v <  452)
+				//Change the cursor to the left right drag icon
+				s.doSetCursor = 1
+				s.cursorCode = 5
+				
+				WM_Resize = (WM_Resize) ? 0:1	
+				hookResult = 1
+			EndIf
+			
+			//Folders list box hover
+			If(V_left > Folders_Position - 5 && V_left < Folders_Position + 5 && s.mouseLoc.v > 72)	
+				Folders_Resize = 1
+			Else
+				Folders_Resize = 0
+			EndIf
+	
+			break
+			
+		case 4:
+			//mouse moved
+			NVAR WM_Position = NTF:WM_Position
+			NVAR DSW_Position = NTF:DSW_Position
+			NVAR WM_Resize = NTF:WM_Resize
+			NVAR DS_Resize = NTF:DS_Resize
+			NVAR Waves_Resize = NTF:Waves_Resize
+			NVAR Folders_Resize = NTF:Folders_Resize
+			NVAR Folders_Position = NTF:Folders_Position
+			NVAR hf =  NTS:hf
+			
+			//Wave Match Hover
+			If(s.mouseLoc.h < WM_Position + 5 && s.mouseLoc.h > WM_Position - 5 && s.mouseLoc.v > 123 && s.mouseLoc.v <  452)
+				//Change the cursor to the left right drag icon
+				s.doSetCursor = 1
+				s.cursorCode = 5
+				
+			//Navigator Folders Hover
+			ElseIf(s.mouseLoc.h < Folders_Position + 5 && s.mouseLoc.h > Folders_Position - 5 && s.mouseLoc.v > 72)	
+				//Change the cursor to the left right drag icon
+				s.doSetCursor = 1
+				s.cursorCode = 5
+			EndIf
+			
+			If(WM_Resize)
+				//Change the cursor to the left right drag icon
+				s.doSetCursor = 1
+				s.cursorCode = 5 
+				
+				If(s.mouseLoc.h < 80 || s.mouseLoc.h > 260)
+					
+					ControlInfo/W=NT MatchListBox
+					WM_Position = V_width + 6
+					break
+				EndIf
+				
+				ControlInfo/W=NT MatchListBox
+				ListBox MatchListBox win=NT,size={s.mouseLoc.h - 6,V_height}
+				
+				ControlInfo/W=NT DataSetWavesListBox
+				ListBox DataSetWavesListBox win=NT,pos={s.mouseLoc.h + 5,V_top},size={V_right - s.mouseLoc.h - 5,V_height}
+				
+				WM_Position = s.mouseLoc.h
+				
+				//move the focus box with it
+				SVAR listFocus = NTF:listFocus
+				strswitch(listFocus)
+					case "WaveMatch":
+						listFocus = "DataSet"
+						changeFocus("WaveMatch",1)
+						break
+					case "DataSet":
+						listFocus = "WaveMatch"
+						changeFocus("DataSet",1)
+						break
+				endswitch
+			ElseIf(Folders_Resize)
+				//Change the cursor to the left right drag icon
+				s.doSetCursor = 1
+				s.cursorCode = 5
+				
+				//Mouse position in navigator panel coordinates
+				GetMouse/W=NT#navigatorPanel
+				Variable mouseHor = V_left
+				
+				ControlInfo/W=NT#navigatorPanel folderListBox
+				Variable xExpand = mouseHor - V_right
+				
+				If(mouseHor < 60 || mouseHor > 220)
+					break
+				EndIf
+				
+				ListBox folderListBox win=NT#navigatorPanel,size={V_width + xExpand,V_height}
+				
+				Folders_Position += xExpand
+				 
+				ControlInfo/W=NT#navigatorPanel waveListBox
+				ListBox waveListBox win=NT#navigatorPanel,pos={V_left + xExpand,V_top},size={V_width - xExpand,V_height}	
+				
+			EndIf
+			
+			break
+		case 5:
+			//mouse up
+			
+			NVAR WM_Position = NTF:WM_Position
+			NVAR DSW_Position = NTF:DSW_Position
+			NVAR WM_Resize = NTF:WM_Resize
+			NVAR DS_Resize = NTF:DS_Resize
+			NVAR Folders_Resize = NTF:Folders_Resize
+			
+			//Change the cursor to the left right drag icon
+			s.doSetCursor = 1
+			s.cursorCode = 0
+			Folders_Resize = 0
+			
+			//Wave Match Hover
+			If(WM_Resize)
+				//Change the cursor to the left right drag icon
+				s.doSetCursor = 1
+				s.cursorCode = 0
+				
+				ControlInfo/W=NT MatchListBox
+				WM_Position = V_width + 6
+				
+				WM_Resize = 0
+				hookResult = 1
+			EndIf
+			
+			
 			break
 	endswitch
 
@@ -1424,7 +1566,7 @@ Function openParameterFold([size])
 	
 	DFREF NTF =  root:Packages:NT:
 	SVAR listFocus = NTF:listFocus
-	
+	NVAR Folders_Position = NTF:Folders_Position
 	NVAR ppr = root:Packages:NT:Settings:ppr//pixel shift per refresh; can adjust Settings panel
 	
 	If(ParamIsDefault(size))
@@ -1462,6 +1604,8 @@ Function openParameterFold([size])
 		Variable expansion = (right*r - left*r) - 754 //current expansion relative to original width of the panel
 		
 		If(expansion >= size)
+			ControlInfo/W=NT#navigatorPanel folderListBox
+			Folders_Position = 460 + V_width + size
 			break
 		EndIf
 		
@@ -1535,7 +1679,7 @@ Function closeParameterFold([size])
 	DFREF NTF =  root:Packages:NT:
 	
 	NVAR ppr = root:Packages:NT:Settings:ppr //pixel shift per refresh; can adjust in Settings panel
-	
+	NVAR Folders_Position = NTF:Folders_Position
 	SVAR selectedCmd = NTF:selectedCmd	
 	
 	Variable r = ScreenResolution/72
@@ -1582,16 +1726,23 @@ Function closeParameterFold([size])
 	//Erase the help message
 	switchHelpMessage("")
 	
+	
+	Variable i = 0
 	Do
-		Variable i
-		
+	
 		//Get original window coordinates
 		GetWindow NT wsize
 		Variable left,top,right,bottom
 		left = V_left;right=V_right;top=V_top;bottom=V_bottom
 		Variable expansion = (r * right - r * left) - 754 //current expansion relative to original width of the panel
 		
+		If(!i)
+			Variable totalReduction = expansion
+		EndIf
+		
 		If(expansion <= size)
+			ControlInfo/W=NT#navigatorPanel folderListBox
+			Folders_Position = 460 + V_width + size
 			break
 		EndIf
 		
@@ -1613,6 +1764,7 @@ Function closeParameterFold([size])
 		SetDrawEnv/W=NT gstop,textxjust= 1,textyjust= 1
 
 		DoUpdate/W=NT
+		i += 1
 	While(expansion > size )
 	
 	//delete midline after animation

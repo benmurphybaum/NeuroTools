@@ -452,6 +452,7 @@ Function switchControls(currentCmd,prevCmd)
 				
 		//Measure command must go through further setup, since it has variable subcontrols depending on the measurement selection
 		If(stringmatch(visibleList,"*measureType*"))
+			Button WaveListSelector win=NT,disable=0
 			setupMeasureControls(CurrentMeasureType())
 		Else
 			//make current controls visible 
@@ -1966,6 +1967,9 @@ Function changeFocus(selection,switchFilterSettings)
 	NVAR offsetY = NTS:offsetY
 	NVAR hf =  NTS:hf
 	
+	//listbox resize positions
+	NVAR WM_Position = NTF:WM_Position
+			
 	SVAR listFocus = NTF:listFocus
 	
 	//return if the selection wasn't changed
@@ -2009,7 +2013,7 @@ Function changeFocus(selection,switchFilterSettings)
 			
 			//rectangle selection
 			SetDrawEnv/W=NT linethick= 0,linefgc= (3,52428,1),fillfgc= (3,52428,1,32768)
-			DrawRect/W=NT 3,117*hf,180,443*hf + offsetY
+			DrawRect/W=NT 3,117*hf,WM_Position + 2,443*hf + offsetY
 			
 			SetDrawEnv/W=NT gstop
 			
@@ -2056,7 +2060,7 @@ Function changeFocus(selection,switchFilterSettings)
 			
 			//rectangle selection
 			SetDrawEnv/W=NT linethick= 0,linefgc= (3,52428,1),fillfgc= (3,52428,1,32768)
-			DrawRect/W=NT 180,117*hf,357,443*hf + offsetY
+			DrawRect/W=NT WM_Position+2,117*hf,357,443*hf + offsetY
 			
 			SetDrawEnv/W=NT gstop
 			

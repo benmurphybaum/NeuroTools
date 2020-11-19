@@ -287,6 +287,19 @@ Function LoadNT([left,top])
 	//List box to hold names of data sets 
 	ListBox DataSetNamesListBox win=NT,mode=2,pos={361,120*hf},size={80,320*hf + offsetY},listWave=DSNamesLB_ListWave,selWave=DSNamesLB_SelWave,disable=0,proc=ntListBoxProc
 	
+	//ListBox position indicators, used for keeping track of resizing
+	NVAR WM_Position = NTF:WM_Position
+	ControlInfo/W=NT MatchListBox
+	WM_Position = V_left + V_width
+	
+	NVAR DSW_Position = NTF:DSW_Position
+	ControlInfo/W=NT DataSetWavesListBox
+	DSW_Position = V_left + V_width
+	
+	NVAR Folders_Position = NTF:Folders_Position
+	ControlInfo/W=NT#navigatorPanel FolderListBox
+	Folders_Position = 460 + V_left + V_width
+	
 	//Draw line between matching and data set section, and the Data Browser section
 	//Put the line into its own draw group so I can pull it out individually
 	SetDrawEnv/W=NT xcoord= abs,ycoord= abs,linefgc= (0,0,0,16384),linethick= 4.00,gname=NavLine,gstart 
@@ -562,6 +575,35 @@ Function MakePackageFolders()
 	String/G NTF:extParamNames
 	String/G NTF:ctrlList_extFunc
 	Make/WAVE/O/N=0 NTF:extFuncWaveRefs
+	
+	//GUI position indicators for resizing the listboxes
+	Variable/G NTF:WM_Position
+	NVAR WM_Position = NTF:WM_Position
+	WM_Position = 0
+	
+	Variable/G NTF:DSW_Position
+	NVAR DSW_Position = NTF:DSW_Position
+	DSW_Position = 0
+	
+	Variable/G NTF:Folders_Position
+	NVAR Folders_Position = NTF:Folders_Position
+	Folders_Position = 0
+	
+	Variable/G NTF:WM_Resize
+	NVAR WM_Resize = NTF:WM_Resize
+	WM_Resize = 0
+	
+	Variable/G NTF:DS_Resize
+	NVAR DS_Resize = NTF:DS_Resize
+	DS_Resize = 0
+	
+	Variable/G NTF:Waves_Resize
+	NVAR Waves_Resize = NTF:Waves_Resize
+	Waves_Resize = 0
+	
+	Variable/G NTF:Folders_Resize
+	NVAR Folders_Resize = NTF:Folders_Resize
+	Folders_Resize = 0
 	
 	//For communication between main NT module and ScanImage, etc. modules to pass return values between them
 	String/G NTF:returnStr 

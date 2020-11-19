@@ -469,3 +469,43 @@ Function NT_RiseTime(DS_Data,PeakStart,PeakEnd)
 	While(ds.wsi < ds.numWaves)
 	
 End
+
+
+Function NT_Normalize(DS_Data,startTm,endTm)
+	String DS_Data
+	Variable startTm,endTm
+	
+	//Data set info structure
+	STRUCT ds ds 
+	
+	//Fills the data set structure
+	GetStruct(ds)
+	
+	//Reset wave set index
+	ds.wsi = 0
+	
+	//Name of the output wave that will hold the results
+	String outputName = NameOfWave(ds.waves[0]) + "_out"
+	
+	//Make the output wave 
+//	Make/O/N=(DimSize(ds.waves[0],0),DimSize(ds.waves[0],1),DimSize(ds.waves[0],2)) $outputName/Wave = outWave
+	
+	//Function Loop
+	Do
+		//declare each wave in the wave set
+		Wave theWave = ds.waves[ds.wsi]
+		
+		SetDataFolder GetWavesDataFolder(theWave,1)
+		
+		Duplicate/O theWave,$NameOfWave(theWave) + "_norm"
+		Wave normWave = $NameOfWave(theWave) + "_norm"
+		
+		//YOUR CODE GOES HERE....
+		Variable maxValue = WaveMax(normWave,startTm,endTm)
+		theWave = theWave / maxValue
+		
+		
+		ds.wsi += 1
+	While(ds.wsi < ds.numWaves)
+	
+End
