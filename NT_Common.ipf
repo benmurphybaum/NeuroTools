@@ -796,38 +796,71 @@ Function controlsVisible(list,visible)
 
 		endswitch
 		
+		
 		switch(type)
 			case 1: //Button	
-				Button $ctrl win=NT,disable=visible,pos={V_pos,offset}
+				If(!visible)
+					Button $ctrl win=NT,disable=visible,pos={V_pos,offset}
+				Else
+					Button $ctrl win=NT,disable=visible
+				EndIf
 				break
 			case -5: //SetVariable
 			case 5:
 				If(!cmpstr(selectedCmd,"Duplicate Rename"))
-					SetVariable $ctrl win=NT,disable=visible,pos={V_pos,105}
-					
+					If(!visible)
+						SetVariable $ctrl win=NT,disable=visible,pos={V_pos,105}
+					Else
+						SetVariable $ctrl win=NT,disable=visible
+					EndIf
+									
 					If(cmpstr(ctrl,"traceName"))
 						continue
 					EndIf
 				Else
-					SetVariable $ctrl win=NT,disable=visible,pos={V_pos,offset}
+					If(!visible)
+						SetVariable $ctrl win=NT,disable=visible,pos={V_pos,offset}
+					Else
+						SetVariable $ctrl win=NT,disable=visible
+					EndIf
 				EndIf
 				break
 			case -3: //PopUpMenu
 			case 3: 
-				PopUpMenu $ctrl win=NT,disable=visible,pos={V_pos,offset}//,pos={503,pos}
+				If(!visible)
+					PopUpMenu $ctrl win=NT,disable=visible,pos={V_pos,offset}//,pos={503,pos}
+				Else
+					PopUpMenu $ctrl win=NT,disable=visible
+				EndIf
 				break
 			case 7: //Slider
-				Slider $ctrl win=NT,disable=visible,pos={V_pos,offset}//,pos={461,pos}
+				If(!visible)
+					Slider $ctrl win=NT,disable=visible,pos={V_pos,offset}//,pos={461,pos}
+				Else
+					Slider $ctrl win=NT,disable=visible
+				EndIf
 				break
 			case -4: //ValDisplay	
 			case 4:
-				ValDisplay $ctrl win=NT,disable=visible,pos={V_pos,offset}//,pos={461,pos}
+				If(!visible)
+					ValDisplay $ctrl win=NT,disable=visible,pos={V_pos,offset}//,pos={461,pos}
+				Else
+					ValDisplay $ctrl win=NT,disable=visible
+				EndIf
 				break
 			case 11: //ListBox
-				ListBox $ctrl win=NT,disable=visible//,pos={V_pos,offset}//,pos={461,pos}
+				If(!visible)
+					ListBox $ctrl win=NT,disable=visible//,pos={V_pos,offset}//,pos={461,pos}
+				Else
+					ListBox $ctrl win=NT,disable=visible
+				EndIf
 				break
 			case 2: //CheckBox
-				CheckBox $ctrl win=NT,disable=visible,pos={V_pos,offset}//,pos={461,pos}
+				If(!visible)
+					CheckBox $ctrl win=NT,disable=visible,pos={V_pos,offset}//,pos={461,pos}
+				Else
+					CheckBox $ctrl win=NT,disable=visible
+				EndIf
 				break
 		endswitch
 		
@@ -971,6 +1004,14 @@ Function/S GetFolderSearchList(filters,listWave,selWave)
 	
 	//Makes a list of all the selected folders and matched subfolders
 	String folderList = ""
+	
+	//If we're matching from a data folder that has been entered as opposed to from a selection...
+	//of the folder itself from its parent directory, must properly set folderSelection.
+	If(DimSize(listWave,0) == 0) //no selected folders
+		folderSelection = cdf //set to current data folder	
+	EndIf
+
+	
 	For(i=0;i<DimSize(listWave,0);i+=1)
 	
 		//reset the subfolder and matched folder lists for each parent folder
@@ -2321,7 +2362,9 @@ End
 Function drawFullPathText()
 	DFREF NTF = root:Packages:NT
 	DFREF NTD = root:Packages:NT:DataSets
+	DFREF NTS = root:Packages:NT:Settings
 	
+	NVAR hf =  NTS:hf
 	SVAR listFocus = NTF:listFocus
 	Variable i = 0,row = -1
 	
@@ -2357,7 +2400,7 @@ Function drawFullPathText()
 	//Update the text box
 	DrawAction/W=NT getGroup=fullPathText,delete	
 	SetDrawEnv/W=NT fname=$LIGHT,fstyle=2,fsize=10,gname=fullPathText,gstart
-	DrawText/W=NT 14,464,listWave[row][0][1]
+	DrawText/W=NT 14,464*hf,listWave[row][0][1]
 	SetDrawEnv/W=NT gstop
 	
 End	
@@ -2468,6 +2511,7 @@ Function GetDataSetInfo(ds[,extFunc])
 	Else
 		//external function call
 		Wave/T listWave = getExtFuncDataSet()
+		Wave/T ds.listWave = listWave
 	EndIf
 	
 	If(DimSize(listWave,0) == 0)
@@ -2531,6 +2575,12 @@ Function/WAVE getExtFuncDataSet()
 		ControlInfo/W=NT $ctrlName
 		If(abs(V_flag) == 3) 
 			
+			//Check if the name is a data set reference or current data folder references. If it's not either it is a user defined pop up menu			
+			String name = getParam("PARAM_" + num2str(i) + "_NAME",func)
+			
+			If(!stringmatch(name,"DS_*"))
+				continue
+			EndIf
 			
 			String dsName = getParam("PARAM_" + num2str(i) + "_VALUE",func)
 			Wave/T ds = GetDataSetWave(dsName,"ORG")
@@ -2547,11 +2597,13 @@ Function/WAVE getExtFuncDataSet()
 		EndIf
 	EndFor	
 	
-	If(count == 0)
-		return $""
-	Else
-		return extFuncDataSets
-	EndIf
+	return extFuncDataSets
+//	
+//	If(count == 0)
+//		return $""
+//	Else
+//		return extFuncDataSets
+//	EndIf
 End
 
 
@@ -3411,11 +3463,13 @@ Function BuildExtFuncControls(theFunction)
 	numParams = str2num(getParam("N_PARAMS",theFunction))
 	numOptParams = str2num(getParam("N_OPT_PARAMS",theFunction))
 	
+	//Kill existing controls
+	KillExtParams()
 	//Function has no extra parameters declared
-	If(numParams == 0 && numOptParams == 0)
-		KillExtParams()
-		return 1
-	EndIf
+//	If(numParams == 0 && numOptParams == 0)
+//		
+//		return 1
+//	EndIf
 	
 	String paramType,functionStr
 	paramType = ""
@@ -3432,31 +3486,84 @@ Function BuildExtFuncControls(theFunction)
 	
 	String extParamNames = functionStr
 	Variable left=480,top=110
-	String type,name,ctrlName
+	String type,name,ctrlName,items
 	
 	For(i=0;i<numParams;i+=1)
 		name = getParam("PARAM_" + num2str(i) + "_NAME",theFunction)
 		ctrlName = "param" + num2str(i)
 		type = getParam("PARAM_" + num2str(i) + "_TYPE",theFunction)
+		items = getParam("PARAM_" + num2str(i) + "_ITEMS",theFunction)
+		
+		//Check if the control is a pop up menu or not
+		Variable isMenu = 0
+		
+		If(stringmatch(name,"menu_*"))
+			isMenu = 1
+		Else
+			isMenu = 0
+		EndIf
+		
 		strswitch(type)
 			case "4"://variable
 				Variable valueNum = str2num(getParam("PARAM_" + num2str(i) + "_VALUE",theFunction))
-				SetVariable/Z $ctrlName win=NT,pos={left,top},size={90,20},bodywidth=50,title=name,value=_NUM:valueNum,disable=0,proc=ntExtParamProc
+				
+				//CheckBox designation
+				If(stringmatch(name,"cb_*"))		
+					name = RemoveListItem(0,name,"_") //removes the "CB" prefix
+					valueNum = (valueNum > 0) ? 1 : 0
+					SetParam("PARAM_" + num2str(i) + "_VALUE",theFunction,num2str(valueNum))
+					
+					CheckBox/Z $ctrlName win=NT,pos={left,top},size={90,20},bodywidth=50,side=1,title=name,value=valueNum,disable=0,proc=ntExtParamCheckProc
+				Else
+					SetVariable/Z $ctrlName win=NT,pos={left,top},size={90,20},bodywidth=50,title=name,value=_NUM:valueNum,disable=0,proc=ntExtParamProc
+				EndIf
+				
 				break
 			case "8192"://string
-				String valueStr = getParam("PARAM_" + num2str(i) + "_VALUE",theFunction)
+			
+				//Popup menu designation
+				If(isMenu)
+					name = RemoveListItem(0,name,"_") //removes the "pop" prefix
+					
+					//Is this a literal string expression or a function call?
+					If(stringmatch(items,"*(*") && stringmatch(items,"*)*"))
+						String itemStr = items
+					Else
+						itemStr = "\"" + items + "\""	
+					EndIf
+					
+					String valueStr = getParam("PARAM_" + num2str(i) + "_VALUE",theFunction)	
+
+					PopUpMenu/Z $ctrlName win=NT,pos={left,top},size={185,20},bodywidth=150,title=name,value=#itemStr,disable=0,proc=ntExtParamPopProc	
+					PopUpMenu/Z $ctrlName win=NT,popmatch=valueStr
+					break
+				Else
+					valueStr = getParam("PARAM_" + num2str(i) + "_VALUE",theFunction)
+				EndIf
 				
 				//test if the string is a data set reference, in which case make it a popup menu
-				If(stringmatch(name,"DS_*"))					
+				If(stringmatch(name,"DS_*"))		
+					//Data Set Menu			
 					SVAR DSNameList = NTD:DSNameList
 					DSNameList = textWaveToStringList(NTD:DSNamesLB_ListWave,";")
 					String selection = getParam("PARAM_" + num2str(i) + "_VALUE",theFunction)
 					Variable selectionIndex = WhichListItem(selection,DSNameList,";")
 					
-					PopUpMenu/Z $ctrlName win=NT,pos={left,top},size={120,20},bodywidth=80,title=StringFromList(1,name,"_"),value=#"root:Packages:NT:DataSets:DSNameList",disable=0,mode=1,popValue=selection,proc=ntExtParamPopProc
+					PopUpMenu/Z $ctrlName win=NT,pos={left,top},size={185,20},bodywidth=150,title=StringFromList(1,name,"_"),value=#"root:Packages:NT:DataSets:DSNameList",disable=0,mode=1,popValue=selection,proc=ntExtParamPopProc
+				ElseIf(stringmatch(name,"CDF_*"))
+					//Current Data Folder Waves Menu
+					selection = getParam("PARAM_" + num2str(i) + "_VALUE",theFunction)
+					selectionIndex = WhichListItem(selection,DSNameList,";")
+					
+					If(selectionIndex == -1)
+						selectionIndex = 0
+					EndIf
+					
+					PopUpMenu/Z $ctrlName win=NT,pos={left,top},size={185,20},bodywidth=150,title=StringFromList(1,name,"_"),value=WaveList("*",";",""),disable=0,mode=1,popValue=selection,proc=ntExtParamPopProc
 				Else
 					SetVariable/Z $ctrlName win=NT,pos={left,top},size={120,20},bodywidth=80,title=name,value=_STR:valueStr,disable=0,proc=ntExtParamProc
 				EndIf
+				
 				break
 			case "16386"://wave
 				valueStr = getParam("PARAM_" + num2str(i) + "_VALUE",theFunction)
@@ -3469,11 +3576,83 @@ Function BuildExtFuncControls(theFunction)
 				validWaveText(valueStr,V_top+13)
 				
 				break
+			case "4608"://structure
+				top -= 25 //reset back				
+				break
 		endswitch
 		top += 25
 		
 	EndFor
 	
+End
+
+
+//Finds the pop up menu values from the code
+Function/S NT_GetPopUpValue(popUpStr,functionStr)
+	String popUpStr,functionStr
+	String values = ""
+	
+	If(!strlen(popUpStr) || !strlen(functionStr))
+		return ""
+	EndIf
+	
+	//Syntax for referencing the list items in a user defined menu
+	String list = popUpStr + "_List"
+	
+	Variable pos = strsearch(functionStr,list,0)
+	
+	If(pos == -1)
+		print "Couldn't find the pop up menu items for " + popUpStr + ". Make sure the syntax for referencing them is correct."
+		return ""
+	EndIf
+	
+	//Extracts the referenced item list using string quotations as a list separator
+	values = functionStr[pos,pos + 400]
+	
+	//Get the equals sign position
+	pos = strsearch(values,"=",0)
+	
+	If(pos == -1)
+		print "Couldn't find the pop up menu items for " + popUpStr + ". Make sure the syntax for referencing them is correct."
+		return ""
+	Else
+		pos += 1
+	EndIf
+	
+	values = values[pos,400 - pos]
+	
+	Variable endPt = strlen(values)
+	
+	//If this is a true string list, there will be quotations as the first character
+	//Eliminate leading white space
+	Variable i
+	Do
+		String char = values[0]
+		
+		If(!cmpstr(char," "))
+			values = values[1,endPt]
+			endPt = strlen(values)
+		EndIf
+	While(!cmpstr(char," "))
+	
+	If(!cmpstr(values[0],"\""))
+		//The menu items are a string list
+		values = StringFromList(1,values,"\"")
+	Else
+		//The menu items are a function return
+		
+		//Finds the trailing parentheses
+		pos = strsearch(values,")",0)
+		
+		If(pos == -1)
+			print "Couldn't find the pop up menu items for " + popUpStr + ". Make sure the syntax for referencing them is correct."
+			return ""
+		EndIf
+		
+		values = values[0,pos]
+	EndIf
+	
+	return values
 End
 
 //Returns the named parameter from the external functions data wave
@@ -3484,6 +3663,10 @@ Function/S getParam(key,func)
 	
 	Variable row = FindDimLabel(param,0,key)
 	Variable col = FindDimLabel(param,1,func)
+	
+	If(row < 0 || col < 0)
+		
+	EndIf
 	
 	return param[row][col]
 End
@@ -3608,17 +3791,17 @@ End
 
 //Kills all the visible external function parameters controls
 Function KillExtParams()
-	String func = CurrentExtFunc()
-	
-	DFREF NTF = root:Packages:NT
-	Wave/T param = NTF:ExtFunc_Parameters
-	
-	Variable numParams = str2num(getParam("N_PARAMS",func))
-	
+
 	Variable i
-	For(i=0;i<numParams;i+=1)
-		KillControl/W=NT $("param" + num2str(i))
-	EndFor
+	Do
+		ControlInfo/W=NT $("param" + num2str(i))
+		
+		If(V_flag != 0)
+			KillControl/W=NT $("param" + num2str(i))
+		EndIf
+		
+		i += 1
+	While(V_flag != 0)
 	
 	//Kill wave validity text
 	validWaveText("",0,deleteText=1)
@@ -3770,7 +3953,7 @@ End
 		If(PN)
 			//PN vector sum
 			WaveStats/Q data
-			nullPt = polarMath(V_maxLoc,180,"deg","add")
+			nullPt = polarMath(V_maxLoc,180,"deg","add",0)
 			If(nullPt == 360)
 				nullPt = 0
 			EndIf
@@ -3840,8 +4023,8 @@ End
 	
 End Function
 
-Function polarMath(pnt1,pnt2,degrad,op)
-	Variable pnt1,pnt2
+Function polarMath(pnt1,pnt2,degrad,op,signed)
+	Variable pnt1,pnt2,signed
 	String degrad,op
 	Variable angOut
 	
@@ -3877,6 +4060,43 @@ Function polarMath(pnt1,pnt2,degrad,op)
 		case "deg":
 			angOut = (angOut > 360) ? (angOut - 360) : angOut
 			angOut = (angOut < 0) ? (angOut + 360) : angOut
+			
+			//Determine the sign. Direction of point 2 relative to point 1
+			If(signed)	
+				
+				Variable signTest = pnt1 + angOut
+				
+				If(signTest > 360)
+					signTest -= 360
+				EndIf	
+
+				If(abs(signTest - pnt2) < 0.0001) 
+					Variable theSign = 1
+				Else
+					theSign = -1
+				EndIf
+//				
+//					
+//				 
+//						
+//				If(pnt1 + angOut > 360)
+//					If(pnt2 > pnt1)
+//						Variable theSign = 1
+//					Else
+//						theSign = -1
+//					EndIf
+//				Else
+//					If(pnt2 + 180 > pnt1)
+//						theSign = -1
+//					Else
+//						theSign = 1
+//					EndIf
+//				EndIf
+				
+				angOut *= theSign
+			EndIf
+			
+						
 			break
 		case "rad":
 			angOut = (angOut > 2*pi) ? (angOut - 2*pi) : angOut
@@ -3909,7 +4129,7 @@ Function/S whichImagingSoftware()
 End
 
 //Retrieves stimulus data from a WaveSurfer HDF5 file that has logged StimGen data
-Function GetStimulusData(fileID)
+Function/WAVE GetStimulusData(fileID)
 	Variable fileID
 	
 	Wave/T wsStimulusDataListWave = root:Packages:NT:wsStimulusDataListWave
@@ -3920,7 +4140,7 @@ Function GetStimulusData(fileID)
 	
 	If(!strlen(S_HDF5ListGroup))
 		Redimension/N=(0,2) wsStimulusDataListWave
-		return 0
+		return $""
 	EndIf
 	
 	HDF5ListGroup/TYPE=1/Z fileID,"/StimGen/Stimulus"
@@ -3957,6 +4177,8 @@ Function GetStimulusData(fileID)
 	If(cleanup)
 		cleanStimData(wsStimulusDataListWave,fileID)
 	EndIf
+	
+	return wsStimulusDataListWave
 End
 
 //Returns an attribute
@@ -3980,10 +4202,21 @@ Function/S GetAttribute(fileID,objectNum,attr)
 			break
 		case 1:
 			Wave data = $stimWave
-			String value = num2str(data[0])
+			If(DimSize(data,0) == 0)
+				String value = ""
+				break
+			EndIf
+			
+			value = num2str(data[0])
 			break
 		case 2:
 			Wave/T textData = $stimWave
+			
+			If(DimSize(textData,0) == 0)
+				value = ""
+				break
+			EndIf
+			
 			value = textData[0]
 			break
 	endswitch
@@ -4008,9 +4241,15 @@ Function/S refineAttributeList(stimData,attrList)
 	//Is there motion?
 	index = WhichListItem("motionType",attrList,";")
 	If(cmpstr(stimData[tableMatch("motionType",stimData)][1],"Static"))
-		attrList = AddListItem("startRad",attrList,";",index+1)
-		attrList = AddListItem("speed",attrList,";",index+2)
-		attrList = AddListItem("angle",attrList,";",index+1)
+	
+		//Is there a trajectory or a standard motion drift?
+		If(cmpstr(stimData[tableMatch("trajectory",stimData)][1],"None"))
+			attrList = AddListItem("trajectory",attrList,";",index+1)
+			attrList = AddListItem("startRad",attrList,";",index+1)
+			attrList = AddListItem("speed",attrList,";",index+2)
+		Else
+			attrList = AddListItem("angle",attrList,";",index+1)
+		EndIf
 	EndIf
 	
 	return attrList

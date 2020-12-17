@@ -227,15 +227,29 @@ Function/S SI_LoadScans(path,fileList)
 			String ROIname = baseName + "_R" + num2str(i) + "_" + ch
 			
 			numZs = (numZs == 0) ? 1 : numZs
-			Make/N=(xPixels,yPixels,(numFrames / numZs))/O/W $ROIname/Wave=scanROI
-				
+//			Make/N=(xPixels,yPixels,(numFrames / numZs))/O/W $ROIname/Wave=scanROI
+			
+			If(framesPerSlice > 1)
+				//Z stack (probably) with multiple frames per slice
+				Make/N=(xPixels,yPixels,numZs,framesPerSlice)/O/W $ROIname/Wave=scanROI
+			Else
+				If(numROIs > 1)
+					//Not a Zstack (not necessarily true, but probably true for our purposes)
+					//Standard for multi ROI multi-plane imaging
+					Make/N=(xPixels,yPixels,(numFrames / numZs))/O/W $ROIname/Wave=scanROI
+				Else
+					//Z stack, single frame per slice, potentially multiple volumes taken (numTimeFrames)
+					Make/N=(xPixels,yPixels,numZs,numTimeFrames)/O/W $ROIname/Wave=scanROI
+				EndIf
+			EndIf
+								
 			imageList += GetWavesDataFolder(scanROI,2) + ";"	
 			
-			SetScale/I x,objResolution * (theROI[0] - (theROI[2] / 2)),objResolution * (theROI[0] + (theROI[2] / 2)),scanROI
+			SetScale/I x,objResolution * (theROI[0] - (theROI[2] / 2)),objResolution * (theROI[0] + (theROI[2] / 2)),"m",scanROI
 			
 			//Reverse scaling from what I originally had, so now the image is oriented the same as in MATLAB when the data is taken
-			SetScale/I y,objResolution * (theROI[1] + (theROI[3] / 2)),objResolution * (theROI[1] - (theROI[3] / 2)),scanROI
-			SetScale/P z,0,theROI[11],scanROI
+			SetScale/I y,objResolution * (theROI[1] + (theROI[3] / 2)),objResolution * (theROI[1] - (theROI[3] / 2)),"m",scanROI
+			SetScale/P z,0,theROI[11],"s",scanROI
 			
 			//Get the z plane of the scan ROI, and it's frame offset
 			String Zstr = num2str(theROI[4])
@@ -251,19 +265,29 @@ Function/S SI_LoadScans(path,fileList)
 			offsetY = (Z == prevZ) ? Ypixels : 0
 		
 			Variable k
-			If(framesPerSlice > 1)
-				//This will hold each block of frames per slice
-				Make/N=(xPixels,yPixels,framesPerSlice)/FREE sliceBlock
-				Redimension/S scanROI
-				For(k=0;k<numZs;k+=1)
-					Multithread sliceBlock = theImage[p][q][r + k * framesPerSlice]
-					MatrixOP/FREE avgSlice = sumBeams(sliceBlock) / framesPerSlice
-					Multithread scanROI[][][k] = avgSlice[p][q][0]
-				EndFor
+//			If(framesPerSlice > 1)
+//				//This will hold each block of frames per slice
+//				Make/N=(xPixels,yPixels,framesPerSlice)/FREE sliceBlock
+//				Redimension/S scanROI
+//				For(k=0;k<numZs;k+=1)
+//					Multithread sliceBlock = theImage[p][q][r + k * framesPerSlice]
+//					MatrixOP/FREE avgSlice = sumBeams(sliceBlock) / framesPerSlice
+//					Multithread scanROI[][][k] = avgSlice[p][q][0]
+//				EndFor
+//			Else
+			
+			If(framesPerSlice == 1)
+				Multithread scanROI[][][][] = theImage[p][offsetY + q][offsetZ + r * numZs]
 			Else
-				Multithread scanROI[][][] = theImage[p][offsetY + q][offsetZ + r * numZs]
+				Make/FREE/N=(xPixels,yPixels,framesPerSlice) chunk
+				For(k=0;k<numZs;k+=1)
+					Multithread chunk = theImage[p][q][r + k * framesPerSlice]
+					Multithread scanROI[][][k][] = chunk[p][q][s]
+				EndFor
 			EndIf
-					
+			
+			
+				
 			prevZ = Z
 			offsetY += yPixels
 		EndFor
@@ -288,6 +312,8 @@ Function/WAVE SI_GetHeader(fileRef,length,offset)
 	Variable fileRef,length,offset
 	
 	FStatus fileRef
+	
+	String path = S_path + S_fileName
 	
 	Variable i = 0
 	
@@ -318,6 +344,22 @@ Function/WAVE SI_GetHeader(fileRef,length,offset)
 		
 		header[i][1] = StringByKey(theParam,str," = ","\n")
 	EndFor
+	
+	//Append the file location to the header
+	Variable row = DimSize(header,0)
+	Redimension/N=(row + 2,2) header
+	header[row][0] = "File Path"
+	header[row][1] = path
+	header[row+1][0] = "Stimulus Path"
+	header[row+1][1] = ""
+	
+	//Try to append the path to potential stimulus .h5 file
+	String fileList = IndexedFile(image,-1,".h5") //image is the pre-defined path to the image, as defined in the calling function
+	String stimFile = RemoveEnding(S_fileName,".tif") + ".h5"
+	
+	If(stringmatch(fileList,"*" + stimFile + "*"))
+		header[row+1][1] = S_path + stimFile
+	EndIf
 	
 	return header
 End

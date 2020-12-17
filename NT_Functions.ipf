@@ -219,6 +219,10 @@ Function/WAVE ExecuteCommand(ds,cmd)
 			NT_DuplicateRename(ds)
 			Wave/WAVE out = $""
 			break
+		case "delSuffix":
+			delSuffix(ds)
+			Wave/WAVE out = $""
+			break
 		case "Move To Folder":
 			NT_MoveToFolder(ds)
 			Wave/WAVE out = $""
@@ -288,9 +292,18 @@ Function/WAVE NT_Average(ds[,pass])
 	
 	//If it's a full path folder
 	If(stringmatch(folder,"root*"))
-		If(!DataFolderExists(folder))
-			NewDataFolder $folder
-		EndIf
+		Variable i = 0
+		String sub = ""
+		Do
+			sub += ParseFilePath(0,folder,":",0,i) + ":"
+			
+			If(!DataFolderExists(sub))
+				NewDataFolder $RemoveEnding(sub,":")
+			EndIf
+			
+			i += 1
+		While(i < ItemsInList(folder,":"))
+		
 		SetDataFolder folder
 	Else
 		If(strlen(folder))
@@ -722,6 +735,47 @@ Function NT_SubtractTrend(ds)
 	While(ds.wsi < ds.numWaves)
 End
 
+Function delSuffix(ds)
+	STRUCT ds &ds
+	
+	ControlInfo/W=NT killOriginals
+	Variable killOriginals = V_Value
+	
+	ds.wsi = 0
+	Do
+		Wave theWave = ds.waves[ds.wsi]
+		
+		If(!WaveExists(theWave))
+			break
+		EndIf
+		
+		SetDataFolder GetWavesDataFolder(theWave,1)
+		
+		String newName = RemoveEnding(ParseFilePath(1,NameOfWave(theWave),"_",1,0),"_")
+		
+		If(!strlen(newName))
+			break
+		EndIf
+		
+		If(killOriginals)
+			Duplicate/O theWave,$newName
+			KillWaves/Z theWave
+		Else
+			Duplicate/O theWave,$newName
+		EndIf
+		
+		ds.wsi += 1
+	While(ds.wsi < ds.numWaves)
+
+	//Update the list boxes since we've just modified waves
+		
+	//Builds the match list according to all search terms, groupings, and filters
+	getWaveMatchList()
+	
+	//display the full path to the wave in a text box
+	drawFullPathText()
+	
+End
 
 Function NT_DuplicateRename(ds)
 	STRUCT ds &ds
@@ -1277,11 +1331,19 @@ Function NT_Measure(ds)
 		strswitch(type)
 			case "Peak": //peak
 				outWave[ds.wsi] = V_max
+				
+//				Variable bgnd = mean(theWave,2,4)
+//				outWave[ds.wsi] -= bgnd
+//				
 				break
 			case "Peak Location": //peak x location
 				outWave[ds.wsi] = V_maxLoc
 				break
 			case "Area": //area
+//				bgnd = mean(theWave,2,4)
+//				Duplicate/FREE theWave,temp
+//				temp -= bgnd
+//				outWave[ds.wsi] = area(temp,startTm,endTm)
 				outWave[ds.wsi] = area(theWave,startTm,endTm)
 				break
 			case "Mean": //mean

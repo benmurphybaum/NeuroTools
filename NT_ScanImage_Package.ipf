@@ -77,6 +77,10 @@ Function SI_CreatePackage()
 	NVAR scaleCumulative = NTSI:scaleCumulative
 	scaleCumulative = 0
 	
+	String/G NTSI:dynamicROI_Image
+	SVAR dynamicROI_Image =  NTSI:dynamicROI_Image
+	dynamicROI_Image = ""
+	
 	//keeps track of the number of frames that have gone into the average
 	Variable/G NTSI:rollingAverageCount
 	NVAR rollingAverageCount = NTSI:rollingAverageCount
@@ -272,10 +276,10 @@ Function SI_CreatePackage()
 	Button displayScanField win=SI,pos={4,1},size={60,20},title="Display",font=$LIGHT,proc=siButtonProc,disable=0
 	Button updateImageBrowser win=SI,pos={70,1},size={70,20},title="Refresh",font=$LIGHT,proc=siButtonProc,disable=0 
 	
-	Button getNewScans win=SI,pos={140,1},size={100,20},title="Get New Scans",font=$LIGHT,proc=siButtonProc,disable=0
+	Button getNewScans win=SI,pos={145,1},size={100,20},title="Get New Scans",font=$LIGHT,proc=siButtonProc,disable=0
 	CheckBox monitorScans win=SI,pos={150,4},size={70,20},title="Monitor New Scans",font=$LIGHT,proc=siCheckBoxProc,disable=1
 	Button browseMonitorFolder win=SI,pos={275,1},size={20,20},title="...",font=$LIGHT,proc=siButtonProc,disable=0
-
+	
 	SI_CreateControls()
 	SI_CreateControlLists()
 	
@@ -490,6 +494,7 @@ Function/Wave SI_GetScanGroups([folder])
 	For(i=ItemsInList(folders,",")-1;i>-1;i-=1) //go backwards
 		SetDataFolder NTS:$StringFromList(i,folders,",")
 		String scanList = WaveList("*",";","DIMS:3")
+		scanList += WaveList("*",";","DIMS:4")
 		If(ItemsInList(scanList,";") == 0)
 			folders = RemoveListItem(i,folders,",")
 		EndIf
@@ -548,6 +553,7 @@ Function/Wave SI_GetScanFields(folder[,group])
 		
 		//Get all 3D waves 
 		list = WaveList("*",";","DIMS:3")//takes care of extra-semicolon on the end
+		list +=  WaveList("*",";","DIMS:4")
 		fullList += list
 		
 		//Adds the path of the group to a separate list to combine later
@@ -565,8 +571,11 @@ Function/Wave SI_GetScanFields(folder[,group])
 	
 	Redimension/N=(DimSize(listWave,0),-1,-1) ScanFieldListWave,ScanFieldSelWave
 	
-	ScanFieldListWave[][][0] = listWave
-	ScanFieldListWave[][][1] = pathWave[p] + ":" + listWave[p]
+	If(DimSize(listWave,0) > 0)
+		ScanFieldListWave[][][0] = listWave
+		ScanFieldListWave[][][1] = pathWave[p] + ":" + listWave[p]
+	EndIf
+	
 	return listWave
 End
 
@@ -753,6 +762,12 @@ Function DisplayScanField(imageList[,add])
 	Variable add
 	
 	DFREF NTSI = root:Packages:NT:ScanImage
+	
+	//Reset the mouse drag indicator to prevent image from moving with mouse...
+	//...immediately without a click
+	NVAR mouseDrag = NTSI:mouseDrag
+	mouseDrag = 0
+	
 	NVAR numImages = NTSI:numImages
 	
 	
@@ -2005,7 +2020,11 @@ Function RemoveFromSIDisplay(w)
 End
 
 //Updates the list boxes on the ScanImage image browser
-Function updateImageBrowserLists()
+Function updateImageBrowserLists([skipROIList])
+	Variable skipROIList //Set to 1 to skip updating the ROI list, if you only want an update to the scan fields/groups/cells
+	
+	skipROIList = (ParamIsDefault(skipROIList)) ? 0 : 1
+	
 	DFREF NTSI = root:Packages:NT:ScanImage
 	
 	SVAR software = NTSI:imagingSoftware
@@ -2072,25 +2091,27 @@ Function updateImageBrowserLists()
 	EndIf
 	
 	//Refresh the ROI lists
-	Wave/T roiGroupList = SI_GetROIGroups()
-	Redimension/N=(DimSize(roiGroupList,0)) ROIGroupListWave,ROIGroupSelWave
-	ROIGroupListWave = roiGroupList
+	If(!skipROIList)
+		Wave/T roiGroupList = SI_GetROIGroups()
+		Redimension/N=(DimSize(roiGroupList,0)) ROIGroupListWave,ROIGroupSelWave
+		ROIGroupListWave = roiGroupList
+		
+		//Ensure their is a selection
+		If(sum(ROIGroupSelWave) == 0 && DimSize(ROIGroupSelWave,0) > 0)
+			ROIGroupSelWave[0] = 1
+		EndIf
+		
+		String groupList = SelectedROIGroup()
+		
+		Wave/T roiList = SI_GetROIs(groupList)
+		Redimension/N=(DimSize(roiList,0),-1,-1) ROIListWave,ROISelWave
 	
-	//Ensure their is a selection
-	If(sum(ROIGroupSelWave) == 0 && DimSize(ROIGroupSelWave,0) > 0)
-		ROIGroupSelWave[0] = 1
-	EndIf
-	
-	String groupList = SelectedROIGroup()
-	
-	Wave/T roiList = SI_GetROIs(groupList)
-	Redimension/N=(DimSize(roiList,0),-1,-1) ROIListWave,ROISelWave
-
-	ROIListWave = roiList
-	//Set selection to the first ROI after refreshing
-	If(DimSize(ROISelWave,0) > 0)
-		ROISelWave = 0
-		ROISelWave[0] = 1 
+		ROIListWave = roiList
+		//Set selection to the first ROI after refreshing
+		If(DimSize(ROISelWave,0) > 0)
+			ROISelWave = 0
+			ROISelWave[0] = 1 
+		EndIf
 	EndIf
 End
 
@@ -2141,36 +2162,100 @@ Function siListBoxProc(lba) : ListBoxControl
 		case -1: // control being killed
 			break
 		case 1: // mouse down
+				String optionStr = ""
+				
 				strswitch(lba.ctrlName)
-					case "scanFields":	
-					case "scanFolders":
+					case "scanFolders":	
+						optionStr = "GoTo"
 					case "scanGroups":
+					case "scanFields":
+						
+						If(!strlen(optionStr))
+							optionStr = "GoTo;Stimulus Data;"
+						EndIf
 						
 						If(lba.eventMod == 16 || lba.eventMod == 17)
 							//Goto ROI contextual menu
-							PopupContextualMenu/C=(lba.mouseLoc.h, lba.mouseLoc.v) "GoTo;"
+							PopupContextualMenu/C=(lba.mouseLoc.h, lba.mouseLoc.v) optionStr
+							
 							If(V_flag)
-								strswitch(lba.ctrlName)	
-									case "scanFolders":
-										String folderPath = "root:Scans:" + ScanFolderListWave[row]
+								strswitch(S_selection)
+									case "GoTo":
+										strswitch(lba.ctrlName)	
+											case "scanFolders":
+												String folderPath = "root:Scans:" + ScanFolderListWave[row]
+												break
+											case "scanGroups":
+												String scanFolder = SelectedScanFolder()
+												folderPath = "root:Scans:" + scanFolder + ":" + ScanGroupListWave[row]
+												break
+											case "scanFields":
+												String scanfieldPath = ScanFieldListWave[row][0][1]
+												folderPath = ParseFilePath(1,scanfieldPath,":",1,0)
+												break
+										endswitch
+									
+										ModifyBrowser collapseAll//close all folders first
+										CreateBrowser //activates the data browser focus
+										ModifyBrowser setDataFolder = folderPath
+										
+										If(!cmpstr(lba.ctrlName,"scanFields"))
+											ModifyBrowser clearSelection,selectList=scanfieldPath //selects waves 
+										EndIf
+										
 										break
-									case "scanGroups":
-										String scanFolder = SelectedScanFolder()
-										folderPath = "root:Scans:" + scanFolder + ":" + ScanGroupListWave[row]
-										break
-									case "scanFields":
-										String scanfieldPath = ScanFieldListWave[row][0][1]
-										folderPath = ParseFilePath(1,scanfieldPath,":",1,0)
+									case "Stimulus Data":
+										strswitch(lba.ctrlName)	
+											case "scanGroups":
+												scanFolder = SelectedScanFolder()
+												String infoPath = "root:Scans:" + scanFolder + ":" + ScanGroupListWave[row] + ":scanInfo"
+												break
+											case "scanFields":
+												scanfieldPath = ScanFieldListWave[row][0][1]
+												infoPath = ParseFilePath(1,scanfieldPath,":",1,0) + "scanInfo"
+												break
+										endswitch
+										
+										//Get the scan info wave
+										Wave/T info = $infoPath
+										
+										If(!WaveExists(info))
+											return 0
+										EndIf
+										
+										Variable index = tableMatch("Stimulus Path",info)
+										If(index != -1)
+											String stimPath = info[index][1]
+										Else
+											return 0
+										EndIf
+										
+										If(!strlen(stimPath))
+											return 0
+										EndIf
+										
+										Variable fileID					
+										HDF5OpenFile/R fileID as stimPath
+			
+										If(V_flag == -1) //cancelled
+											break
+										EndIf
+										
+										//Retrieve stimulus data							
+										Wave/T stimData = GetStimulusData(fileID)
+										If(WaveExists(stimData))
+											DoWindow/W=StimData StimData
+											If(!V_flag)
+												Edit/K=1/N=StimData/W=(0,0,250,400)	 stimData as "Stimulus Data"
+											Else
+												DoWindow/F/W=StimData StimData
+											EndIf
+										EndIf
+										
+										HDF5CloseFile/A fileID
 										break
 								endswitch
-							
-								ModifyBrowser collapseAll//close all folders first
-								CreateBrowser //activates the data browser focus
-								ModifyBrowser setDataFolder = folderPath
-								
-								If(!cmpstr(lba.ctrlName,"scanFields"))
-									ModifyBrowser clearSelection,selectList=scanfieldPath //selects waves 
-								EndIf
+																
 							EndIf
 						EndIf
 					break
@@ -2599,6 +2684,7 @@ Function HandleSelectionRightClick(selection,software,ROIListWave,ROISelWave)
 				
 				If(!cmpstr(moveToROI,"New Group"))
 					If(i == 0)
+						SetDataFolder $baseROIPath
 						moveToROI = UniqueName("Group",11,0)
 						NewDataFolder $(baseROIPath + moveToROI)
 					EndIf
@@ -2704,8 +2790,8 @@ Function siButtonProc(ba) : ButtonControl
 						SetWindow SIDisplay hook(zoomScrollHook) = $""
 					EndIf
 
-					SetVariable roiWidth,win=SIDisplay#ROIPanel,pos={2,35},size={60,20},bodywidth=30,title="Width",font=$LIGHT,limits={2,inf,1},value=ROI_Width,disable=1
-					SetVariable roiHeight,win=SIDisplay#ROIPanel,pos={2,55},size={60,20},bodywidth=30,title="Height",font=$LIGHT,limits={2,inf,1},value=ROI_Height,disable=1
+					SetVariable roiWidth,win=SIDisplay#ROIPanel,pos={2,35},size={60,20},bodywidth=30,title="Width",font=$LIGHT,limits={0.5,inf,1},value=ROI_Width,disable=1
+					SetVariable roiHeight,win=SIDisplay#ROIPanel,pos={2,55},size={60,20},bodywidth=30,title="Height",font=$LIGHT,limits={0.5,inf,1},value=ROI_Height,disable=1
 					SetVariable ROIname win=SIDisplay#ROIPanel,pos={3,35},size={93,20},font=$LIGHT,value=_STR:"",title="Name",disable=0
 					
 					updateImageBrowserLists()
@@ -3047,13 +3133,13 @@ Function siButtonProc(ba) : ButtonControl
 					
 					String stimFileList = IndexedFile(scanPath,-1,".h5")
 					//See if there is a corresponding stimulus h5 file
-					For(i=0;i<ItemsInList(fileList,";");i+=1)
+					For(i=0;i<ItemsInList(stimFileList,";");i+=1)
 						String stimFile = StringFromList(i,stimFileList,";")
 						String matchedFile = RemoveEnding(stimFile,".h5") + ".tif"
 						Variable index = WhichListItem(matchedFile,fileList,";")
 						
 						If(index == -1)
-							break
+							continue
 						EndIf
 						
 						String stimName = GetStimGenParameter(ScanLoadPath,stimFile,"Name")
@@ -3169,6 +3255,7 @@ Function siCheckBoxProc(cba) : CheckBoxControl
 				case "CumulativeScale":
 					NVAR scaleCumulative = NTSI:scaleCumulative
 					scaleCumulative = checked
+					break
 				case "monitorScans":
 					SVAR scanMonitorPath = NTSI:scanMonitorPath
 					SVAR ScanLoadPath = NTSI:ScanLoadPath
@@ -3344,6 +3431,11 @@ Function siVarProc(sva) : SetVariableControl
 					break
 				case "dynamicROISize":
 					SVAR dynamicROI_Image = NTSI:dynamicROI_Image
+					
+					If(!strlen(dynamicROI_Image))
+						return 0
+					EndIf
+					
 					Wave theImage = $dynamicROI_Image
 					NVAR isDynamicROI = NTSI:isDynamicROI
 					
@@ -3358,7 +3450,7 @@ Function siVarProc(sva) : SetVariableControl
 					break
 				case "scanFieldMatch":
 					//refreshes the list boxes in case of any deleted or loaded scans
-					updateImageBrowserLists()
+					updateImageBrowserLists(skipROIList = 1)
 					
 					//Matches the scan fields according to the match string
 					matchScanFields(sval)
@@ -3830,6 +3922,7 @@ Function/WAVE CreateROI(left,top,right,bottom,[group,baseName,autoName])
 	
 	//Make a new ROI group if selected
 	If(!cmpstr(group,"**NEW**"))
+		SetDataFolder $roiFolder
 		group = UniqueName("Group",11,0)
 		NewDataFolder $(roiFolder + group)
 	EndIf
@@ -5485,6 +5578,7 @@ Function CreateDrawnROI(drawROIX,drawROIY,target,group,baseName)
 	
 	//Make a new ROI group if selected
 	If(!cmpstr(group,"**NEW**"))
+		SetDataFolder $roiFolder
 		group = UniqueName("Group",11,0)
 		NewDataFolder $(roiFolder + group)
 	EndIf
@@ -5571,6 +5665,7 @@ Function CreateROIGrid(w,h,threshold,target,group,baseName)
 	
 	//Make a new ROI group if selected
 	If(!cmpstr(group,"**NEW**"))
+		SetDataFolder $roiFolder
 		group = UniqueName("Group",11,0)
 		NewDataFolder $(roiFolder + group)
 	EndIf
@@ -6424,11 +6519,26 @@ Function/WAVE GetMaxProj(imageList[,noReplace])
 		
 		String outName = "maxProj" + num2str(i)
 		
-		MatrixOP/O NTSI:$outName = sumBeams(theImage)
-		Wave maxProj = NTSI:$outName
+		Variable numDims = WaveDims(theImage)
 		
-		Redimension/S maxProj //must be 32 bit float to be divided by 200 
-		maxProj /= DimSize(theImage,2)
+		If(numDims == 3)
+			MatrixOP/O NTSI:$outName = sumBeams(theImage)
+			Wave maxProj = NTSI:$outName
+		
+			Redimension/S maxProj //must be 32 bit float to be divided by frame number
+			maxProj /= DimSize(theImage,2)
+		ElseIf(numDims == 4)
+			//max project along the fourth dimension
+			Variable j, numLayers = DimSize(theImage,2)
+			Make/FREE/N=(DimSize(theImage,0),DimSize(theImage,1),DimSize(theImage,3)) temp
+			Make/O/N=(DimSize(theImage,0),DimSize(theImage,1),numLayers) NTSI:$outName/Wave=maxProj
+			Redimension/S maxProj
+			For(j=0;j<numLayers;j+=1)
+				Multithread temp = theImage[p][q][j][r]
+				MatrixOP/FREE theSum = sumbeams(temp)
+				Multithread maxProj[][][j] = theSum[p][q][0] / DimSize(theImage,3)
+			EndFor
+		EndIf
 		
 		CopyScales/P theImage,maxProj
 		

@@ -41,20 +41,20 @@ Function ntListBoxProc(lba) : ListBoxControl
 			//reset the drag and drop variable on a mouse up
 			dragging = 0
 			
-			If(row > DimSize(selWave,0) - 1 || row == -1)
-				break
-			EndIf
-			
-			strswitch(lba.ctrlName)
-				case "MatchListBox":
-				case "DataSetWavesListBox":
-					DrawAction/W=NT getGroup=fullPathText,delete
-					SetDrawEnv/W=NT fname=$LIGHT,fstyle=2,fsize=10,xcoord=abs,ycoord=abs, textxjust= 0,gname=fullPathText,gstart
-					DrawText/W=NT 14,464,listWave[row][0][1]
-					SetDrawEnv/W=NT gstop
-					break
-			endswitch
-			
+//			If(row > DimSize(selWave,0) - 1 || row == -1)
+//				break
+//			EndIf
+//			
+//			strswitch(lba.ctrlName)
+//				case "MatchListBox":
+//				case "DataSetWavesListBox":
+//					DrawAction/W=NT getGroup=fullPathText,delete
+//					SetDrawEnv/W=NT fname=$LIGHT,fstyle=2,fsize=10,xcoord=abs,ycoord=abs, textxjust= 0,gname=fullPathText,gstart
+//					DrawText/W=NT 14,464,listWave[row][0][1]
+//					SetDrawEnv/W=NT gstop
+//					break
+//			endswitch
+			drawFullPathText()
 			break
 		case 3: // double click
 			If(HandleLBDoubleClick(lba))
@@ -951,6 +951,17 @@ Function HandleButtonClick(ba)
 			//Copy the string to the clipboard
 			PutScrapText str
 			break
+		case "editSaveNames":
+			Wave/T savedNameTable = NTF:savedNameTable
+			If(!WaveExists(savedNameTable))
+				Make/N=(0,2)/T/O NTF:savedNameTable /Wave = savedNameTable
+			EndIf
+			
+			Edit savedNameTable
+			break
+		case "deleteSuffix":
+			RunCmd("delSuffix")
+			break
 	endswitch
 	return errorCode
 End
@@ -1079,6 +1090,29 @@ Function ntExtParamProc(sva) : SetVariableControl
 	endswitch	
 	return 0
 End
+
+//Handles external function checkboxes
+Function ntExtParamCheckProc(cba) : CheckBoxControl
+	STRUCT WMCheckboxAction &cba
+	
+	String name = cba.ctrlName
+	Variable paramIndex = ExtFuncParamIndex(name)
+	
+	String func = CurrentExtFunc()
+	String type = getParam("PARAM_" + num2str(paramIndex) + "_TYPE",func)
+			
+	switch( cba.eventCode )
+		case 2: // mouse up
+			Variable checked = cba.checked
+			setParam("PARAM_" + num2str(paramIndex) + "_VALUE",func,num2str(checked))
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
 
 //POP UP MENUS---------------------------
 Function ntPopMenuProc(pa) : PopupMenuControl

@@ -1,5 +1,6 @@
 ﻿#pragma TextEncoding = "UTF-8"
 #pragma rtGlobals=3		// Use modern global access method and strict wave access.
+#include <Multi-peak fitting 2.0>
 
 //RESERVED FUNCTION, don't change or remove. 
 Function ArrangeProcWindows()
@@ -16,9 +17,9 @@ End
 //Functions without the 'NT_' prefix aren't included in the list, and can be used as subroutines
 	//for the main 'NT_' functions. 
 	
-Function NT_BensFunction(suffix,DS_myDataset,DS_myDataset2)
+Function NT_SumWaves(suffix,DS_Data)
 	String suffix 
-	String DS_myDataset,DS_myDataset2
+	String DS_Data
 	
 	//Data set info structure
 	STRUCT ds ds 
@@ -30,10 +31,17 @@ Function NT_BensFunction(suffix,DS_myDataset,DS_myDataset2)
 	ds.wsi = 0
 	
 	//Name of the output wave that will hold the results
-	String outputName = NameOfWave(ds.waves[0]) + "_out"
+	If(!strlen(suffix))
+		suffix = "sum"
+	EndIf 
 	
-	//Make the output wave 
-	Make/O/N=(DimSize(ds.waves[0],0),DimSize(ds.waves[0],1),DimSize(ds.waves[0],2)) $outputName/Wave = outWave
+	String outputName = NameOfWave(ds.waves[0]) + "_" + suffix
+	
+	//Make the output wave, ensuring proper dimensioning out to 4D
+	SetDataFolder GetWavesDataFolder(ds.waves[0],1)
+	
+	Make/O/N=(DimSize(ds.waves[0],0),DimSize(ds.waves[0],1),DimSize(ds.waves[0],2),DimSize(ds.waves[0],3)) $outputName/Wave = outWave
+	Multithread outWave = 0
 	
 	//Function Loop
 	Do
@@ -41,11 +49,12 @@ Function NT_BensFunction(suffix,DS_myDataset,DS_myDataset2)
 		Wave theWave = ds.waves[ds.wsi]
 		
 		//YOUR CODE GOES HERE....
-		print NameOfWave(theWave) + "_" + suffix
-		
+		Multithread outWave += theWave
 		
 		ds.wsi += 1
 	While(ds.wsi < ds.numWaves)
+	
+	CopyScales/P theWave,outWave
 	
 End
 
@@ -507,5 +516,602 @@ Function NT_Normalize(DS_Data,startTm,endTm)
 		
 		ds.wsi += 1
 	While(ds.wsi < ds.numWaves)
+	
+End
+
+//Generates a custom color table for a green to magenta fade
+Function NT_CustomColorTable(menu_firstColor,menu_secondColor,alpha)
+	String menu_firstColor,menu_secondColor
+	Variable alpha
+	
+	//Menu items
+	String menu_firstColor_List = "Red;Green;Blue;Yellow;Orange;White;Black;Magenta;Cyan;"
+	String menu_secondColor_List = "Red;Green;Blue;Yellow;Orange;White;Black;Magenta;Cyan;"
+	
+	//percentage alpha
+	If(alpha <= 1)
+		alpha = round(0xffff * alpha)
+	EndIf
+	
+	DFREF saveDF = GetDataFolderDFR()
+	
+	If(!DataFolderExists("root:Packages:NT:CustomColors"))
+		NewDataFolder root:Packages:NT:CustomColors
+	EndIf
+		
+	DFREF cc = root:Packages:NT:CustomColors
+	SetDataFolder cc
+	
+	Make/U/W/O/N=(256,4) cc:$(menu_firstColor + menu_secondcolor)/Wave = color
+	
+	Variable startR,startG,startB,endR,endG,endB
+	
+	strswitch(menu_firstColor)
+		case "Green":
+			startR = 0
+			startG = 0xffff
+			startB = 0		
+			break
+		case "Blue":
+			startR = 0
+			startG = 0
+			startB = 0xffff
+			break
+		case "Red":
+			startR = 0xffff
+			startG = 0
+			startB = 0
+			break
+		case "Yellow":
+			startR = 0xffff
+			startG = 0xffff
+			startB = 0
+			break
+		case "Orange":
+			startR = 0xffff
+			startG = 0.64 * 0xffff
+			startB = 0
+			break		
+		case "White":
+			startR = 0xffff
+			startG = 0xffff
+			startB = 0xffff
+			break
+		case "Black":
+			startR = 0
+			startG = 0
+			startB = 0
+			break
+		case "Magenta":
+			startR = 0xffff
+			startG = 0
+			startB = 0xffff
+			break
+		case "Cyan":
+			startR = 0
+			startG = 0xffff
+			startB = 0xffff
+			break
+	endswitch
+	
+	strswitch(menu_secondColor)
+		case "Green":
+			endR = 0
+			endG = 0xffff
+			endB = 0
+			break
+		case "Blue":
+			endR = 0
+			endG = 0
+			endB = 0xffff
+			break
+		case "Red":
+			endR = 0xffff
+			endG = 0
+			endB = 0
+			break
+		case "Yellow":
+			endR = 0xffff
+			endG = 0xffff
+			endB = 0
+			break
+		case "Orange":
+			endR = 0xffff
+			endG = 0.64 * 0xffff
+			endB = 0
+			break		
+		case "White":
+			endR = 0xffff
+			endG = 0xffff
+			endB = 0xffff
+			break	
+		case "Black":
+			endR = 0
+			endG = 0
+			endB = 0
+			break	
+		case "Magenta":
+			endR = 0xffff
+			endG = 0
+			endB = 0xffff
+			break
+		case "Cyan":
+			endR = 0
+			endG = 0xffff
+			endB = 0xffff
+			break
+	endswitch
+	
+	//Assign the colors and alpha
+	color[][0] = startR + ((endR - startR) / 255) * x
+	color[][1] = startG + ((endG - startG) / 255) * x
+	color[][2] = startB + ((endB - startB) / 255) * x
+	color[][3] = alpha
+	
+	SetDataFolder saveDF
+End
+
+//Averages along the 4th dimension (chunks)
+Function NT_Average4D(DS_Data)
+	String DS_Data
+	
+	//Data set info structure
+	STRUCT ds ds 
+	
+	//Fills the data set structure
+	GetStruct(ds)
+	
+	//Reset wave set index
+	ds.wsi = 0
+	
+	Variable i,j
+		
+	//Function Loop
+	Do
+		//declare each wave in the wave set
+		Wave theWave = ds.waves[ds.wsi]
+		
+		SetDataFolder GetWavesDataFolder(theWave,1)
+		
+		//YOUR CODE GOES HERE....
+		Variable rows = DimSize(theWave,0)
+		Variable cols = DimSize(theWave,1)
+		Variable layers = DimSize(theWave,2)
+		Variable chunkSize = DimSize(theWave,3)
+		
+		//Must be a 4D wave
+		If(!chunkSize)
+			continue
+		EndIf
+		
+		Make/O/N=(rows,cols,layers)/S $NameOfWave(theWave) + "_avg"/Wave=outWave
+		CopyScales/I theWave,outWave
+		Multithread	outWave = 0
+		
+		For(i=0;i<layers;i+=1)
+			For(j=0;j<chunkSize;j+=1)
+				Multithread outWave[][][i] += theWave[p][q][i][j]
+			EndFor
+		EndFor
+		
+		Multithread outWave /= chunkSize
+			
+		ds.wsi += 1
+	While(ds.wsi < ds.numWaves)
+	
+End
+
+
+//Sums image data so that the view is XZ projection
+Function NT_ProjectXZ(DS_Data)
+	String DS_Data
+	
+	//Data set info structure
+	STRUCT ds ds 
+	
+	//Fills the data set structure
+	GetStruct(ds)
+	
+	//Reset wave set index
+	ds.wsi = 0
+	
+	Variable i,j
+		
+	//Function Loop
+	Do
+		//declare each wave in the wave set
+		Wave theWave = ds.waves[ds.wsi]
+		
+		SetDataFolder GetWavesDataFolder(theWave,1)
+		
+		//YOUR CODE GOES HERE....
+		Variable rows = DimSize(theWave,0)
+		Variable cols = DimSize(theWave,1)
+		Variable layers = DimSize(theWave,2)
+		
+		//Must be a 3D wave
+		If(!layers)
+			continue
+		EndIf
+		
+		
+		Make/O/N=(rows,layers)/S $NameOfWave(theWave) + "_XZ"/Wave=outWave
+		Multithread	outWave = 0
+		
+		//rotate image to XZY
+		MatrixOP/O/FREE xzy = transposeVol(theWave,1)
+		
+		//project the z plane
+		MatrixOP/O outWave = sumbeams(xzy)
+		
+		CopyScales/P theWave,outWave
+		SetScale/P y,0,DimDelta(theWave,2),"m",outWave
+		
+		ds.wsi += 1
+	While(ds.wsi < ds.numWaves)
+	
+End
+
+//Double peak or single peak?
+Function NT_CrossTalk(DS_Data,menu_Arbor,startTm,endTm,smoothFactor,peakThreshold,NameTruncate)
+	String DS_Data,menu_Arbor
+	Variable startTm,endTm,smoothFactor,peakThreshold
+	Variable NameTruncate
+	
+	String menu_Arbor_List = "ON;OFF;"
+	
+	//Data set info structure
+	STRUCT ds ds 
+	
+	//Button control structure to get in between
+	STRUCT MPFitInfoStruct MPStruct
+	
+	//Fills the data set structure
+	GetStruct(ds)
+	
+	//Reset wave set index
+	ds.wsi = 0
+	
+//	//Name of the output wave that will hold the results
+//	String outputName = NameOfWave(ds.waves[0]) + "_out"
+//	
+//	//Make the output wave 
+//	Make/O/N=(DimSize(ds.waves[0],0),DimSize(ds.waves[0],1),DimSize(ds.waves[0],2)) $outputName/Wave = outWave
+	
+	If(!DataFolderExists("root:Packages:NT:MultiPeak"))
+		NewDataFolder root:Packages:NT:MultiPeak
+	EndIf
+	
+	String DFpath = "root:Packages:NT:MultiPeak"
+	SetDataFolder $DFpath
+	
+	String path = ParseFilePath(1,GetWavesDataFolder(ds.waves[0],1),":",1,0)
+	
+	String prefix = ParseFilePath(1,NameOfWave(ds.waves[0]),"_",0,NameTruncate)
+	
+	Make/O/N=(ds.numWaves) $(path + prefix + "Crossover")/Wave=crossover //ratio of the peak amplitudes
+	Make/O/N=(ds.numWaves) $(path + prefix +"FirstPeak")/Wave=firstPeak //first peak amplitude
+	Make/O/N=(ds.numWaves) $(path + prefix + "SecPeak")/Wave=secPeak //second peak amplitude
+	
+	//Function Loop
+	Do
+		//declare each wave in the wave set
+		Wave theWave = ds.waves[ds.wsi]
+		path = GetWavesDataFolder(theWave,1)
+
+		//Each ROI gets its own PeakFits subfolder to hold all of the output waves		
+		If(!DataFolderExists(path + "PeakFits"))
+			NewDataFolder $(path + "PeakFits")
+		EndIf
+		
+		String peakPath = path + "PeakFits"
+		
+		//Baseline coefficient wave
+		Wave/Z cwave = $(DFPath+":'Baseline Coefs'")
+		if (!WaveExists(cwave))
+			Make/O/D/N=1 $(DFPath+":'Baseline Coefs'")
+		endif
+		
+		//Multi-peak fitting
+		Variable npks = AutoFindPeaks(theWave, x2pnt(theWave,startTm),  x2pnt(theWave,endTm), 0.02, smoothFactor, Inf)		// Empirically these settings do well
+		Wave wpi = W_AutoPeakInfo
+		
+		//Convert the results to scaled amplitudes and times
+		AdjustAutoPeakInfoForX(wpi, theWave,  $"")
+		
+		//Sort so the peaks are in order
+		Make/D/N=(DimSize(wpi, 0))/O MPF2_sortwave, MPF2_indexwave
+		MPF2_sortwave = wpi[p][0]
+		MakeIndex MPF2_sortwave, MPF2_indexwave
+		SortColumns keyWaves={MPF2_indexwave},sortWaves={wpi}	
+		KillWaves MPF2_sortwave,MPF2_indexwave
+		
+		npks = TrimAmpAutoPeakInfo(wpi,0.05)
+		
+		Variable i
+		//Coefficient waves for the peaks and initial guesses for a Gaussian peak fit
+		FUNCREF MPF2_FuncInfoTemplate infoFunc=$("Gauss"+PEAK_INFO_SUFFIX)
+		Variable nparams
+		String GaussGuessConversionFuncName = infoFunc(PeakFuncInfo_GaussConvFName)
+		if (strlen(GaussGuessConversionFuncName) == 0)
+		else
+			FUNCREF MPF2_GaussGuessConvTemplate gconvFunc=$GaussGuessConversionFuncName
+		endif
+		
+		String newWName
+		for (i = 0; i < npks; i += 1)
+			sprintf newWName, "Peak %d Coefs", i
+			Make/D/O/N=(DimSize(wpi, 1)) $newWName
+			Wave w = $newWName
+			w = wpi[i][p]
+			gconvFunc(w)
+		endfor
+		
+		//Fill out the peak fitting structure
+		MPStruct.NPeaks = DimSize(wpi, 0)
+		
+		//Y and optional X wave
+		Wave MPStruct.yWave = theWave
+		Wave/Z MPStruct.xWave = $""
+		
+		//Masks and weighting waves are optionals
+		Wave/Z MPStruct.weightWave = $""
+		Wave/Z MPStruct.maskWave = $""
+		
+		//Start and End ranges
+		MPStruct.XPointRangeBegin = x2pnt(theWave,startTm)
+		MPStruct.XPointRangeEnd = x2pnt(theWave,endTm)
+		
+		//Fit points variable
+		Variable/G $(DFpath + ":MPF2_FitCurvePoints")
+		NVAR MPF2_FitCurvePoints  = $(DFpath + ":MPF2_FitCurvePoints")
+		MPF2_FitCurvePoints = 100
+		MPStruct.FitCurvePoints = MPF2_FitCurvePoints
+		
+		//Baseline Coefficients
+		MPStruct.ListOfFunctions = "Constant;"
+		MPStruct.ListOfCWaveNames = "Baseline Coefs;"	
+		MPStruct.ListOfHoldStrings = ";"
+		
+		For (i = 0; i < MPStruct.NPeaks; i += 1)
+			MPStruct.ListOfCWaveNames += "Peak "+num2istr(i)+" Coefs;"
+			MPStruct.ListOfFunctions += "Gauss;"
+			MPStruct.ListOfHoldStrings += ";"
+		endfor
+		
+		MPStruct.fitOptions = 4
+		
+		//Perform the fit of initial approximation to the data
+		MPF2_DoMPFit(MPStruct, DFPath+":")
+		
+		Wave fitWave = $(DFPath + ":fit_" + NameOfWave(theWave))
+		Duplicate/O fitWave,$(peakPath + ":fit_" + NameOfWave(theWave))
+		
+		//Extract the amplitudes of the fitted peaks
+		Make/O/N=(MPStruct.NPeaks) $(peakPath + ":" + NameOfWave(theWave) + "_peakAmp")/Wave = amp
+		
+		For (i = 0; i < MPStruct.NPeaks; i += 1)
+			String coefName = "'Peak " + num2str(i) + " Coefs'"
+			Wave coef = $(DFpath + ":" + coefName)
+			amp[i] = coef[2]
+		Endfor
+		
+		//Remove values that are negative		
+		amp = (amp < 0) ? nan : amp
+		WaveTransform zapNaNs amp
+		
+		//Remove if there are more than two peaks
+		If(DimSize(amp,0) > 2)
+			amp = nan
+			WaveTransform zapNaNs amp
+		EndIf
+		
+		
+		
+		
+		If(!cmpstr(menu_Arbor,"OFF"))
+			Variable whichPeak = 1
+	
+			//If only one peak was detected, make this the 'second' peak position
+			If(DimSize(amp,0) == 1)
+				Redimension/N=2 amp
+				amp[1] = amp[0]
+				amp[0] = 0
+			EndIf
+	
+		ElseIf(!cmpstr(menu_Arbor,"ON"))
+			whichPeak = 0
+			
+			//If only one peak was detected, make this the 'second' peak position
+			If(DimSize(amp,0) == 1)
+				Redimension/N=2 amp
+				amp[1] = 0
+			EndIf
+		EndIf	
+	
+		//Remove if the peak is less than peakThreshold
+		If(DimSize(amp,0) == 2)
+			If(amp[whichPeak] < peakThreshold)
+				amp = nan
+				WaveTransform zapNaNs amp
+			EndIf
+		EndIf
+
+		//Fraction of first peak relative to the second peak
+		If(!cmpstr(menu_Arbor,"OFF"))
+			If(DimSize(amp,0) == 2)
+				crossover[ds.wsi] = amp[0] / amp[1]
+				firstPeak[ds.wsi] = amp[0]
+				secPeak[ds.wsi] = amp[1]
+			ElseIf(DimSize(amp,0) == 1)
+				crossover[ds.wsi] = 0
+				firstPeak[ds.wsi] = 0
+				secPeak[ds.wsi] = amp[0]
+			Else
+				crossover[ds.wsi] = nan
+				firstPeak[ds.wsi] = nan
+				secPeak[ds.wsi] = nan
+			EndIf
+		Else
+			If(DimSize(amp,0) == 2)
+				crossover[ds.wsi] = amp[1] / amp[0]
+				firstPeak[ds.wsi] = amp[0]
+				secPeak[ds.wsi] = amp[1]
+			ElseIf(DimSize(amp,0) == 1)
+				crossover[ds.wsi] = 0
+				firstPeak[ds.wsi] = amp[0]
+				secPeak[ds.wsi] = 0
+			Else
+				crossover[ds.wsi] = nan
+				firstPeak[ds.wsi] = nan
+				secPeak[ds.wsi] = nan
+			EndIf
+		EndIf
+					
+		ds.wsi += 1
+	While(ds.wsi < ds.numWaves)
+	
+	SetDataFolder $path
+End
+
+Function NT_DefineROIQuadrant(DS_BaseImage,CDF_MI,X_Center,Y_Center,menu_Split,menu_ROI_Group)
+	String DS_BaseImage,CDF_MI
+	Variable X_Center,Y_Center
+	String menu_Split //Should we split the receptive field vertically, horizontally, or diagonally
+	String menu_ROI_Group
+	
+	String menu_Split_List = "Vertical;Horizontal;Diagonal;"
+	
+	//Use the ROI lists as the menu items 
+	String menu_ROI_Group_List = TextWaveToStringList(root:Packages:NT:ScanImage:ROIGroupListWave,";")
+	
+	//Data set info structure
+	STRUCT ds ds 
+	
+	//Fills the data set structure
+	GetStruct(ds)
+
+	//If the data set happens to have more than one image in it, just use the first one
+	Wave theWave = ds.waves[0]
+	
+	If(!WaveExists(theWave))
+		return 0
+	EndIf
+	
+	//Make sure it's a 2D wave
+	If(WaveDims(theWave) < 2)
+		return 0
+	EndIf
+	
+	//Make sure the MI wave is selected and valid
+	Wave/Z MI = $CDF_MI
+	If(!WaveExists(MI))
+		print "Couldn't find the MI Wave"
+		return 0
+	EndIf	
+	
+	//YOUR CODE GOES HERE....
+	
+	Variable rows =  DimSize(theWave,0)
+	Variable cols =  DimSize(theWave,1)
+	
+	//Resolve the X center point
+	If(X_Center > 1e-3 && X_Center < 1) //above scale of the image (mm not microns) means its a fractional input
+		Variable xTurn = IndexToScale(theWave,DimSize(theWave,0) * X_Center,0)
+	Else
+		//Make sure center point is actually within the range of the images
+		Variable index = ScaleToIndex(theWave,X_Center,0)
+		If(index > rows || index < 0)
+			Abort "Turn center point was not within the image scale"
+		EndIf
+		
+		xTurn = X_Center
+	EndIf
+	
+	//Resolve the Y center point
+	If(Y_Center > 1e-3 && Y_Center < 1) //above scale of the image (mm not microns) means its a fractional input
+		Variable yTurn = IndexToScale(theWave,DimSize(theWave,1) * Y_Center,1)
+	Else
+		//Make sure center point is actually within the range of the images
+		index = ScaleToIndex(theWave,Y_Center,1)
+		If(index > cols || index < 0)
+			Abort "Turn center point was not within the image scale"
+		EndIf
+	
+		yTurn = Y_Center
+	EndIf
+	
+	//Get the center XY coordinates of the ROI group
+	String cmdStr = "SI_GetCenter(group = " + menu_ROI_Group + ")"
+	Execute cmdStr
+	
+	Wave xROI = $("root:Packages:NT:ScanImage:ROIs:" + menu_ROI_Group + "_ROIx")
+	Wave yROI = $("root:Packages:NT:ScanImage:ROIs:" + menu_ROI_Group + "_ROIy")
+	
+	If(!WaveExists(xROI) || !WaveExists(yROI))
+		return 0
+	EndIf
+	
+	//Assign each ROI to one side of the image or the other
+	Variable numROIs = DimSize(xROI,0)
+	If(numROIs == 0)
+		return 0
+	EndIf
+	
+	//Name of the output wave that will hold the results
+	SetDataFolder root:Analysis:$menu_ROI_Group
+	String outputName = menu_ROI_Group + "_Sectors"
+	
+	//Make the output wave 
+	Make/O/N=(numROIs) $outputName/Wave = outWave
+	
+	Variable i,count1=0,count2=0
+	For(i=0;i<numROIs;i+=1)
+		Variable ycoord = yROI[i]
+		Variable xcoord = xROI[i]
+		
+		strswitch(menu_Split)
+			case "Vertical":
+				If(i == 0)
+					Make/O/N=1 :top/Wave=out1
+					Make/O/N=1 :bottom/Wave=out2
+				EndIf
+						
+				If(ycoord > yTurn)
+					outWave[i] = 1 //top
+					out1 += MI[i]
+					count1 += 1
+				Else
+					outWave[i] = 0 //bottom
+					out2 += MI[i]
+					count2 += 1
+				EndIf
+				
+				break
+			case "Horizontal":
+				If(i == 0)
+					Make/O/N=1 :left/Wave=out1
+					Make/O/N=1 :right/Wave=out2
+				EndIf
+				
+				If(xcoord < xTurn)
+					outWave[i] = 1 //left
+					out1 += MI[i]
+					count1 += 1
+				Else
+					outWave[i] = 0 //right
+					out2 += MI[i]
+					count2 += 1
+				EndIf
+				
+				break
+			case "Diagonal":
+				
+				break
+		endswitch
+	EndFor
+
+	out1 /= count1
+	out2 /= count2
 	
 End

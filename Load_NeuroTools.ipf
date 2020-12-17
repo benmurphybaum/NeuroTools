@@ -705,7 +705,6 @@ Function/Wave GetExternalFunctionData(param)
 	
 	//function list
 	String funcs = GetExternalFunctions()
-	String keys = "NAME;TYPE;THREADSAFE;RETURNTYPE;N_PARAMS;N_OPT_PARAMS;"
 	
 	//Wave to hold all the function parameter data
 	Redimension/N=(-1,ItemsInList(funcs,";")) param
@@ -713,6 +712,10 @@ Function/Wave GetExternalFunctionData(param)
 	//Will keep track if there are empty variables in the text wave across all functions
 	Variable isEmpty = 0
 	Variable emptySlots = 100
+	
+	//Keeps track of pop up menus
+	Variable isPopMenu = 0
+	String popUpStr = ""
 	
 	//function data
 	For(i=0;i<ItemsInList(funcs,";");i+=1)
@@ -722,9 +725,9 @@ Function/Wave GetExternalFunctionData(param)
 		String info = FunctionInfo("NT_" + theFunction)
 		
 		//Gets the actual code for the beginning of the function to extract parameter names
-		String functionStr = ProcedureText("NT_" + theFunction,0)
-		Variable pos = strsearch(functionStr,")",0)
-		functionStr = functionStr[0,pos]
+		String fullFunctionStr = ProcedureText("NT_" + theFunction,0)
+		Variable pos = strsearch(fullFunctionStr,")",0)
+		String functionStr = fullFunctionStr[0,pos]
 		functionStr = RemoveEnding(StringFromList(1,functionStr,"("),")")
 		
 		//Resize according to the parameter number
@@ -733,16 +736,30 @@ Function/Wave GetExternalFunctionData(param)
 			numParams = 0
 		EndIf
 		
-		If(6 + numParams*3 > DimSize(param,0))
-			Redimension/N=(6 + numParams * 3,-1) param
+		If(6 + numParams*4 > DimSize(param,0))
+			Redimension/N=(6 + numParams * 4,-1) param
 		EndIf
 			
-		For(j=0;j<numParams*3;j+=1)
-			keys += "PARAM_" + num2str(j) + "_TYPE;PARAM_" + num2str(j) + "_NAME;PARAM_" + num2str(j) + "_VALUE;"
+		String keys = "NAME;TYPE;THREADSAFE;RETURNTYPE;N_PARAMS;N_OPT_PARAMS;"
+		
+		For(j=0;j<numParams;j+=1)
+			keys += "PARAM_" + num2str(j) + "_TYPE;PARAM_" + num2str(j) + "_NAME;PARAM_" + num2str(j) + "_ITEMS;PARAM_" + num2str(j) + "_VALUE;"
 		EndFor
 		
+		//Try to find previously created functions
+		Variable col = tableMatch("NT_" + theFunction,param,returnCol=1)
+		
+		//insert the previous column position into the current one, in case of reordering
+		//prevents losing preset values for the parameters when new functions are added
+		If(col != -1)
+			param[][i] = param[p][col]
+		EndIf
+			
+		//Label the dimension for each function column
+		SetDimLabel 1,i,$theFunction,param
+		
 		Variable whichParam = 0
-		For(j=0;j < 6 + numParams*3;j+=1)
+		For(j=0;j < 6 + numParams*4;j+=1)
 			String theKey = StringFromList(j,keys,";")
 			
 			//Label the dimension
@@ -757,14 +774,36 @@ Function/Wave GetExternalFunctionData(param)
 			If(stringmatch(theKey,"*PARAM*NAME*"))
 				param[j][i] = StringFromList(whichParam,functionStr,",")
 				whichParam += 1
+				
+				If(stringmatch(param[j][i],"menu_*"))
+					popUpStr = param[j][i]
+				Else
+					popUpStr = ""
+				EndIf 
+				
+				
+			ElseIf(stringmatch(theKey,"*PARAM*ITEMS*"))
+				If(strlen(popUpStr))
+					param[j][i] = NT_GetPopUpValue(popUpStr,fullFunctionStr)
+				Else
+					param[j][i] = ""
+				EndIf
+			ElseIf(stringmatch(theKey,"*PARAM*VALUE*"))
+				If(strlen(popUpStr))
+					If(!strlen(param[j][i]))
+						param[j][i] = StringFromList(0,param[j-1][i],";")
+					EndIf
+					
+					popUpStr = "" //reset
+				EndIf
 			Else
 				param[j][i] = StringByKey(theKey,info,":",";")
 			EndIf	
 		EndFor
 		
-		Variable diff = DimSize(param,0) - (6 + numParams * 3)
+		Variable diff = DimSize(param,0) - (6 + numParams * 4)
 		If(diff)
-			param[6 + numParams * 3,DimSize(param,0)-1][i] = ""
+			param[6 + numParams * 4,DimSize(param,0)-1][i] = ""
 		EndIf
 		
 		If(diff < emptySlots)
@@ -1287,7 +1326,7 @@ Function CreateControlLists()
 	controlAssignments[3][3] = "WaveSelectorTitle;"
 	
 	controlAssignments[4][0] = "Duplicate Rename"
-	controlAssignments[4][1] = "WaveListSelector;prefixName;groupName;SeriesName;SweepName;TraceName;killOriginals;savedNames;copyToClipboard;"
+	controlAssignments[4][1] = "WaveListSelector;prefixName;groupName;SeriesName;SweepName;TraceName;deleteSuffix;killOriginals;savedNames;copyToClipboard;editSaveNames;"
 	controlAssignments[4][2] = "300"
 	controlAssignments[4][3] = "WaveSelectorTitle;"
 	
@@ -1347,7 +1386,7 @@ Function CreateControlLists()
 	controlAssignments[15][3] = ""
 	
 	controlAssignments[16][0] = "Load Ephys"
-	controlAssignments[16][1] = "BrowseFiles;fileListBox;stimulusData;fileType;"
+	controlAssignments[16][1] = "BrowseFiles;fileType;fileListBox;stimulusData;"
 	controlAssignments[16][2] = "305"
 	controlAssignments[16][3] = ""
 	
@@ -1391,9 +1430,11 @@ Function CreateControls()
 	SetVariable seriesName win=NT,pos={569,100},size={55,20},title=" __",value=_STR:"",disable=1
 	SetVariable sweepName win=NT,pos={624,100},size={55,20},title=" __",value=_STR:"",disable=1
 	SetVariable traceName win=NT,pos={679,100},size={55,20},title=" __",value=_STR:"",disable=1
-	Checkbox killOriginals win=NT,pos={464,120},size={100,20},title="Kill Originals",value=0,disable=1
-	PopUpMenu savedNames win=NT,pos={464,150},size={100,20},title="Saved Names",value=#"root:Packages:NT:savedNameList",disable=1
-	Button copyToClipboard win=NT,pos={464,170},size={100,20},title="To Clipboard",disable=1,proc=ntButtonProc
+	Button deleteSuffix win=NT,pos={464,120},size={100,20},title="Delete Suffix",disable=1,proc=ntButtonProc
+	Checkbox killOriginals win=NT,pos={464,150},size={100,20},title="Kill Originals",value=0,disable=1
+	Button editSaveNames win=NT,pos={464,305},size={120,20},title="Edit Saved Names",disable=1,proc=ntButtonProc
+	PopUpMenu savedNames win=NT,pos={464,180},size={100,20},title="Saved Names",value=#"root:Packages:NT:savedNameList",disable=1	
+	Button copyToClipboard win=NT,pos={464,220},size={100,20},title="To Clipboard",disable=1,proc=ntButtonProc
 	
 	//SET WAVE NOTE
 	SetVariable waveNote win=NT,size={274,0},pos={460,100},font=$LIGHT,fsize=12,title="Note:",value=_STR:"",disable=1

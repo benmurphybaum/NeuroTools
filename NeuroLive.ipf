@@ -319,7 +319,7 @@ Static Function/Wave GetExternalFunctionData(param)
 End
 
 //Finds the pop up menu values from the code
-Function/S GetPopUpValue(popUpStr,functionStr)
+Static Function/S GetPopUpValue(popUpStr,functionStr)
 	String popUpStr,functionStr
 	String values = ""
 	
@@ -2957,6 +2957,92 @@ Function NL_DSPlot(menu_Angles,menu_Measurement,Output_Name)
 	//display the tuning curve
 	DisplayOutput(ds)
 	
+End
+
+//Generates a tuning curve for input data, returns a vector summation DSI and Angle
+Function NL_RFPlot(menu_Measurement,X_Start,X_End,Y_Start,Y_End,Output_Name)
+	
+	//declare any additional custom variables
+	String menu_Measurement
+	Variable X_Start,X_End,Y_Start,Y_End
+	String Output_Name
+		
+	String menu_Measurement_List = "# Spikes;Peak Spike Rate;Peak;Area;"
+	
+	//declare the structure paramStruct, which already contains the built-in parameters
+	STRUCT paramStruct s
+	GetParams(s)
+	
+	Variable i
+
+	//First wave in the set
+	If(DimSize(s.waves,0) == 0)
+		return 0
+	EndIf
+	
+	//Set the current data folder to the first wave
+	SetDataFolder GetWavesDataFolder(s.waves[0],1)
+	
+	//Create the ds tuning output wave
+	If(!strlen(Output_Name))
+		Output_Name = NameOfWave(s.waves[0]) + "_RF"
+	EndIf
+	
+	Make/N=(s.numWaves)/O $(Output_Name + "_X"),$(Output_Name + "_Y")
+	Wave rfx = $(Output_Name + "_X")
+	Wave rfy = $(Output_Name + "_Y")
+	
+	Variable halfway = s.numWaves/2
+	
+	//Loop through each wave in the wave list, and get its peak w/ possible background subtraction	
+	For(i=0;i<DimSize(s.paths,0);i+=1)
+		
+		//current wave in the list
+		Wave theWave = s.waves[i]
+		
+		strswitch(menu_Measurement)
+			case "# Spikes":
+				rfx[i] = GetSpikeCount(theWave,s.threshold,startTm=s.startTm,endTm=s.endTm)
+				break
+			case "Peak Spike Rate":
+				break
+			case "Peak":
+				//get the peak, taken as the average over the selected range
+				If(s.bRange)
+					rfx[i] = mean(theWave,s.startTm,s.endTm) - mean(theWave,s.bstartTm,s.bendTm)
+				Else
+					rfx[i] = mean(theWave,s.startTm,s.endTm)
+				EndIf
+				break
+			case "Area":
+				//get the peak, taken as the average over the selected range
+				If(s.bRange)
+					rfx[i] = area(theWave,s.startTm,s.endTm) - mean(theWave,s.bstartTm,s.bendTm)
+				Else
+					rfx[i] = area(theWave,s.startTm,s.endTm)
+				EndIf
+				
+				break
+			default:
+				break
+		endswitch
+
+	EndFor
+	
+
+	rfy = rfx
+	Redimension/N=(halfway) rfx
+	DeletePoints/M=0 0,halfway,rfy
+	
+	SetScale/I x,X_Start,X_End,"m",rfx
+	SetScale/I x,Y_Start,Y_End,"m",rfy
+	
+	SetScale/I y,0,1,"# Spikes",rfx
+	SetScale/I y,0,1,"# Spikes",rfy
+	
+	//display the tuning curve
+	DisplayOutput(rfx)
+	DisplayOutput(rfy)
 End
 
 

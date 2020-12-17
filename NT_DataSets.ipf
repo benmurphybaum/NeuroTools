@@ -608,6 +608,10 @@ Function/S GetWaveSetList(listWave,wsn,fullPath)
 	
 	Wave/T ws = GetWaveSet(listWave,wsn)
 	
+	If(!WaveExists(ws))
+		return ""
+	EndIf
+	
 	list = TextWaveToStringList(ws,";",layer=fullPath)
 	return list
 End
@@ -632,6 +636,12 @@ Function/WAVE GetWaveSetRefs(listWave,wsn)
 		
 	For(i=0;i<numDataSets;i+=1)
 		Make/FREE/O/T/N=(DimSize(listWave,0),1,2) currentDS
+		
+		If(!DimSize(currentDS,0))
+			Redimension/N=(0,-1) ds_waveRefs
+			return ds_waveRefs
+		EndIf
+		
 		currentDS = listWave[p][i][r]
 		
 		//current data set
@@ -662,6 +672,11 @@ Function isEmptyWaveSet(listwave,wsn)
 	Wave/Z/T ws = GetWaveSet(listWave,wsn)
 	
 	If(!WaveExists(ws))
+		isEmpty = 1
+		return isEmpty
+	EndIf
+	
+	If(DimSize(ws,0) == 0)
 		isEmpty = 1
 		return isEmpty
 	EndIf
