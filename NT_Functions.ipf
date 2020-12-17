@@ -1535,6 +1535,16 @@ Function NT_Load_WaveSurfer(String fileList[,String channels])
 		
 		folder = ReplaceString(" ",folder,"")
 		
+		//Check if the parent folder starts with a number or character (Igor requires a character)
+		String lastFolder = ParseFilePath(0,folder,":",1,0)
+		String firstChar = lastFolder[0]
+		Variable numCheck = str2num(firstChar)
+		
+		If(numtype(numCheck) != 2)
+			lastFolder = "Cell_" + lastFolder
+			folder = ReplaceListItem(ItemsInList(folder,":")-1,folder,":",lastFolder)
+		EndIf
+		
 		If(!DataFolderExists(folder))
 			NewDataFolder $folder
 		EndIf

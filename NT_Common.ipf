@@ -4276,6 +4276,60 @@ Function refineStimDataTable(stimData,attrList)
 	
 End
 
+Function fillTrajectoryAssignments(stimData,attrList,fileID)
+	Wave/T stimData
+	String attrList
+	Variable fileID
+	
+	Variable index = tableMatch("trajectory",stimData)
+	If(index != -1)
+		String trajName = stimData[index][1]
+	Else
+		return 0
+	EndIf
+	
+	//If no trajectory is assigned, return
+	If(!cmpstr(trajName,"None"))
+		return 0
+	EndIf
+	
+	//Load the contents of the trajectory
+	String theTrajectory = getTrajectory(trajName,fileID)
+	
+	If(!strlen(theTrajectory))
+		return 0
+	EndIf
+	
+	
+	
+End
+
+Function/S getTrajectory(trajName,fileID)
+	String trajName
+	Variable fileID
+	String theTrajectory = ""
+	
+	String path = "/StimGen/Trajectories"
+	HDF5LoadData/Z/Q/O/A=trajName/TYPE=1/N=stimData fileID, path
+	
+	If(strlen(S_waveNames))
+		Wave/T data = $StringFromList(0,S_waveNames,";")
+		theTrajectory = data[0]
+		KillWaves/Z data
+	EndIf
+	
+	//format the trajectory into readable list
+	theTrajectory = ReplaceString("{",theTrajectory,"")
+	theTrajectory = ReplaceString("}",theTrajectory,"")
+	theTrajectory = ReplaceString("'",theTrajectory,"")
+	theTrajectory = ReplaceString("[",theTrajectory,"")
+	theTrajectory = ReplaceString("]",theTrajectory,"")
+	theTrajectory = ReplaceString(" ",theTrajectory,"")
+	theTrajectory = ReplaceString(",duration",theTrajectory,";duration")
+	
+	return theTrajectory
+End
+
 Function fillSequenceAssignments(stimData,attrList,fileID)
 	Wave/T stimData
 	String attrList
@@ -4369,5 +4423,8 @@ Function cleanStimData(stimData,fileID)
 	
 	//Fill out any sequence assignments
 	fillSequenceAssignments(stimData,attrList,fileID)
+	
+	//Fill out any trajectory assignments
+	fillTrajectoryAssignments(stimData,attrList,fileID)
 	
 End

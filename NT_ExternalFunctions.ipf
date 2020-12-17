@@ -1042,7 +1042,7 @@ Function NT_DefineROIQuadrant(DS_BaseImage,CDF_MI,X_Center,Y_Center,menu_Split,m
 	EndIf
 	
 	//Get the center XY coordinates of the ROI group
-	String cmdStr = "SI_GetCenter(group = " + menu_ROI_Group + ")"
+	String cmdStr = "SI_GetCenter(group = \"" + menu_ROI_Group + "\")"
 	Execute cmdStr
 	
 	Wave xROI = $("root:Packages:NT:ScanImage:ROIs:" + menu_ROI_Group + "_ROIx")
