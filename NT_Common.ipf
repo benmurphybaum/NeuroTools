@@ -4300,10 +4300,27 @@ Function fillTrajectoryAssignments(stimData,attrList,fileID)
 		return 0
 	EndIf
 	
+	String angle = StringByKey("angle",theTrajectory,":",";")
+	String duration = StringByKey("duration",theTrajectory,":",";")
 	
+	Variable numAngles = ItemsInList(angle,",")
+	Variable i
+	
+	For(i=0;i<numAngles;i+=1)
+		Variable angleNum = str2num(StringFromList(i,angle,","))
+		
+		//Is the angle a number or text?
+		If(numtype(angleNum) == 2)
+		
+		Else
+		
+		
+		EndIf
+	EndFor
 	
 End
 
+//Returns the angle and duration in a key-value list of the named trajectory
 Function/S getTrajectory(trajName,fileID)
 	String trajName
 	Variable fileID
