@@ -4300,6 +4300,12 @@ Function fillTrajectoryAssignments(stimData,attrList,fileID)
 		return 0
 	EndIf
 	
+	//Add the trajectory to the stim data wave
+	Variable rows = DimSize(stimData,0)
+	Redimension/N=(rows + 1,-1) stimData
+	stimData[rows][0] = trajName
+	stimData[rows][1] = theTrajectory
+	
 	String angle = StringByKey("angle",theTrajectory,":",";")
 	String duration = StringByKey("duration",theTrajectory,":",";")
 	
@@ -4307,14 +4313,22 @@ Function fillTrajectoryAssignments(stimData,attrList,fileID)
 	Variable i
 	
 	For(i=0;i<numAngles;i+=1)
-		Variable angleNum = str2num(StringFromList(i,angle,","))
+		String angleStr = StringFromList(i,angle,",")
+		Variable angleNum = str2num(angleStr)
 		
 		//Is the angle a number or text?
 		If(numtype(angleNum) == 2)
-		
+			//text
+			String sequence = GetSequence(angleStr,fileID)
+			
+			//Add the sequence to the stim data wave
+			rows = DimSize(stimData,0)
+			Redimension/N=(rows + 1,-1) stimData
+			stimData[rows][0] = angleStr
+			stimData[rows][1] = sequence
 		Else
-		
-		
+			//numeric
+			continue
 		EndIf
 	EndFor
 	
