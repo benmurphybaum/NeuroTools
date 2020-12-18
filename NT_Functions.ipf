@@ -1605,9 +1605,16 @@ Function NT_Load_WaveSurfer(String fileList[,String channels])
 						mult = 1e-12
 						break
 					default:
+						mult = 1 //either V or A without prefix
 				endswitch
 				
-				strswitch(theUnit[1])
+				String unitBase = theUnit[1]
+				
+				If(!strlen(unitBase))
+					unitBase = theUnit[0]
+				EndIf
+				
+				strswitch(unitBase)
 					case "A":
 						//current
 						prefix = "Im"
@@ -1631,7 +1638,7 @@ Function NT_Load_WaveSurfer(String fileList[,String channels])
 					
 					Multithread channel = data[j][p]
 					SetScale/P x,0,1/rate[0],"s",channel
-					SetScale/P y,0,1,theUnit[1],channel
+					SetScale/P y,0,1,unitBase,channel
 					
 					//Set the wave note
 					Note/K channel,"Path: " + path

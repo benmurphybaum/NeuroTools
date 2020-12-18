@@ -4147,6 +4147,10 @@ Function/WAVE GetStimulusData(fileID)
 	Variable numGroups = ItemsInList(S_HDF5ListGroup,";")
 	
 	HDF5ListAttributes/TYPE=1/Z fileID,"/StimGen/Stimulus/0"
+	If(V_flag)
+		return $""
+	EndIf
+	
 	Variable numAttr = ItemsInList(S_HDF5ListAttributes,";")
 	
 	Variable i,j
