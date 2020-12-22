@@ -333,6 +333,13 @@ Function SI_CreateControls()
 	ListBox scanLoadListbox win=NT,pos={460,120},font=$LIGHT,fsize=10,size={225,350},listWave=ScanLoadListWave,selWave=ScanLoadSelWave,userColumnResize=1,mode=9,disable=1,proc=siListBoxProc
 	Checkbox selectAllScans win=NT,pos={460,102},font=$LIGHT,fsize=10,size={75,20},title="Select All",disable=1,proc=siCheckBoxProc
 
+	//Load Suite2P
+	CheckBox loadROITraces win=NT,pos={460,102},font=$LIGHT,fsize=10,size={75,20},title="ROI Traces",disable=1,proc=siCheckBoxProc
+	CheckBox loadROIMasks win=NT,pos={460,122},font=$LIGHT,fsize=10,size={75,20},title="ROI Masks",disable=1,proc=siCheckBoxProc
+	CheckBox loadROICoords win=NT,pos={460,142},font=$LIGHT,fsize=10,size={75,20},title="ROI Coordinates and Weights",disable=1,proc=siCheckBoxProc
+	CheckBox loadBackgroundTraces win=NT,pos={460,162},font=$LIGHT,fsize=10,size={75,20},title="Background Traces",disable=1,proc=siCheckBoxProc
+	CheckBox loadDenoisedMovie win=NT,pos={460,182},font=$LIGHT,fsize=10,size={75,20},title="Denoised Movie",disable=1,proc=siCheckBoxProc
+	
 	//Population Vector Sum
 //	SVAR DSNameList = root:Packages:NT:DataSets:DSNameList
 	PopUpMenu Signals win=NT,pos={510,80},size={120,20},bodywidth=120,title="Signals",value=#"root:Packages:NT:DataSets:DSNames",disable=1
@@ -388,7 +395,7 @@ Function SI_CreateControlLists()
 	NVAR numMainCommands = NTF:numMainCommands
 	
 	//Resize for the Imaging package commands
-	Redimension/N=(numMainCommands + 9,4) controlAssignments
+	Redimension/N=(numMainCommands + 10,4) controlAssignments
 	
 	//SCANIMAGE PACKAGE
 	controlAssignments[numMainCommands][0] = "Load Scans" //command name
@@ -437,6 +444,12 @@ Function SI_CreateControlLists()
 	controlAssignments[numMainCommands+8][1] += "SR_referenceImage;SR_getRefScan;"
 	controlAssignments[numMainCommands+8][2] = "280"
 	controlAssignments[numMainCommands+8][3] = "WaveSelectorTitle"
+	
+	controlAssignments[numMainCommands+9][0] = "Load Suite2P"
+	controlAssignments[numMainCommands+9][1] = ""
+	controlAssignments[numMainCommands+9][1] = "loadROITraces;loadROIMasks;loadROICoords;loadBackgroundTraces;loadDenoisedMovie;"
+	controlAssignments[numMainCommands+9][2] = "240"
+	controlAssignments[numMainCommands+9][3] = ""
 End
 
 //Returns a text wave with all available scan folders (immediate subfolders within the root:Scans: directory)
@@ -2044,6 +2057,30 @@ Function updateImageBrowserLists([skipROIList])
 	Wave/T ROIGroupListWave = NTSI:ROIGroupListWave
 	Wave ROIGroupSelWave = NTSI:ROIGroupSelWave
 	
+	//Refresh the ROI lists
+	If(!skipROIList)
+		Wave/T roiGroupList = SI_GetROIGroups()
+		Redimension/N=(DimSize(roiGroupList,0)) ROIGroupListWave,ROIGroupSelWave
+		ROIGroupListWave = roiGroupList
+		
+		//Ensure their is a selection
+		If(sum(ROIGroupSelWave) == 0 && DimSize(ROIGroupSelWave,0) > 0)
+			ROIGroupSelWave[0] = 1
+		EndIf
+		
+		String groupList = SelectedROIGroup()
+		
+		Wave/T roiList = SI_GetROIs(groupList)
+		Redimension/N=(DimSize(roiList,0),-1,-1) ROIListWave,ROISelWave
+	
+		ROIListWave = roiList
+		//Set selection to the first ROI after refreshing
+		If(DimSize(ROISelWave,0) > 0)
+			ROISelWave = 0
+			ROISelWave[0] = 1 
+		EndIf
+	EndIf
+	
 	//Refresh the scan folders, if any have been added or deleted
 	Wave/T listWave = SI_GetScanFolders()
 	Redimension/N=(DimSize(listWave,0),-1,-1) ScanFolderListWave,ScanFolderSelWave
@@ -2089,30 +2126,7 @@ Function updateImageBrowserLists([skipROIList])
 	If(strlen(scanFieldMatchStr))
 		matchScanFields(scanFieldMatchStr)
 	EndIf
-	
-	//Refresh the ROI lists
-	If(!skipROIList)
-		Wave/T roiGroupList = SI_GetROIGroups()
-		Redimension/N=(DimSize(roiGroupList,0)) ROIGroupListWave,ROIGroupSelWave
-		ROIGroupListWave = roiGroupList
-		
-		//Ensure their is a selection
-		If(sum(ROIGroupSelWave) == 0 && DimSize(ROIGroupSelWave,0) > 0)
-			ROIGroupSelWave[0] = 1
-		EndIf
-		
-		String groupList = SelectedROIGroup()
-		
-		Wave/T roiList = SI_GetROIs(groupList)
-		Redimension/N=(DimSize(roiList,0),-1,-1) ROIListWave,ROISelWave
-	
-		ROIListWave = roiList
-		//Set selection to the first ROI after refreshing
-		If(DimSize(ROISelWave,0) > 0)
-			ROISelWave = 0
-			ROISelWave[0] = 1 
-		EndIf
-	EndIf
+
 End
 
 //Handles list box selections in the ScanImage package
@@ -5417,6 +5431,169 @@ Function NT_AlignImages(ds)
 	SetDataFolder saveDF
 End
 
+//Load ROI data from suite 2P HDF5 files.
+Function NT_LoadSuite2P()
+	
+	DFREF saveDF = GetDataFolderDFR()
+	
+	//Open the HDF5 files
+	Variable refnum
+	Open/D/R/MULT=1/F="All Files:.*;"/M="Select one or more .h5 files" refnum
+	String fileList = S_fileName
+	
+	If(!strlen(fileList))
+		return 0
+	EndIf
+	
+	Variable numFiles = ItemsInList(fileList,"\r")
+	
+	fileList = ReplaceString("\r",fileList,";")
+	
+	//Make sure correct data folders are there
+	If(!DataFolderExists("root:Analysis"))
+		NewDataFolder root:Analysis
+	EndIf
+	
+	If(!DataFolderExists("root:Analysis:Suite2P"))
+		NewDataFolder root:Analysis:Suite2P
+	EndIf
+	
+	SetDataFolder root:Analysis:Suite2P
+	
+	//Input parameters for which data to load
+	ControlInfo/W=NT loadROITraces
+	Variable loadROITraces = V_Value
+	
+	ControlInfo/W=NT loadROIMasks
+	Variable loadROIMasks = V_Value
+	
+	ControlInfo/W=NT loadROICoords
+	Variable loadROICoords = V_Value
+	
+	ControlInfo/W=NT loadBackgroundTraces
+	Variable loadBackgroundTraces = V_Value
+	
+	ControlInfo/W=NT loadDenoisedMovie
+	Variable loadDenoisedMovie = V_Value
+	
+	Variable i,j,k
+	For(i=0;i<numFiles;i+=1)
+		String theFile = StringFromList(i,fileList,";")
+		
+		//Make sure it's hdf5 type
+		If(!stringmatch(theFile,"*.h5"))
+			continue
+		EndIf
+		
+		Variable fileID					
+		HDF5OpenFile/R fileID as theFile
+
+		If(V_flag == -1) //cancelled
+			break
+		EndIf
+		
+		//ROI TRACES (Fcell)
+		If(loadROITraces)
+			HDF5LoadData/Z/O/N=Fcell/Q fileID,"/Fcell"
+			If(V_flag)
+				continue
+			EndIf
+			
+			Wave Fcell
+			
+			//Load the ROI traces for each ROI
+			Variable numROIs = DimSize(Fcell,0)
+			Variable roiLength = DimSize(Fcell,1)
+			
+			For(j=0;j<numROIs;j+=1)
+				String ROIname = "ROI_" + num2str(j)
+				MatrixOP/O $ROIname = row(Fcell,j)^t
+			EndFor
+		EndIf
+		
+		//BACKGROUND TRACES (Fneu)
+		If(loadBackgroundTraces)
+			HDF5LoadData/O/N=Fneu/Q fileID,"/Fneu"
+			Wave Fneu
+			
+			//Load the ROI traces for each ROI
+			numROIs = DimSize(Fneu,0)
+			roiLength = DimSize(Fneu,1)
+			
+			For(j=0;j<numROIs;j+=1)
+				ROIname = "ROI_" + num2str(j) + "_Bgnd"
+				MatrixOP/O $ROIname = row(Fneu,j)^t
+			EndFor
+		EndIf
+		
+		If(loadROICoords)
+			//Make sure the ROI folder exists, it should upon loading the scanimage package
+			If(!DataFolderExists("root:Packages:NT:ScanImage:ROIs"))
+				NewDataFolder root:Packages:NT:ScanImage:ROIs
+			EndIf
+			
+			SetDataFolder root:Packages:NT:ScanImage:ROIs
+			String folderName = UniqueName("Group",11,0)
+			
+			If(!DataFolderExists("root:Packages:NT:ScanImage:ROIs:" + folderName))
+				NewDataFolder $("root:Packages:NT:ScanImage:ROIs:" + folderName)
+			EndIf
+			
+			SetDataFolder $("root:Packages:NT:ScanImage:ROIs:" + folderName)
+			
+			HDF5ListGroup/Z/Q/TYPE=1 fileID,"/pixels"
+			String groupList = S_HDF5ListGroup
+			
+			numROIs = ItemsInList(groupList,";")
+			
+			//Load the X and Y positions and weights for the ROIs
+			String locationList = "x;y;weights;"
+			For(j=0;j<numROIs;j+=1)
+				For(k=0;k<ItemsInList(locationList,";");k+=1)
+					String item = StringFromList(k,locationList,";")
+					String location = "/pixels/" + num2str(j) + "/" + item
+					
+					roiName = "ROI_" + num2str(j) + "_" + item
+					HDF5LoadData/Z/O/N=$roiName/Q fileID,location
+					Wave itemWave = $roiName
+					
+					If(!cmpstr(item,"weights"))
+						Redimension/S itemWave //32 bit float
+					Else
+						Redimension/W/U itemWave //unsigned 16 bit
+					EndIf
+				EndFor
+			EndFor
+			
+			updateImageBrowserLists()
+		EndIf
+		
+		//ROI MASKS
+		If(loadROIMasks)
+			HDF5LoadData/O/N=masks/Q fileID,"/masks"
+			Wave masks
+			//Make 64 bit float waves 32 to save space
+			Redimension/S masks
+		EndIf
+		
+		//DENOISED MOVIE
+		If(loadDenoisedMovie)
+			HDF5LoadData/O/N=denoised/Q fileID,"/denoised"
+			Wave denoised
+			//Make 64 bit float waves 32 to save space
+			Redimension/S denoised
+		EndIf	
+
+//		Make/FREE/N=(DimSize(masks,0),DimSize(masks,1))/B/U maskLayer
+		
+		HDF5CloseFile fileID
+		
+		KillWaves/Z Fcell,Fneu
+	EndFor
+	
+	SetDataFolder saveDF
+End
+
 //Calculates the Max Projection of the 3D input wave
 Function/WAVE NT_MaxProject(w)
 	Wave w
@@ -6401,6 +6578,9 @@ Function RunCmd_ScanImagePackage(cmd)
 		case "Align Images":
 			GetStruct(ds)
 			NT_AlignImages(ds)
+			break
+		case "Load Suite2P":
+			NT_LoadSuite2P()
 			break
 	endswitch
 	

@@ -1669,6 +1669,7 @@ Function openParameterFold([size])
 	strswitch(selectedCmd)
 		case "Run Cmd Line":
 		case "New Data Folder":
+		case "Load Suite2P":
 		case "Kill Data Folder":
 			break
 		case "Load Scans":
@@ -1749,6 +1750,7 @@ Function closeParameterFold([size])
 		case "Load WaveSurfer":
 		case "Load pClamp":
 		case "Load Scans":
+		case "Load Suite2P":
 		case "Population Vector Sum":
 			Button WaveListSelector win=NT,disable=3
 			break

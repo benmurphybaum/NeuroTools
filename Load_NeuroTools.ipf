@@ -830,7 +830,7 @@ Function MakeCommandList()
 	controlListWave[1][1] = "Get ROI;dF Map;"
 	
 	controlListWave[2][0] = "ScanImage"
-	controlListWave[2][1] = "Load Scans;Get ROI;dF Map;Max Project;Vector Sum Map;Population Vector Sum;Response Quality;Adjust Galvo Distortion;Align Images;"
+	controlListWave[2][1] = "Load Scans;Load Suite2P;Get ROI;dF Map;Max Project;Vector Sum Map;Population Vector Sum;Response Quality;Adjust Galvo Distortion;Align Images;"
 	return 1
 End
 

@@ -107,6 +107,7 @@ Function RunCmd(cmd)
 		//Imaging package commands
 		case "Load Scans":
 		case "Population Vector Sum":
+		case "Load Suite2P":
 //		case "Max Project":
 			//Executes this middle-man function from the command line to escape the .ipf,
 			//allowing me to reference potentially uncompiled functions in other packages.

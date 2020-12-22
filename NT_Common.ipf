@@ -789,6 +789,7 @@ Function controlsVisible(list,visible)
 			case "Load pClamp":
 			case "Load WaveSurfer":
 			case "Load Scans":
+			case "Load Suite2P":
 			case "Adjust Galvo Distortion":
 			case "Align Images":
 				offset = V_top
