@@ -5570,6 +5570,7 @@ Function NT_LoadSuite2P()
 		
 		//ROI MASKS
 		If(loadROIMasks)
+			SetDataFolder root:Analysis:Suite2P
 			HDF5LoadData/O/N=masks/Q fileID,"/masks"
 			Wave masks
 			//Make 64 bit float waves 32 to save space
@@ -5578,6 +5579,7 @@ Function NT_LoadSuite2P()
 		
 		//DENOISED MOVIE
 		If(loadDenoisedMovie)
+			SetDataFolder root:Analysis:Suite2P
 			HDF5LoadData/O/N=denoised/Q fileID,"/denoised"
 			Wave denoised
 			//Make 64 bit float waves 32 to save space
