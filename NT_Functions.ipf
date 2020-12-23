@@ -1086,7 +1086,10 @@ Function NT_RunCmdLine()
 						EndIf
 					ElseIf(strlen(outWaveName) && WaveExists($outWaveName) && strlen(theWaveSet))
 						//already exists, correct any incorrect dimensions
-						Redimension/N=(numWaves) $outWaveName
+//						Redimension/N=(numWaves) $outWaveName
+						
+						Wave theFirstWave = $StringFromList(0,theWaveSet,";")
+						Redimension/N=(DimSize(theFirstWave,0)) $outWaveName
 					EndIf 
 	
 				EndIf

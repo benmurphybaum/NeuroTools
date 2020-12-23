@@ -4449,6 +4449,10 @@ Function cleanStimData(stimData,fileID)
 	 		attrList = "Stimulus;objectType;gratingType;spatialFreq;spatialPhase;orientation;xPos;yPos;contrastType;contrast;modulationType;motionType;delay;duration;trialTime;"
 	 		
 			break
+		case "Noise":
+			attrList = "Stimulus;objectType;noiseType;noiseSize;noiseFreq;noiseSeed,xPos;yPos;contrastType;contrast;delay;duration;trialTime;"
+			break
+		
 	endswitch
 	
 	//Adds motion and modulation parameters to the attribute list according to the stimulus
