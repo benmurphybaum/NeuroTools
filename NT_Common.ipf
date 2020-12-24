@@ -4450,7 +4450,7 @@ Function cleanStimData(stimData,fileID)
 	 		
 			break
 		case "Noise":
-			attrList = "Stimulus;objectType;noiseType;noiseSize;noiseFreq;noiseSeed,xPos;yPos;contrastType;contrast;delay;duration;trialTime;"
+			attrList = "Stimulus;objectType;noiseType;noiseSize;noiseFreq;noiseSeed;xPos;yPos;contrastType;contrast;delay;duration;trialTime;"
 			break
 		
 	endswitch

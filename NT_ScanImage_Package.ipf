@@ -3376,7 +3376,11 @@ Function ScanMonitor()
 	
 	
 	//Display the last new scan
-	DisplayScanField(imageList)
+	If(strlen(imageList))
+		DisplayScanField(imageList)
+	Else
+		return 0
+	EndIf
 	
 	//Get max projection of every image in the SIDisplay
 	SVAR SIDisplay_ImagePaths = root:Packages:NT:ScanImage:SIDisplay_ImagePaths			
