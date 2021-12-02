@@ -1,7 +1,6 @@
 # NeuroTools
 
-DOWNLOAD the most updated version from http://www.benmurphybaum.com/NeuroToolsStore
-
+For the most updated version, and access to newly available analysis packages, download from www.benmurphybaum.com/NeuroToolsStore
 
 NeuroTools provides an interface for efficiently navigating, organizing, and performing analysis routines on large data sets in the Igor Pro environment. 
 
