@@ -1,11 +1,69 @@
 ﻿#pragma TextEncoding = "UTF-8"
 #pragma rtGlobals=3		// Use modern global access method and strict wave access.
 
+//Inputs a numerical string list, converts to a ranged list (i.e. 1,2,3,5,6,7 -> 1-3,5-7)
+Function/S ListToRange(list,separator)
+	String list,separator
+	Variable i,size = ItemsInList(list,separator)
+	
+	String item = ""
+	String range = ""
+
+	Variable count = 0
+	
+	For(i=0;i<size;i+=1)
+		item = StringFromList(i,list,separator)
+		
+		If(!isNum(item))
+//			print "List must be fully numeric, no characters allowed."
+			return list
+		EndIf
+		
+		If(i == 0)
+			range = item
+		Else
+			String lastItem = StringFromList(i-1,list,separator)
+			
+			If(str2num(item) - 1 == str2num(lastItem))
+				count += 1
+			Else
+				If(count == 0)
+					range += "," + item
+				Else
+					range += "-" + lastItem + "," + item
+					count = 0
+				EndIf
+			EndIf
+		EndIf
+	EndFor
+	
+	//last item
+	If(count > 0)
+		range += "-" + item
+	EndIf
+	
+	return range
+End
+
+//returns 1 if the input string is numeric, 0 if it is not
+Function isNum(str)
+	String str
+	
+	Variable var = str2num(str)
+	
+	If(numtype(var) == 2)
+		return 0
+	Else
+		return 1
+	EndIf
+End
+
 //If str matches an entry in the tableWave, returns the row, otherwise return -1
-Function tableMatch(str,tableWave,[startp,endp,returnCol])
+Function tableMatch(str,tableWave,[startp,endp,whichCol,returnCol,startFrom])
 	String str
 	Wave/T tableWave
-	Variable startp,endp,returnCol//for range
+	Variable startp,endp,whichCol,returnCol//for range
+	Variable startFrom //start from beginning is default (0) or start from end is 1
 	Variable i,j,size = DimSize(tableWave,0)
 	Variable cols = DimSize(tableWave,1)
 	
@@ -25,6 +83,14 @@ Function tableMatch(str,tableWave,[startp,endp,returnCol])
 		returnCol = 0
 	EndIf
 	
+	If(ParamIsDefault(whichCol))
+		whichCol = 0
+	EndIf
+	
+	If(ParamIsDefault(startFrom))
+		startFrom = 0
+	EndIf
+	
 	If(startp > DimSize(tableWave,0) - 1)
 		return -1
 	EndIf
@@ -33,16 +99,50 @@ Function tableMatch(str,tableWave,[startp,endp,returnCol])
 		return -1
 	EndIf
 	
-	For(j=0;j<cols;j+=1)
-		For(i=startp;i<endp+1;i+=1)
-			If(stringmatch(tableWave[i][j][0],str))
-				If(returnCol)
-					return j
-				Else
+	If(!ParamIsDefault(whichCol))
+		If(startFrom)
+			//Backwards
+			For(i=endp;i>startp-1;i-=1)
+				If(stringmatch(tableWave[i][whichCol][0],str))
 					return i
 				EndIf
-			EndIf
-		EndFor
+			EndFor
+		Else
+			//Forwards 
+			For(i=startp;i<endp+1;i+=1)
+				If(stringmatch(tableWave[i][whichCol][0],str))
+					return i
+				EndIf
+			EndFor
+		EndIf
+				
+		return -1
+	EndIf
+	
+	For(j=0;j<cols;j+=1)
+		If(startFrom)
+			//Backwards
+			For(i=endp;i>startp-1;i-=1)
+				If(stringmatch(tableWave[i][j][0],str))
+					If(returnCol)
+						return j
+					Else
+						return i
+					EndIf
+				EndIf
+			EndFor
+		Else
+			//Forwards
+			For(i=startp;i<endp+1;i+=1)
+				If(stringmatch(tableWave[i][j][0],str))
+					If(returnCol)
+						return j
+					Else
+						return i
+					EndIf
+				EndIf
+			EndFor
+		EndIf
 	EndFor
 	
 	return -1
@@ -97,61 +197,71 @@ Function/S filterTable(str,tableWave,[startp,endp,returnCol])
 End
 
 //Switches the label on the Command Menu on a new selection
-Function switchCommandMenu(cmd)
-	String cmd
-	
-	//Calculates spacer to ensure centered text on the drop down menu
-	String spacer = ""
-	Variable cmdLen = strlen(cmd)
-	cmdLen = 16 - cmdLen
-	
-	Do
-		spacer += " "
-		cmdLen -= 1
-	While(cmdLen > 0)
-	
-	//Command Menu
-	Button CommandMenu win=NT,font=$LIGHT,pos={456,39},size={140,20},fsize=12,proc=ntButtonProc,title="\\JL▼   " + spacer + cmd,disable=0
-
-End
+//Function switchCommandMenu(cmd)
+//	String cmd
+//	
+//	//Calculates spacer to ensure centered text on the drop down menu
+//	String spacer = ""
+//	Variable cmdLen = strlen(cmd)
+//	cmdLen = 16 - cmdLen
+//	
+//	Do
+//		spacer += " "
+//		cmdLen -= 1
+//	While(cmdLen > 0)
+//	
+//	//Command Menu
+//	Button CommandMenu win=NTP,font=$LIGHT,pos={456,39},size={140,20},fsize=12,proc=ntButtonProc,title="\\JL▼   " + spacer + cmd,disable=0
+//
+//End
 
 
 //Switches the label on the Wave Selector Menu on a new selection
 Function switchWaveListSelectorMenu(cmd)
 	String cmd
 	
-	DFREF NTF = root:Packages:NT
-	SVAR waveSelectorStr = NTF:waveSelectorStr
+	DFREF NPC = $CW
+	SVAR waveSelectorStr = NPC:waveSelectorStr
 	
 	//Calculates spacer to ensure centered text on the drop down menu
+	String spacedCmd = getSpacer(cmd,15)
+	
+	//Command Menu
+	Button WaveListSelector win=NTP,font=$LIGHT,proc=ntButtonProc,title=spacedCmd,disable=0
+	
+	waveSelectorStr = cmd
+End
+
+//Returns a string with appropriate buffer for button titles that trigger contextual pop up menus
+Function/S getSpacer(str,buffer)
+	//Calculates spacer to ensure centered text on the drop down menu
+	String str
+	Variable buffer
+	
 	String spacer = ""
-	Variable cmdLen = strlen(cmd)
-	cmdLen = 15 - cmdLen
+	Variable cmdLen = strlen(str)
+	cmdLen = buffer - cmdLen
 	
 	Do
 		spacer += " "
 		cmdLen -= 1
 	While(cmdLen > 0)
 	
-	//Command Menu
-	Button WaveListSelector win=NT,font=$LIGHT,proc=ntButtonProc,title="\\JL▼   " + spacer + cmd,disable=0
-	
-	waveSelectorStr = cmd
+	return "\\JL▼   " + spacer + str
 End
-
 
 //Gets the subfolders that reside in the current data folder
 Function/WAVE getFolders([folderPath])
 	//if folderPath is provided, the folder list within folderPath is provided instead of the cdf
 	String folderPath
 	
-	DFREF NTF = root:Packages:NT
+	DFREF NPC = $CW
 	
 	//Selection and List Waves for the list box
-	Wave/T FolderLB_ListWave = NTF:FolderLB_ListWave
-	Wave/T FolderLB_SelWave = NTF:FolderLB_SelWave
+	Wave/T FolderLB_ListWave = NPC:FolderLB_ListWave
+	Wave/T FolderLB_SelWave = NPC:FolderLB_SelWave
 		
-	SVAR cdf = NTF:currentDataFolder
+	SVAR cdf = NPC:cdf
 	
 	//Indexes waves in current data folder, applies match string
 	cdf = GetDataFolder(1) //this is saved in case custom folder path is used
@@ -181,13 +291,13 @@ End
 //Gets the waves that reside in the current data folder
 Function/WAVE getFolderWaves([depth])
 	Variable depth //folder depth
-	DFREF NTF = root:Packages:NT
+	DFREF NPC = $CW
 
 	//Selection and List waves
-	Wave/T WavesLB_ListWave = NTF:WavesLB_ListWave
-	Wave WavesLB_SelWave = NTF:WavesLB_SelWave
+	Wave/T WavesLB_ListWave = NPC:WavesLB_ListWave
+	Wave WavesLB_SelWave = NPC:WavesLB_SelWave
 	
-	SVAR cdf = NTF:currentDataFolder
+	SVAR cdf = NPC:cdf
 	
 	String itemList
 	Variable i
@@ -212,10 +322,10 @@ End
 //Refreshes the folder and wave list box contents
 Function switchFolders(selection)
 	String selection
-	DFREF NTF = root:Packages:NT
+	DFREF NPC = $CW
 	
 	//Change the current data folder
-	SVAR cdf = NTF:currentDataFolder
+	SVAR cdf = NPC:cdf
 	SetDataFolder cdf + selection
 	
 	//Refresh the folder and waves list boxes
@@ -226,10 +336,10 @@ End
 //Switches the current data folder up one level
 //Refreshes the folder and wave list box contents
 Function navigateBack()
-	DFREF NTF = root:Packages:NT
+	DFREF NPC = $CW
 	
 	//Change the current data folder
-	SVAR cdf = NTF:currentDataFolder
+	SVAR cdf = NPC:cdf
 	
 	//Do nothing if we're already in root
 	If(!cmpstr(cdf,"root:"))
@@ -243,7 +353,7 @@ Function navigateBack()
 	getFolders()
 	getFolderWaves()
 	
-	Wave FolderLB_SelWave = NTF:FolderLB_SelWave
+	Wave FolderLB_SelWave = NPC:FolderLB_SelWave
 	
 	//Set the selection to the first row
 	If(DimSize(FolderLB_SelWave,0) > 0)
@@ -256,26 +366,45 @@ End
 Function BrowseEphys(fileType)
 	String fileType
 	
-	DFREF NTF = root:Packages:NT
+	DFREF NPC = $CW
 	Variable fileID
 	
-	SVAR wsFilePath = NTF:wsFilePath
-	SVAR wsFileName = NTF:wsFileName
+	SVAR wsFilePath = NPC:wsFilePath
+	SVAR wsFileName = NPC:wsFileName
 			
 	strswitch(fileType)
 		case "WaveSurfer":
+			
 			HDF5OpenFile/I/R fileID as "theWave"
 			
 			If(V_flag == -1) //cancelled
 				return 0
-			EndIf
-			
+			EndIf	
 			wsFilePath = S_path
 			wsFileName = S_fileName
 	
 			UpdateWaveSurferLists(fileID,wsFilePath,wsFileName)
 			
 			HDF5CloseFile/A fileID
+			break
+		case "TurnTable":
+			NewPath/O/Q/Z ephysPath
+			
+			String fileList = IndexedFile(ephysPath,-1,".h5")
+
+			PathInfo ephysPath
+			wsFilePath = S_path
+
+			wsFileName = StringFromList(0,fileList,";")
+			
+			Wave/T wsSweepListWave = $getParam2("lb_SweepList","LISTWAVE","NT_LoadEphys")
+			Wave/T wsFileListWave = $getParam2("lb_FileList","LISTWAVE","NT_LoadEphys")
+			Wave wsFileSelWave = $getParam2("lb_FileList","SELWAVE","NT_LoadEphys")
+			
+			Redimension/N=(ItemsInList(fileList,";")) wsFileListWave,wsFileSelWave
+			
+			wsFileListWave = StringFromList(p,fileList,";")
+			wsFileSelWave = 0
 			break
 			
 		case "PClamp":	
@@ -291,7 +420,7 @@ Function BrowseEphys(fileType)
 			
 			String fullPath = wsFilePath
 			NewPath/O/Q/Z loadPath,fullpath
-			String fileList = IndexedFile(loadPath,-1,extension)
+			fileList = IndexedFile(loadPath,-1,extension)
 			
 			If(!strlen(fileList))
 				return 0
@@ -301,27 +430,27 @@ Function BrowseEphys(fileType)
 			
 			fileList = ReplaceString(extension,fileList,"")
 			
-			Wave/T wsFileListWave = NTF:wsFileListWave
-			Wave wsFileSelWave = NTF:wsFileSelWave
+			Wave/T wsFileListWave = NPC:wsFileListWave
+			Wave wsFileSelWave = NPC:wsFileSelWave
 			
 			Wave/T textWave = StringListToTextWave(fileList,";")
 			Redimension/N=(DimSize(textWave,0) - 1) wsFileListWave,wsFileSelWave
 			wsFileListWave = textWave
 			wsFileSelWave[0] = 1
 			
-			//What channels are available for the selected file
-			
-			fullPath = wsFilePath + wsFileName
-			ABFLoader(fullPath,"1",0)
-			
-			Wave/T dTable_Values = root:ABFvar:dTable_Values
-			
-			String chList = dTable_Values[4]
-			
+//			//What channels are available for the selected file
+//			
+//			fullPath = wsFilePath + wsFileName
+//			ABFLoader(fullPath,"1",0)
+//			
+//			Wave/T dTable_Values = root:ABFvar:dTable_Values
+//			
+//			String chList = "1;2;"
+//			
 			String quote = "\""
-			String channelList = quote + "All;" + ResolveListItems(chList,";") + quote
+			String channelList = quote + "All;1;2;" + quote
 
-			PopUpMenu ChannelSelector win=NT,value=#channelList
+			PopUpMenu ChannelSelector win=NTP#Func,value=#channelList
 			
 			break
 		case "Presentinator":
@@ -346,8 +475,8 @@ Function BrowseEphys(fileType)
 			
 			fileList = ReplaceString(extension,fileList,"")
 			
-			Wave/T wsFileListWave = NTF:wsFileListWave
-			Wave wsFileSelWave = NTF:wsFileSelWave
+			Wave/T wsFileListWave = NPC:wsFileListWave
+			Wave wsFileSelWave = NPC:wsFileSelWave
 			
 			Wave/T textWave = StringListToTextWave(fileList,";")
 			Redimension/N=(DimSize(textWave,0) - 1) wsFileListWave,wsFileSelWave
@@ -362,20 +491,91 @@ Function BrowseEphys(fileType)
 	
 End
 
-
-
-
+//browses disk for scanimage tiffs
+Function/S BrowseScanImage(fileType)
+	String fileType
+	DFREF NPC = $CW
+	Variable fileID
+	
+	Variable refnum
+	String extension = ".tif"
+	
+	//Browse the folder
+	NewPath/O/Q/Z loadPath
+	
+	If(V_flag)
+		return ""
+	EndIf
+	
+	String fileList = IndexedFile(loadPath,-1,"????")
+	
+	String tifList = ListMatch(fileList,"*.tif",";")
+	String pmtList = ListMatch(fileList,"*.pmt.dat",";")
+	
+	fileList = tifList + pmtList
+	
+	If(!strlen(fileList))
+		return ""
+	EndIf
+	
+	//Sort the files
+	fileList = SortList(fileList,";",16)	
+//	fileList = ReplaceString(extension,fileList,"")
+//	fileList = ReplaceString(".pmt.dat",fileList,"")
+	Variable numFiles = ItemsInList(fileList,";")
+	
+	//Enter the file names into the list box
+	Make/O/N=(numFiles) NPC:siFileSelWave /Wave = selWave
+	Make/O/T/N=(numFiles,2) NPC:siFileListWave /Wave = listWave
+	
+	//Free wave return, transfer to list wave
+	Wave/T theList = StringListToTextWave(fileList,";")
+	
+	listWave[][0] = theList
+	
+	//Find any StimGen .h5 files with the same names
+	String stimFileList = IndexedFile(loadPath,-1,".h5")
+	
+	Variable i
+	For(i=0;i<DimSize(theList,0);i+=1)
+		String name = theList[i]
+		
+		//remove all other possible endings
+		name = RemoveEnding(name,".tif")
+		name = RemoveEnding(name,".pmt.dat")
+		name = RemoveEnding(name,".meta")
+		
+		name += ".h5"
+		
+		Variable index = WhichListItem(name,stimFileList,";")
+		
+		If(index != -1)
+			//extract the stimulus name
+			HDF5OpenFile/P=loadPath/Z fileID as name
+			Wave/T stimData = GetStimulusData(fileID)
+			HDF5CloseFile/Z fileID
+			
+			If(WaveExists(stimData))
+				listWave[i][1] = stimData[0][1]
+			EndIf
+			
+		EndIf
+	EndFor
+	
+	PathInfo/S loadPath
+	return S_Path
+End
 
 //Switches the listed controls to those of the selected command in the Command Menu
 Function switchControls(currentCmd,prevCmd)
 	String currentCmd,prevCmd
-	DFREF NTF = root:Packages:NT
-	NVAR foldStatus = NTF:foldStatus
+	DFREF NPC = $CW
+	NVAR foldStatus = NPC:foldStatus
 	
-	SVAR selectedCmd = NTF:selectedCmd
-	Wave/T controlAssignments = NTF:controlAssignments 
+	SVAR selectedCmd = NPC:selectedCmd
+	Wave/T controlAssignments = NPC:controlAssignments 
 	
-	SVAR textGroups = NTF:textGroups
+	SVAR textGroups = NPC:textGroups
 	
 	Variable r = ScreenResolution / 72
 	
@@ -394,8 +594,8 @@ Function switchControls(currentCmd,prevCmd)
 	Variable expansion = (V_right*r - V_left*r) - 754 //current expansion relative to original width of the panel
 	
 	//Delete the command line entry
-	SetDrawEnv/W=NT  fstyle= 0, textxjust= 0
-	DrawAction/W=NT getgroup=CmdLineText,delete
+	SetDrawEnv/W=NTP  fstyle= 0, textxjust= 0
+	DrawAction/W=NTP getgroup=CmdLineText,delete
 	
 	//Toggle visibility of controls according to the selected command
 	If(!cmpstr(prevCmd,""))
@@ -468,10 +668,10 @@ Function switchControls(currentCmd,prevCmd)
 	
 	
 	//Refresh any command specific text that needs to be displayed
-	SVAR loadedPackages = NTF:loadedPackages
+	SVAR loadedPackages = NPC:loadedPackages
 	
-	SetDrawEnv/W=NT fstyle=0
-	DrawAction/W=NT getgroup=fcnText,delete
+	SetDrawEnv/W=NTP fstyle=0
+	DrawAction/W=NTP getgroup=fcnText,delete
 	strswitch(selectedCmd)
 		case "Get ROI":
 		case "dF Map":		
@@ -486,13 +686,13 @@ Function switchControls(currentCmd,prevCmd)
 			break
 		case "External Function":
 			//refresh the external function list
-			ControlInfo/W=NT extFuncPopUp
+			ControlInfo/W=NTP extFuncPopUp
 			String func = CurrentExtFunc()
-			BuildExtFuncControls(func)
+			
 			break
 		default:
 			If(stringmatch(visibleList,"*WaveListSelector*"))
-				ControlInfo/W=NT WaveListSelector
+				ControlInfo/W=NTP WaveListSelector
 				If(stringmatch(S_title,"*Image Browser"))
 					switchWaveListSelectorMenu("Wave Match")
 				EndIf
@@ -506,9 +706,9 @@ Function updateTextGroups(cmd)
 	String cmd
 	Variable i,j
 	
-	DFREF NTF = root:Packages:NT
-	Wave/T textGroups = NTF:textGroups
-	Wave/T controlAssignments = NTF:controlAssignments 
+	DFREF NPC = $CW
+	Wave/T textGroups = NPC:textGroups
+	Wave/T controlAssignments = NPC:controlAssignments 
 	
 	//Get the command index in the assignment table
 	Variable index = tableMatch(cmd,controlAssignments)
@@ -520,8 +720,8 @@ Function updateTextGroups(cmd)
 	For(i=0;i<DimSize(textGroups,0);i+=1)
 		String group = textGroups[i][0]
 		
-		SetDrawEnv/W=NT fstyle=0, textxjust=0
-		DrawAction/W=NT getgroup=$group,delete
+		SetDrawEnv/W=NTP fstyle=0, textxjust=0
+		DrawAction/W=NTP getgroup=$group,delete
 	EndFor
 	
 	//Now draw all of the text groups for the selected command
@@ -546,7 +746,7 @@ Function updateTextGroups(cmd)
 		String fontSizeList = textGroups[groupIndex][4]
 		
 		//start the group
-		SetDrawEnv/W=NT gname=$group,gstart
+		SetDrawEnv/W=NTP gname=$group,gstart
 		
 		//There may be more than one text object per group
 		For(j=0;j<ItemsInList(textList,";");j+=1)
@@ -555,12 +755,12 @@ Function updateTextGroups(cmd)
 			Variable yPos = str2num(StringFromList(j,yPosList,";"))
 			Variable fontSize = str2num(StringFromList(j,fontSizeList,";"))
 			
-			SetDrawEnv/W=NT xcoord= abs,ycoord= abs, fsize=fontSize, textrgb=(0,0,0), textxjust= 1,textyjust= 1,fname=$LIGHT
-			DrawText/W=NT xPos,yPos,text
+			SetDrawEnv/W=NTP xcoord= abs,ycoord= abs, fsize=fontSize, textrgb=(0,0,0), textxjust= 1,textyjust= 1,fname=$LIGHT
+			DrawText/W=NTP xPos,yPos,text
 		EndFor
 		
 		//stop the group
-		SetDrawEnv/W=NT gstop
+		SetDrawEnv/W=NTP gstop
 	EndFor
 End
 
@@ -570,8 +770,8 @@ Function switchHelpMessage(cmd)
 	String helpMsg = ""
 	
 	//Reset the help message
-	SetDrawEnv/W=NT  fstyle= 0,textrgb= (0,0,0)
-	DrawAction/W=NT getgroup=helpMessage,delete
+	SetDrawEnv/W=NTP  fstyle= 0,textrgb= (0,0,0)
+	DrawAction/W=NTP getgroup=helpMessage,delete
 	
 	If(!strlen(cmd))
 		return 0
@@ -613,20 +813,24 @@ Function switchHelpMessage(cmd)
 			break
 	endswitch
 	
-	SetDrawEnv/W=NT textyjust= 0,xcoord=abs,ycoord=abs,fname=$LIGHT,fstyle=2,fsize=10,textrgb= (0,0,0),gname=helpMessage,gstart
-	DrawText/W=NT 456,495,helpMsg
-	SetDrawEnv/W=NT gstop
+	SetDrawEnv/W=NTP textyjust= 0,xcoord=abs,ycoord=abs,fname=$LIGHT,fstyle=2,fsize=10,textrgb= (0,0,0),gname=helpMessage,gstart
+	DrawText/W=NTP 456,495,helpMsg
+	SetDrawEnv/W=NTP gstop
 	
 End
 
 //Takes text wave, and creates a string list with its contents
-Function/S textWaveToStringList(textWave,separator,[col,layer])
-	Wave/T textWave
+Function/S textWaveToStringList(textWave,separator,[col,layer,noEnding])
+	Wave/T/Z textWave
 	String separator
-	Variable col,layer
+	Variable col,layer,noEnding
 	
 	Variable size,i
 	String strList = ""
+	
+	If(!WaveExists(textWave))
+		return ""
+	EndIf
 	
 	If(WaveType(textWave,1) !=2)
 		Abort "Input must be a text wave"
@@ -642,9 +846,15 @@ Function/S textWaveToStringList(textWave,separator,[col,layer])
 		layer = 0
 	EndIf
 	
+	noEnding = ParamIsDefault(noEnding) ? 0 : 1
+	
 	For(i=0;i<size;i+=1)
 		strList += textWave[i][col][layer] + separator
 	EndFor
+	
+	If(noEnding)
+		strList = RemoveEnding(strList,separator)
+	EndIf
 	
 	return strList
 End
@@ -669,25 +879,49 @@ Function/WAVE StringListToTextWave(strList,separator)
 End
 
 //Same as StringFromList, but is capable of extracting a range from the list
-Function/S StringsFromList(range,list,separator)
+Function/S StringsFromList(range,list,separator,[noEnding])
 	String range,list,separator
+	Variable noEnding
 	String outList = ""
 	Variable i,index
 	
-	range = ResolveListItems(range,separator)
+	noEnding = (ParamIsDefault(noEnding)) ? 0 : 1
+
+	//Detect any asterisk wild cards
+	If(!cmpstr(range[0],"*"))
+		range[0] = "0"
+	EndIf
+	
+	Variable size = strlen(range) - 1
+	Variable lastItem = ItemsInList(list,separator) - 1
+	
+	If(!cmpstr(range[size],"*"))
+		range = ReplaceString("*",range,num2str(lastItem))
+//		range[size] = num2str(ItemsInList(list,separator)-1)
+	EndIf
+	
+	range = ResolveListItems(range,";")
+	range = RemoveDuplicateList(range,";")
 	
 	For(i=0;i<ItemsInList(range,";");i+=1)
 		index = str2num(StringFromList(i,range,";"))
 		outList += StringFromList(index,list,separator) + separator
 	EndFor	
-
+	
+	If(noEnding)
+		outList = RemoveEnding(outList,separator)
+	EndIf
+	
 	return outList
 End
 
 //Replaces the indicated list item with the replaceWith string
-Function/S ReplaceListItem(index,listStr,separator,replaceWith)
+Function/S ReplaceListItem(index,listStr,separator,replaceWith,[noEnding])
 	Variable index
 	String listStr,separator,replaceWith
+	Variable noEnding
+	
+	noEnding = (ParamIsDefault(noEnding)) ? 0 : 1
 	
 	listStr = RemoveListItem(index,listStr,separator)
 	listStr = AddListItem(replaceWith,listStr,separator,index)
@@ -695,13 +929,48 @@ Function/S ReplaceListItem(index,listStr,separator,replaceWith)
 		listStr = RemoveEnding(listStr,separator)
 	EndIf
 	
+	If(noEnding)
+		listStr = RemoveEnding(listStr,separator)
+	EndIf
+	
 	return listStr
+End
+
+//Removes blank list items in a string list
+Function/S RemoveEmptyItems(list,separator)
+	String list,separator
+	
+	list = RemoveFromList("",list,separator)
+	
+	return list
+End
+
+//Removes blank cells in a text wave
+Function/Wave RemoveEmptyCells(w,dim)
+	Wave/T w
+	Variable dim //dimension
+	
+	Variable i,size = DimSize(w,dim) - 1
+	For(i=size;i>-1;i-=1) //count backwards
+		If(!strlen(w[i]))
+			DeletePoints/M=(dim) i,1,w
+		EndIf
+	EndFor
+	
+	return w
 End
 
 //Takes a hyphenated range, and resolves it into a comma-separated list
 //Can handle leading zeros in the range
-Function/S resolveListItems(theList,separator)
+Function/S resolveListItems(theList,separator,[noEnding])
 	String theList,separator
+	Variable noEnding
+	
+	If(!strlen(theList))
+		return ""
+	EndIf
+	
+	noEnding = ParamIsDefault(noEnding) ? 0 : 1
 	
 	String commaList,theListItem,first,last,outList
 	Variable j,k
@@ -761,6 +1030,10 @@ Function/S resolveListItems(theList,separator)
 		EndIf
 	EndFor
 	
+	If(noEnding)
+		outList = RemoveEnding(outList,separator)
+	EndIf
+	
 	return outList
 End
 
@@ -773,7 +1046,7 @@ Function controlsVisible(list,visible)
 	
 	For(i=0;i<ItemsInList(list,";");i+=1)
 		String ctrl = StringFromList(i,list,";")
-		ControlInfo/W=NT $ctrl
+		ControlInfo/W=NTP $ctrl
 		Variable type = V_flag
 		
 		If(!cmpstr(ctrl,"WaveListSelector"))
@@ -868,7 +1141,7 @@ Function controlsVisible(list,visible)
 		offset+= 23
 	EndFor
 	
-	DoUpdate/W=NT
+	DoUpdate/W=NTP
 End
 
 
@@ -877,24 +1150,24 @@ End
 Function/WAVE getWaveMatchList()
 	STRUCT filters filters
 	
-	DFREF NTF = root:Packages:NT
-	DFREF NTD = root:Packages:NT:DataSets
-	SVAR cdf = NTF:currentDataFolder
-	SVAR folderSelection = NTF:folderSelection
+	DFREF NPC = $CW
+	DFREF NPD = $DSF
+	SVAR cdf = NPC:cdf
+	SVAR folderSelection = NPC:folderSelection
 	
 	//Is the focus set to the Wave Match list or the Data Set Waves list?
-	SVAR listFocus = NTF:listFocus
+	SVAR listFocus = NPC:listFocus
 	
 	//Update the search, filter, and grouping terms structure
 	SetSearchTerms(filters)
 	
 	//List and Selection waves for the list box
-	Wave/T listWave = NTF:MatchLB_ListWave
-	Wave selWave = NTF:MatchLB_SelWave
+	Wave/T listWave = NPC:MatchLB_ListWave
+	Wave selWave = NPC:MatchLB_SelWave
 	
 	//Navigator selection and list waves
-	Wave/T FolderLB_ListWave = NTF:FolderLB_ListWave
-	Wave FolderLB_SelWave = NTF:FolderLB_SelWave
+	Wave/T FolderLB_ListWave = NPC:FolderLB_ListWave
+	Wave FolderLB_SelWave = NPC:FolderLB_SelWave
 		
 	Variable i,j
 	
@@ -910,8 +1183,8 @@ Function/WAVE getWaveMatchList()
 	If(!cmpstr(listFocus,"WaveMatch"))
 		//Wave Match List - first find for wave matches within the selected folders
 		//List and Selection waves for the list box
-		Wave/T listWave = NTF:MatchLB_ListWave
-		Wave selWave = NTF:MatchLB_SelWave
+		Wave/T listWave = NPC:MatchLB_ListWave
+		Wave selWave = NPC:MatchLB_SelWave
 		
 		//Selected folders in the Navigator
 		//Makes a list of all the selected folders and matched subfolders
@@ -924,8 +1197,8 @@ Function/WAVE getWaveMatchList()
 	ElseIf(!cmpstr(listFocus,"DataSet"))
 		//Data Set Waves List
 		//List and Selection waves for the list box
-		Wave/T listWave = NTD:DataSetLB_ListWave
-		Wave selWave = NTD:DataSetLB_SelWave
+		Wave/T listWave = NPD:DataSetLB_ListWave
+		Wave selWave = NPD:DataSetLB_SelWave
 		
 		//List and Selection waves for the selected data set
 		Wave/T DS_BASE = GetDataSetWave(GetDSName(),"BASE")
@@ -952,20 +1225,25 @@ Function/WAVE getWaveMatchList()
 	
 	//Push the filtered waves onto the selected data set if that is in focus
 	If(!cmpstr(listFocus,"DataSet"))
-		Wave/T DS_ORG = GetDataSetWave(GetDSName(),"ORG")
+		String dsName = GetDSName()
+		
+		Wave/T DS_ORG = GetDataSetWave(dsName,"ORG")
 		matchContents(listWave,DS_ORG)
+
 	EndIf
 	
 	//BASE match wave list, no groupings; this list is the basis for any new data sets
-	Wave/T MatchLB_ListWave_BASE = NTF:MatchLB_ListWave_BASE 
+	Wave/T MatchLB_ListWave_BASE = NPC:MatchLB_ListWave_BASE 
 	matchContents(listWave,MatchLB_ListWave_BASE)	
+	
+	Variable numWaves = DimSize(listWave,0)
 	
 	//Apply the wave groupings to the wave lists in the structure
 	SetWaveGrouping(filters,listWave,selWave)
 	
 	//If focus is on DataSet, update the data set ORG wave
 	If(!cmpstr(listFocus,"DataSet"))
-		String dsName = GetDSName()
+		dsName = GetDSName()
 		Wave/T DS_ORG = GetDataSetWave(dsName,"ORG")
 		
 		If(!WaveExists(DS_ORG))
@@ -981,11 +1259,56 @@ Function/WAVE getWaveMatchList()
 	   If(index != -1)
 		   saveFilterSettings("DataSet")
 		EndIf
+		
+						
+		Variable numWS_DS = GetNumWaveSets(DS_ORG)
+		
+		Wave/T DS_BASE = GetDataSetWave(dsName,"BASE")
+		Variable numWaves_DS = DimSize(DS_BASE,0)
+		
+		DisplayWaveNums(numWS_DS,numWaves_DS,"DS")
+		
 	Else
 		saveFilterSettings("WaveMatch")
+		
+		//How many wave sets did we define
+		Variable numWS = GetNumWaveSets(listWave)
+		
+		DisplayWaveNums(numWS,numWaves,"WM")
 	EndIf
 	
+	
+	
 	return listWave
+End
+
+Function DisplayWaveNums(numWS,numWaves,whichList)
+	Variable numWS,numWaves
+	String whichList
+	
+	String plural = ""
+	
+	If(numWS > 1 || numWS == 0)
+		plural = "s"
+	EndIf
+	
+	String wavePlural = ""
+	
+	If(numWaves > 1 || numWaves == 0)
+		wavePlural = "s"
+	EndIf
+	
+	If(!cmpstr(whichList,"WM"))
+		DrawAction/W=NTP#Data getGroup=waveNumText,delete	
+		SetDrawEnv/W=NTP#Data fname=$LIGHT,fstyle=2,fsize=12,gname=waveNumText,gstart
+		DrawText/W=NTP#Data 50,165,num2str(numWS) + " Wave Set" + plural +  " (" + num2str(numWaves) + " Wave" + wavePlural + ")"
+		SetDrawEnv/W=NTP#Data gstop
+	ElseIf(!cmpstr(whichList,"DS"))
+		DrawAction/W=NTP#Data getGroup=DSwaveNumText,delete	
+		SetDrawEnv/W=NTP#Data fname=$LIGHT,fstyle=2,fsize=12,gname=DSwaveNumText,gstart
+		DrawText/W=NTP#Data 290,165,num2str(numWS) + " Wave Set" + plural +  " (" + num2str(numWaves) + " Wave" + wavePlural + ")"
+		SetDrawEnv/W=NTP#Data gstop
+	EndIf
 End
 
 //Uses the relative Folder entry (located in the 'filters' structure)
@@ -996,19 +1319,19 @@ Function/S GetFolderSearchList(filters,listWave,selWave)
 	Wave selWave
 	Variable i,j
 	
-	DFREF NTF = root:Packages:NT
-	SVAR cdf = NTF:currentDataFolder
+	DFREF NPC = $CW
+	SVAR cdf = NPC:cdf
 	
 	//Used to save the folder selection
-	SVAR folderSelection = NTF:folderSelection
-	folderSelection = ""
+	SVAR folderSelection = NPC:folderSelection
+	folderSelection = "" //set the folder selection to cdf as the base
 	
 	//Makes a list of all the selected folders and matched subfolders
 	String folderList = ""
 	
 	//If we're matching from a data folder that has been entered as opposed to from a selection...
 	//of the folder itself from its parent directory, must properly set folderSelection.
-	If(DimSize(listWave,0) == 0) //no selected folders
+	If(sum(selWave) == 0) //no selected folders
 		folderSelection = cdf //set to current data folder	
 	EndIf
 
@@ -1060,8 +1383,8 @@ Function/S FindMatchedWaves(filters,folderList)
 	STRUCT filters &filters
 	String folderList
 	
-	DFREF NTF = root:Packages:NT
-	SVAR cdf = NTF:currentDataFolder
+	DFREF NPC = $CW
+	SVAR cdf = NPC:cdf
 	
 	Variable i,j,count,numORs
 	
@@ -1181,7 +1504,7 @@ Function ApplyFilters(filters)
 	String list_name = "",list_path = ""
 	
 	//Loop through each underscore position
-	For(pos=0;pos<5;pos+=1)	
+	For(pos=0;pos<7;pos+=1)	
 		switch(pos)
 			case 0: //prefix
 				filterTerms = resolveListItems(filters.prefix,";")
@@ -1197,6 +1520,12 @@ Function ApplyFilters(filters)
 				break
 			case 4: //trace
 				filterTerms = resolveListItems(filters.trace,";")
+				break
+			case 5: //pos 6
+				filterTerms = resolveListItems(filters.pos6,";")
+				break
+			case 6: //pos 7
+				filterTerms = resolveListItems(filters.pos7,";")
 				break
 		endswitch 
 		
@@ -1249,10 +1578,10 @@ Function SetWaveGrouping(filters,listWave,selWave)
 	Wave/T listWave
 	Wave selWave
 	
-	DFREF NTF = root:Packages:NT
-	DFREF NTD = root:Packages:NT:DataSets
+	DFREF NPC = $CW
+	DFREF NPD = $DSF
 	
-	SVAR listFocus = NTF:listFocus
+	SVAR listFocus = NPC:listFocus
 	
 	Variable numWaves = ItemsInList(filters.name,",")
 	Variable i,j,numGroupings = ItemsInList(filters.wg,",")
@@ -1265,11 +1594,11 @@ Function SetWaveGrouping(filters,listWave,selWave)
 	
 	If(!cmpstr(listFocus,"DataSet"))
 		RemoveWaveGroupings(listWave,"DataSet")
-		Wave DataSetLB_SelWave = NTD:DataSetLB_SelWave
+		Wave DataSetLB_SelWave = NPD:DataSetLB_SelWave
 		Redimension/N=(DimSize(listWave,0)) DataSetLB_SelWave
 	ElseIf(!cmpstr(listFocus,"WaveMatch"))
 		RemoveWaveGroupings(listWave,"WaveMatch")
-		Wave MatchLB_SelWave = NTF:MatchLB_SelWave
+		Wave MatchLB_SelWave = NPC:MatchLB_SelWave
 		Redimension/N=(DimSize(listWave,0)) MatchLB_SelWave
 	EndIf
 	
@@ -1320,11 +1649,17 @@ Function SetWaveGrouping(filters,listWave,selWave)
 			case "WSN":
 				WaveGroup_WSN(listWave,selWave,value)
 				break
+			case "WSNS":
+				WaveGroup_WSNStride(listWave,selWave,value)
+				break
 			case "B":
 				WaveGroup_Block(listWave,selWave,value)
 				break
 			case "S":
  				WaveGroup_Stride(listWave,selWave,value)
+				break
+			case "L":
+				WaveGroup_Line(listWave,selWave,value)
 				break
 			default:
  				WaveGroup_Position(listWave,selWave,value)
@@ -1340,15 +1675,15 @@ Function RemoveWaveGroupings(listWave,whichList)
 	Wave/T listWave
 	String whichList //WaveMatch or DataSet
 	Variable i,j
-	DFREF NTD = root:Packages:NT:DataSets
-	DFREF NTF = root:Packages:NT
+	DFREF NPD = $DSF
+	DFREF NPC = $CW
 
 	strswitch(whichList)
 		case "DataSet":
 			//group all together
 			Wave/T DS_BASE = GetDataSetWave(GetDSName(),"BASE")
 			Wave/T DS_ORG = GetDataSetWave(GetDSName(),"ORG")
-			Wave DataSetLB_SelWave = NTD:DataSetLB_SelWave
+			Wave DataSetLB_SelWave = NPD:DataSetLB_SelWave
 			
 			//Remove the groupings from the ORG data set version,
 			//Returns the waves to original ordering according to the BASE data set
@@ -1429,6 +1764,8 @@ Function WaveGroup_Position(listWave,selWave,value)
 //					SortColumns/KNDX=1 sortWaves={ws}
 					
 					String prevSubFolder = ""
+					Variable blockSize = 0
+					Variable startWS = 0
 					
 					//Separate sorted waves according to their folder paths.
 					For(k=0;k<DimSize(ws,0);k+=1)
@@ -1440,13 +1777,19 @@ Function WaveGroup_Position(listWave,selWave,value)
 							size = DimSize(tempWave,0)
 							Redimension/N=(size + 1,1,2) tempWave //add a row to temp wave
 							tempWave[k + whichWSN + startRow][0][] = ws[k][0][r]
+							
+							blockSize += 1
+							tempWave[startWS][0][] = ReplaceString("(" + num2str(blockSize-1) + ")",tempWave[startWS][0][r],"(" + num2str(blockSize) + ")")
+							
 						Else
 							//Start a new wave set
 							size = DimSize(tempWave,0)
 							Redimension/N=(size + 1,1,2) tempWave //add a row to temp wave
-							tempWave[k + whichWSN + startRow][0][] = "----WAVE SET " + num2str(whichWSN) + "----"
+						 	startWS = k + whichWSN + startRow
+							tempWave[k + whichWSN + startRow][0][] = "----WAVE SET " + num2str(whichWSN) + "----(0)"
 							whichWSN += 1
 							prevSubFolder = subFolder
+							blockSize = 0
 							k -= 1
 						EndIf
 						
@@ -1500,7 +1843,7 @@ Function WaveGroup_Position(listWave,selWave,value)
 							//Add two points, one for the WSN marker, and one for the first wave
 							size = DimSize(tempWave,0)
 							InsertPoints/M=0 size,2,tempWave
-							tempWave[size][0][] = "----WAVE SET " + num2str(whichWSN) + "----"
+							tempWave[size][0][] = "----WAVE SET " + num2str(whichWSN) + "----(1)" //add number of waves in the wave set on the end
 							tempWave[size + 1][0][] = ws[k][0][r]
 							whichWSN += 1
 							matchedTerms += term + ";"
@@ -1510,7 +1853,16 @@ Function WaveGroup_Position(listWave,selWave,value)
 							
 							//Find the WSN marker of the wave set one larger than the one we want
 							//This finds the last row of the wave set we are allocating to.
-							Variable index = tableMatch("*WAVE SET*" + num2str(wsn + baseWSN + 1) + "*",tempWave)
+							Variable wsStart = tableMatch("*WAVE SET*" + num2str(wsn + baseWSN) + "*-*",tempWave)
+							If(wsStart == -1)
+								continue
+							EndIf
+							
+							//get current size of matched wave set
+							String entry = tempWave[wsStart][0][0]
+							Variable wsSize = str2num(StringFromList(0,entry,")",strsearch(entry,"(",0) + 1))
+							
+							Variable index = tableMatch("*WAVE SET*" + num2str(wsn + baseWSN + 1) + "*-*",tempWave)
 							
 							//If it's the last wave set, index will be -1
 							//Add the matched wave to the end of the tempWave
@@ -1521,6 +1873,9 @@ Function WaveGroup_Position(listWave,selWave,value)
 							//Insert the matched wave into the last slot in that wave set block
 							InsertPoints/M=0 index,1,tempWave
 							tempWave[index][0][] = ws[k][0][r]
+							
+							//Increase the wave set counter
+							tempWave[wsStart][0][] = ReplaceString("(" + num2str(wsSize) + ")",entry,"(" + num2str(wsSize + 1) + ")")
 							
 						EndIf
 					EndFor
@@ -1570,6 +1925,8 @@ Function WaveGroup_Folder(listWave,selWave,value)
 		
 		String prevSubFolder = ""
 		
+		Variable blockSize=0,blockStart=0
+		
 		//Separate sorted waves according to their folder paths.
 		For(k=0;k<DimSize(ws,0);k+=1)
 			String subFolder = ParseFilePath(0,ws[k][0][1],":",1,depth + 1)
@@ -1580,18 +1937,113 @@ Function WaveGroup_Folder(listWave,selWave,value)
 				size = DimSize(tempWave,0)
 				Redimension/N=(size + 1,1,2) tempWave //add a row to temp wave
 				tempWave[k + whichWSN + startRow][0][] = ws[k][0][r]
+				
+				tempWave[blockStart][0][] = ReplaceString("(" + num2str(blockSize) + ")",tempWave[blockStart][0][r],"(" + num2str(blockSize + 1) + ")")
+				blockSize += 1
 			Else
 				//Start a new wave set
+				blockSize = 0
+				blockStart = k + whichWSN + startRow
 				size = DimSize(tempWave,0)
 				Redimension/N=(size + 1,1,2) tempWave //add a row to temp wave
-				tempWave[k + whichWSN + startRow][0][] = "----WAVE SET " + num2str(whichWSN) + "----"
+				tempWave[k + whichWSN + startRow][0][] = "----WAVE SET " + num2str(whichWSN) + "----(0)"
 				whichWSN += 1
+			
 				prevSubFolder = subFolder
 				k -= 1
 			EndIf
 			
 			prevSubFolder = subFolder
 		EndFor
+	EndFor
+	
+	//Push the sorted waves onto the listbox
+	matchContents(tempWave,listWave)
+	Redimension/N=(DimSize(tempWave,0)) selWave
+	
+End
+
+//Groups the input listWave into wave sets by their line in a data set archive table
+//Only works for data archives, which are defined in tables.
+//Doesn't accept a numerical entry, just /L
+
+//Must be placed first in a sequence of grouping flags, otherwise it will override all flags before it.
+Function WaveGroup_Line(listWave,selWave,value)
+	Wave/T listWave
+	Wave selWave
+	String value //wave grouping termsa
+	
+	DFREF NPC = $CW
+	DFREF NPD = $DSF
+	
+	SVAR listFocus = NPC:listFocus
+	
+	//Master temporary wave to build up the new wave groupings
+	Make/T/FREE/N=(0,1,2) tempWave
+	
+	
+	
+	//Check that the focus is on data sets
+	If(cmpstr(listFocus,"DataSet"))
+		return 0
+	EndIf
+	
+	//Check that the selected data set is a data archive
+	String dsName = GetDSName()
+	If(!isArchive(dsName))
+		return 0
+	EndIf
+	
+	//Get the archive table and base table
+	Wave/T archive = GetDataSetWave(dsName,"Archive")
+	Wave/T BASE = GetDataSetWave(dsName,"BASE")
+	
+	Variable i,j,numLines = DimSize(archive,0)
+	Variable whichWSN = 0
+	Variable startRow = 0
+			
+	For(i=0;i<numLines;i+=1)
+		Variable pathCol = FindDimLabel(archive,1,"IgorPath")
+		If(pathCol < 0)
+			continue
+		EndIf
+		
+		String path = archive[i][pathCol] //full path to the wave
+		If(!strlen(path))
+			path = "root:"
+		EndIf
+		
+		Variable numWaves = 0
+
+		
+		//current size of the temporary data set wave
+		Variable size = DimSize(tempWave,0)
+		
+		//loop through each underscore position
+		For(j=0;j<10;j+=1)
+			String item = archive[i][j]
+			
+			If(!strlen(item))
+				continue
+			EndIf
+			
+			//resolve any list syntax (commas and hyphens)
+			String itemList = resolveListItems(item,",")
+			
+			If(j == 0)
+				numWaves = ItemsInList(itemList,",")
+			Else
+				numWaves *= ItemsInList(itemList,",")
+			EndIf		
+		EndFor
+		
+		Redimension/N=(size + 1 + numWaves,1,2) tempWave //add rows to temp wave
+		tempWave[startRow][0][] = "----WAVE SET " + num2str(whichWSN) + "----(" + num2str(numWaves) + ")" //add new wave set for this line
+
+		tempWave[startRow + 1,startRow + numWaves][][] = BASE[p - (whichWSN + 1)][q][r]
+		
+		whichWSN += 1		
+		startRow = DimSize(tempWave,0)
 	EndFor
 	
 	//Push the sorted waves onto the listbox
@@ -1631,19 +2083,27 @@ Function WaveGroup_Block(listWave,selWave,value)
 			size = DimSize(tempWave,0)
 			//Add new wave set marker
 			If(i == nextBlock)
+				
 				InsertPoints/M=0 size,2,tempWave
-				tempWave[index][0][] = "----WAVE SET " + num2str(wsCount) + "----"
+				Variable blockStart = index
+				Variable blockCount = 0
+				tempWave[index][0][] = "----WAVE SET " + num2str(wsCount) + "----(1)"
 				index += 1
 				tempWave[index][0][] = ws[i][0][r]
 				index += 1
 				wsCount += 1
+				blockCount += 1 //counts the waves allocated to each wave set
 				nextBlock += blockSize
 			Else
 				//Add wave to the current block
 				InsertPoints/M=0 size,1,tempWave
 				tempWave[index][0][] = ws[i][0][r]
 				index += 1
+				blockCount += 1
 			EndIf
+			
+			//increase the wave count in the current wave set
+			tempWave[blockStart][0][] = ReplaceString("(" + num2str(blockCount-1) + ")",tempWave[blockStart][0][r],"(" + num2str(blockCount) + ")")
 		EndFor
 	EndFor
 	
@@ -1685,7 +2145,9 @@ Function WaveGroup_Stride(listWave,selWave,value)
 			size = DimSize(tempWave,0)
 			
 			InsertPoints/M=0 size,1,tempWave
-			tempWave[index][0][] = "----WAVE SET " + num2str(wsCount) + "----"
+			tempWave[index][0][] = "----WAVE SET " + num2str(wsCount) + "----(0)"
+			Variable wsStart = index
+			Variable blockSize = 0
 			
 			wsCount += 1
 			index += 1
@@ -1698,6 +2160,9 @@ Function WaveGroup_Stride(listWave,selWave,value)
 				tempWave[index][0][] = ws[i + count][0][r]
 				count += stride
 				index += 1
+				
+				tempWave[wsStart][0][] = ReplaceString("(" + num2str(blockSize) + ")",tempWave[wsStart][0][r],"(" + num2str(blockSize+1) + ")")
+				blockSize += 1
 			While(count < waveSetSize)
 		EndFor
 		
@@ -1738,9 +2203,17 @@ Function WaveGroup_WSI(listWave,selWave,value)
 		Variable waveSetSize = DimSize(ws,0)
 		
 		//Start of the wave set in the list wave
-		baseIndex = tableMatch("*WAVE SET*" + num2str(j) + "*",listWave) + 1
+		baseIndex = tableMatch("*WAVE SET*" + num2str(j) + "*-*",listWave) + 1
+	
 		If(baseIndex == -1)
 		 	continue
+		EndIf
+		
+			
+		//get current size of matched wave set
+		If(baseIndex > 0)
+			String entry = listWave[baseIndex-1][0][0]
+			Variable wsSize = str2num(StringFromList(0,entry,")",strsearch(entry,"(",0) + 1))
 		EndIf
 		
 		For(i=waveSetSize-1;i>-1;i-=1) //go backwards
@@ -1748,6 +2221,11 @@ Function WaveGroup_WSI(listWave,selWave,value)
 			//Not one of the indicated WSIs
 			If(WhichListItem(num2str(i),value,",") == -1)
 				DeletePoints/M=0 baseIndex + i,1,listWave
+				If(baseIndex > 0)
+					listWave[baseIndex-1][0][] = ReplaceString("(" + num2str(wsSize) + ")",listWave[baseIndex-1][0][r],"(" + num2str(wsSize-1) + ")")
+				
+					wsSize -= 1
+				EndIf
 			EndIf
 
 		EndFor
@@ -1763,6 +2241,57 @@ Function WaveGroup_WSI(listWave,selWave,value)
 	
 	Redimension/N=(DimSize(listwave,0)) selWave
 End
+
+
+//Selects wave set numbers by stride
+Function WaveGroup_WSNStride(listWave,selWave,value)
+	//If the value is a two part comma-separated list, the first item is the offset, the second is the stride.
+	//Otherwise the default is that the first wave set is kept, and we stride from there.
+	Wave/T listWave
+	Wave selWave
+	String value
+
+	//list comprehension (mixes of hyphens and commas are resolved into a comma-separated list)
+	value = resolveListItems(value,",")
+	Variable i,numWaveSets,item,numItems
+	
+	//Get the stride and offset
+	numItems = ItemsInList(value,",")
+	If(numItems == 2)
+		Variable offset = str2num(StringFromList(0,value,","))
+		Variable stride = str2num(StringFromList(1,value,","))
+	ElseIf(numItems == 1)
+		stride = str2num(value)
+		offset = 0
+	EndIf
+	
+	//are they valid entries?
+	If(numtype(stride) == 2 || numtype(offset) == 2)
+		return 0
+	EndIf
+		
+	numWaveSets = GetNumWaveSets(listWave)
+	
+	If(!DimSize(listWave,0))
+		return 0
+	EndIf
+	
+	String wsList = ""
+	Variable count = offset
+	Do
+		wsList += num2str(count) + ";"
+		count += stride
+	While(count < numWaveSets)
+	
+	For(i=numWaveSets-1;i > -1;i-=1)
+		If(whichlistitem(num2str(i),wsList,";") == -1)
+			DeleteWaveSet(listWave,i)
+		EndIf
+	EndFor
+	
+	Redimension/N=(DimSize(listwave,0)) selWave
+End
+
 
 //Filters the waves in the listbox by their wave set number (WSN).
 //For WSN=0-4, only the 1st through 5th (zero offset) wave sets will remain
@@ -1835,48 +2364,55 @@ End
 //Updates the Wave Match,NOT-match,relativeFolder search terms with the values in the GUI controls
 Function SetSearchTerms(filters)
 	STRUCT filters &filters
-	DFREF NTF = root:Packages:NT
+	DFREF NPC = $CW
 	
 	//Set the structure SVARs
 	SetFilterStructure(filters,"")
 	
-	ControlInfo/W=NT waveNotMatch
+	ControlInfo/W=NTP#Data waveNotMatch
 	filters.notMatch = S_Value
 	
-	ControlInfo/W=NT waveMatch
+	ControlInfo/W=NTP#Data waveMatch
 	filters.match = S_Value
 	
-	ControlInfo/W=NT relativeFolderMatch
+	ControlInfo/W=NTP#Data relativeFolderMatch
 	filters.relFolder = S_Value			
 	
-	ControlInfo/W=NT waveGrouping
+	ControlInfo/W=NTP#Data waveGrouping
 	filters.wg = S_Value	
 	
-	ControlInfo/W=NT prefixGroup
+	ControlInfo/W=NTP#Data prefixGroup
 	filters.prefix = S_Value
 	
-	ControlInfo/W=NT groupGroup
+	ControlInfo/W=NTP#Data groupGroup
 	filters.group = S_Value
 	
-	ControlInfo/W=NT seriesGroup
+	ControlInfo/W=NTP#Data seriesGroup
 	filters.series = S_Value
 	
-	ControlInfo/W=NT sweepGroup
+	ControlInfo/W=NTP#Data sweepGroup
 	filters.sweep = S_Value
 	
-	ControlInfo/W=NT traceGroup
+	ControlInfo/W=NTP#Data traceGroup
 	filters.trace = S_Value
+	
+	ControlInfo/W=NTP#Data pos6Group
+	filters.pos6 = S_Value
+	
+	ControlInfo/W=NTP#Data pos7Group
+	filters.pos7 = S_Value
+	
 	
 End
 
 //Returns list with full path of the selected items in the WavesListBox in the Navigator
 Function/S getSelectedItems()
-	DFREF NTF = root:Packages:NT
+	DFREF NPC = $CW
 	//Selection and List waves
-	Wave WavesLB_SelWave = NTF:WavesLB_SelWave
-	Wave/T WavesLB_ListWave = NTF:WavesLB_ListWave
+	Wave WavesLB_SelWave = NPC:WavesLB_SelWave
+	Wave/T WavesLB_ListWave = NPC:WavesLB_ListWave
 	
-	SVAR cdf = NTF:currentDataFolder
+	SVAR cdf = NPC:cdf
 	Variable i
 	
 	String selWaveList = ""
@@ -1945,16 +2481,16 @@ Function clearFilterControls([filtersOnly])
 	
 	STRUCT filters filters
 	
-	DFREF NTF = root:Packages:NT
-	DFREF NTD = root:Packages:NT:DataSets
+	DFREF NPC = $CW
+	DFREF NPD = $DSF
 	
-	SVAR listFocus = NTF:listFocus
+	SVAR listFocus = NPC:listFocus
 	
 	If(ParamIsDefault(filtersOnly))
 		filtersOnly = 0
 	EndIf
 	
-	String controls = "prefixGroup;groupGroup;seriesGroup;sweepGroup;traceGroup;waveGrouping;"
+	String controls = "prefixGroup;groupGroup;seriesGroup;sweepGroup;traceGroup;pos6Group;pos7Group;waveGrouping;"
 	
 	If(!cmpstr(listFocus,"WaveMatch"))
 		controls += "waveMatch;waveNotMatch;relativeFolderMatch;"
@@ -1966,13 +2502,13 @@ Function clearFilterControls([filtersOnly])
 		If(filtersOnly && i > 4)
 			return 0
 		EndIf
-		SetVariable $StringFromList(i,controls,";") win=NT,value=_STR:""
+		SetVariable $StringFromList(i,controls,";") win=NTP#Data,value=_STR:""
 	EndFor
 	
 	If(!cmpstr(listFocus,"DataSet"))
 		//Return to the BASE data set
-		Wave/T DataSetLB_ListWave = NTD:DataSetLB_ListWave
-		Wave DataSetLB_SelWave = NTD:DataSetLB_SelWave
+		Wave/T DataSetLB_ListWave = NPD:DataSetLB_ListWave
+		Wave DataSetLB_SelWave = NPD:DataSetLB_SelWave
 		String dsName = GetDSName()
 		
 		//No data set selected or none exist
@@ -1990,6 +2526,15 @@ Function clearFilterControls([filtersOnly])
 		//save the filter/grouping selection
 		SetSearchTerms(filters)
 		saveFilterSettings("DataSet")
+		
+							
+		Variable numWS_DS = GetNumWaveSets(DS_ORG)
+		
+		Wave/T DS_BASE = GetDataSetWave(dsName,"BASE")
+		Variable numWaves_DS = DimSize(DS_BASE,0)
+		
+		DisplayWaveNums(numWS_DS,numWaves_DS,"DS")
+		
 	Else
 		//Update the WaveMatch list box
 		getWaveMatchList()
@@ -2002,63 +2547,43 @@ Function changeFocus(selection,switchFilterSettings)
 	String selection //left or right
 	Variable switchFilterSettings//switchFilterSettings = 1 to save/recall filters
 	
-	
-	DFREF NTF = root:Packages:NT
-	DFREF NTD = root:Packages:NT:DataSets
+	DFREF NPC = $CW
+	DFREF NPD = $DSF
 	DFREF NTS = root:Packages:NT:Settings
+	NVAR dataPanelWidth = NPC:dataPanelWidth
 	NVAR offsetY = NTS:offsetY
 	NVAR hf =  NTS:hf
 	
 	//listbox resize positions
-	NVAR WM_Position = NTF:WM_Position
+	NVAR WM_Position = NPC:WM_Position
 			
-	SVAR listFocus = NTF:listFocus
+	SVAR listFocus = NPC:listFocus
 	
 	//return if the selection wasn't changed
 	If(!cmpstr(selection,listFocus))
 		return 0
 	EndIf
 	
-	SetDrawLayer/W=NT UserBack
+	SetDrawLayer/W=NTP UserBack
 	//Delete only the selection dots, not the rest of the draw layer
-	DrawAction/W=NT/L=UserBack getgroup=selectionDots
-	DrawAction/W=NT/L=UserBack delete=V_startPos,V_endPos
+	DrawAction/W=NTP/L=UserBack getgroup=selectionDots
+	DrawAction/W=NTP/L=UserBack delete=V_startPos,V_endPos
 	
 	strswitch(selection)
 		case "WaveMatch":
-			SetDrawEnv/W=NT gname=selectionDots,gstart
-			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 1.0))
-			DrawOval/W=NT 45,108*hf,50,113*hf
-			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.8))
-			DrawOval/W=NT 35,108*hf,40,113*hf
-			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.6))
-			DrawOval/W=NT 25,108*hf,30,113*hf
-			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.4))
-			DrawOval/W=NT 15,108*hf,20,113*hf
-			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.2))
-			DrawOval/W=NT 5,108*hf,10,113*hf
 			
-			//This ones extra, to compensate for some Igor bug messing with my object groups?
-			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 1.0))
-			DrawOval/W=NT 45,108*hf,50,113*hf
+			DrawAction/W=NTP#Data getgroup=dataSetLabels,delete;DrawAction/W=NTP#Data getgroup=dataSetLabels,delete
 			
-			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 1.0))
-			DrawOval/W=NT 133,108*hf,138,113*hf
-			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.8))
-			DrawOval/W=NT 143,108*hf,148,113*hf
-			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.6))
-			DrawOval/W=NT 153,108*hf,158,113*hf
-			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.4))
-			DrawOval/W=NT 163,108*hf,168,113*hf
-			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.2))
-			DrawOval/W=NT 173,108*hf,178,113*hf
-			
-			//rectangle selection
-			SetDrawEnv/W=NT linethick= 0,linefgc= (3,52428,1),fillfgc= (3,52428,1,32768)
-			DrawRect/W=NT 3,117*hf,WM_Position + 2,443*hf + offsetY
-			
-			SetDrawEnv/W=NT gstop
-			
+			SetDrawEnv/W=NTP#Data gstart,gname=dataSetLabels
+			SetDrawEnv/W=NTP#Data xcoord= abs,ycoord= abs, fsize=16, textxjust= 1,textyjust= 1,fname=$LIGHT
+			DrawText/W=NTP#Data dataPanelWidth/2,20,"DATA SET BUILDER"
+			SetDrawEnv/W=NTP#Data xcoord= abs,ycoord= abs,fstyle=1, fsize=16, textxjust= 1,textyjust= 1,textrgb=(0,54000,0),fname=$LIGHT
+			DrawText/W=NTP#Data 115,139,"MATCHED WAVES"
+			SetDrawEnv/W=NTP#Data xcoord= abs,ycoord= abs, fsize=14, textxjust= 1,textyjust= 1,fname=$LIGHT,textrgb=(0,0,0),fstyle=0
+			DrawText/W=NTP#Data 355,139,"DATA SET WAVES"
+		//	SetDrawEnv/W=NTP#Data xcoord= abs,ycoord= abs, fsize=14, textxjust= 1,textyjust= 1,fname=$LIGHT
+		//	DrawText/W=NTP#Data 540,135,"DATA SETS"
+			SetDrawEnv/W=NTP#Data gstop
 			If(switchFilterSettings)
 				//Save the current filters/grouping settings before changing focus
 				saveFilterSettings("DataSet")
@@ -2070,41 +2595,18 @@ Function changeFocus(selection,switchFilterSettings)
 			listFocus = "WaveMatch"
 			break
 		case "DataSet":
-			Variable offset = 150
-			Variable offset2 = 144
-			SetDrawEnv/W=NT gname=selectionDots,gstart
+			DrawAction/W=NTP#Data getgroup=dataSetLabels,delete;DrawAction/W=NTP#Data getgroup=dataSetLabels,delete
 			
-			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 1.0))
-			DrawOval/W=NT 69+offset,108*hf,74+offset,113*hf
-			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.8))
-			DrawOval/W=NT 59+offset,108*hf,64+offset,113*hf
-			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.6))
-			DrawOval/W=NT 49+offset,108*hf,54+offset,113*hf
-			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.4))
-			DrawOval/W=NT 39+offset,108*hf,44+offset,113*hf
-			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.2))
-			DrawOval/W=NT 29+offset,108*hf,34+offset,113*hf
-			
-			//This ones extra, to compensate for some Igor bug messing with my object groups?
-			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 1.0))
-			DrawOval/W=NT 69+offset,108*hf,74+offset,113*hf
-			
-			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 1.0))
-			DrawOval/W=NT 169+offset2,108*hf,174+offset2,113*hf
-			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.8))
-			DrawOval/W=NT 179+offset2,108*hf,184+offset2,113*hf
-			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.6))
-			DrawOval/W=NT 189+offset2,108*hf,194+offset2,113*hf
-			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.4))
-			DrawOval/W=NT 199+offset2,108*hf,204+offset2,113*hf
-			SetDrawEnv/W=NT linethick=0,fillfgc= (3,52428,1,floor(65535 * 0.2))
-			DrawOval/W=NT 209+offset2,108*hf,214+offset2,113*hf
-			
-			//rectangle selection
-			SetDrawEnv/W=NT linethick= 0,linefgc= (3,52428,1),fillfgc= (3,52428,1,32768)
-			DrawRect/W=NT WM_Position+2,117*hf,357,443*hf + offsetY
-			
-			SetDrawEnv/W=NT gstop
+			SetDrawEnv/W=NTP#Data gstart,gname=dataSetLabels
+			SetDrawEnv/W=NTP#Data xcoord= abs,ycoord= abs, fsize=16, textxjust= 1,textyjust= 1,fname=$LIGHT
+			DrawText/W=NTP#Data dataPanelWidth/2,20,"DATA SET BUILDER"
+			SetDrawEnv/W=NTP#Data xcoord= abs,ycoord= abs, fsize=14, textxjust= 1,textyjust= 1,fstyle=0,textrgb=(0,0,0),fname=$LIGHT
+			DrawText/W=NTP#Data 115,139,"MATCHED WAVES"
+			SetDrawEnv/W=NTP#Data xcoord= abs,ycoord= abs,fstyle=1, fsize=16, textxjust= 1,textyjust= 1,textrgb=(0,54000,0),fname=$LIGHT
+			DrawText/W=NTP#Data 355,139,"DATA SET WAVES"
+		//	SetDrawEnv/W=NTP#Data xcoord= abs,ycoord= abs, fsize=14, textxjust= 1,textyjust= 1,fname=$LIGHT
+		//	DrawText/W=NTP#Data 540,135,"DATA SETS"
+			SetDrawEnv/W=NTP#Data gstop
 			
 			If(switchFilterSettings)
 				//Save the current filters/grouping settings before changing focus
@@ -2126,20 +2628,20 @@ End
 Function saveFilterSettings(selection)
 	String selection
 	
-	DFREF NTF = root:Packages:NT
-	DFREF NTD = root:Packages:NT:DataSets
+	DFREF NPC = $CW
+	DFREF NPD = $DSF
 	
-	SVAR filterSettings = NTF:filterSettings
+	SVAR filterSettings = NPC:filterSettings
 	
 	If(!cmpstr(selection,"WaveMatch"))
 		filterSettings = getFilterSettings()
 	ElseIf(!cmpstr(selection,"DataSet"))
 		Wave/T DS_ORG = GetDataSetWave(GetDSName(),"ORG")
-		Wave/T DSNamesLB_ListWave = NTD:DSNamesLB_ListWave
+		Wave/T DSNamesLB_ListWave = NPD:DSNamesLB_ListWave
 		
 		Variable index = GetDSIndex()
 		If(index != -1 && WaveExists(DS_ORG))
-			String origFilterSettings = StringsFromList("9-13",DSNamesLB_ListWave[index][0][1],";")
+			String origFilterSettings = StringsFromList("11-17",DSNamesLB_ListWave[index][0][1],";")
 
 			DSNamesLB_ListWave[index][0][1] = getFilterSettings() + origFilterSettings
 		EndIf
@@ -2152,18 +2654,18 @@ Function/S recallFilterSettings(selection)
 	String selection
 	STRUCT filters filters
 	
-	DFREF NTF = root:Packages:NT
-	DFREF NTD = root:Packages:NT:DataSets
+	DFREF NPC = $CW
+	DFREF NPD = $DSF
 	
-	SVAR filterSettings = NTF:filterSettings
+	SVAR filterSettings = NPC:filterSettings
 	String dsFilters = ""
 
 	SetFilterStructure(filters,"")
 	
 	If(!cmpstr(selection,"WaveMatch"))
 		//WaveMatch list and selection waves
-		Wave/T listWave = NTF:MatchLB_ListWave
-		Wave selWave = NTF:MatchLB_SelWave
+		Wave/T listWave = NPC:MatchLB_ListWave
+		Wave selWave = NPC:MatchLB_SelWave
 		
 		//Fill out the structure with the saved settings
 		filters.match = StringFromList(0,filterSettings,";")
@@ -2174,28 +2676,31 @@ Function/S recallFilterSettings(selection)
 		filters.series = StringFromList(5,filterSettings,";")
 		filters.sweep = StringFromList(6,filterSettings,";")
 		filters.trace = StringFromList(7,filterSettings,";")
-		filters.wg = StringFromList(8,filterSettings,";")
+		filters.pos6 = StringFromList(8,filterSettings,";")
+		filters.pos7 = StringFromList(9,filterSettings,";")
+		filters.wg = StringFromList(10,filterSettings,";")
 		
 		//output the filter structure to a string list for the return value
 		String filterSettingStr = getFilterSettings()
 		
 	ElseIf(!cmpstr(selection,"DataSet"))
 		//Get the selected data set ORGANIZED wave
-		Wave/T DS_ORG = GetDataSetWave(GetDSName(),"ORG")
-		Variable index = GetDSIndex()
+		String dataset = GetDSName()
+		Wave/T DS_ORG = GetDataSetWave(dataset,"ORG")
+		Variable index = GetDSIndex(dataset=dataset)
 		
 		//Fill out the structure with the saved settings
 		//WaveMatch list and selection waves
-		Wave/T listWave = NTD:DataSetLB_ListWave
-		Wave selWave = NTD:DataSetLB_SelWave
+		Wave/T listWave = NPD:DataSetLB_ListWave
+		Wave selWave = NPD:DataSetLB_SelWave
 		
-		Wave/T DSNamesLB_ListWave = NTD:DSNamesLB_ListWave
+		Wave/T DSNamesLB_ListWave = NPD:DSNamesLB_ListWave
 		
 		//For data sets with no waves in them, set filters to empty
 		If(index == -1 || !WaveExists(DS_ORG) || index > DimSize(DSNamesLB_ListWave,0))
-			dsFilters = ";;;;;;;;;"
+			dsFilters = ";;;;;;;;;;;;;;;;;"
 		ElseIf(DimSize(DSNamesLB_ListWave,0) == 0)
-			dsFilters = ";;;;;;;;;"
+			dsFilters = ";;;;;;;;;;;;;;;;;"
 		Else
 			dsFilters = DSNamesLB_ListWave[index][0][1]
 		EndIf
@@ -2210,7 +2715,9 @@ Function/S recallFilterSettings(selection)
 		filters.series = StringFromList(5,dsFilters,";")
 		filters.sweep = StringFromList(6,dsFilters,";")
 		filters.trace = StringFromList(7,dsFilters,";")
-		filters.wg = StringFromList(8,dsFilters,";")
+		filters.pos6 = StringFromList(8,dsFilters,";")
+		filters.pos7 = StringFromList(9,dsFilters,";")
+		filters.wg = StringFromList(10,dsFilters,";")
 		
 		filterSettingStr = dsFilters
 	Else
@@ -2248,35 +2755,46 @@ Function RecallOriginalFilters(dsFilters)
 
 	
 	If(!strlen(StringFromList(3,dsFilters,";")))
-		filters.prefix = StringFromList(9,dsFilters,";")
+		filters.prefix = StringFromList(11,dsFilters,";")
 	Else
 		filters.prefix = StringFromList(3,dsFilters,";")
 	EndIf
 	
 	If(!strlen(StringFromList(4,dsFilters,";")))
-		filters.group = StringFromList(10,dsFilters,";")
+		filters.group = StringFromList(12,dsFilters,";")
 	Else
 		filters.group = StringFromList(4,dsFilters,";")
 	EndIf
 	
 	If(!strlen(StringFromList(5,dsFilters,";")))
-		filters.series = StringFromList(11,dsFilters,";")
+		filters.series = StringFromList(13,dsFilters,";")
 	Else
 		filters.series = StringFromList(5,dsFilters,";")
 	EndIf
 	
 	If(!strlen(StringFromList(6,dsFilters,";")))
-		filters.sweep = StringFromList(12,dsFilters,";")
+		filters.sweep = StringFromList(14,dsFilters,";")
 	Else
 		filters.sweep = StringFromList(6,dsFilters,";")
 	EndIf	
 	
 	If(!strlen(StringFromList(7,dsFilters,";")))
-		filters.trace = StringFromList(13,dsFilters,";")
+		filters.trace = StringFromList(15,dsFilters,";")
 	Else
 		filters.trace = StringFromList(7,dsFilters,";")
 	EndIf	
 	
+	If(!strlen(StringFromList(8,dsFilters,";")))
+		filters.pos6 = StringFromList(16,dsFilters,";")
+	Else
+		filters.pos6 = StringFromList(8,dsFilters,";")
+	EndIf
+	
+	If(!strlen(StringFromList(9,dsFilters,";")))
+		filters.pos7 = StringFromList(17,dsFilters,";")
+	Else
+		filters.pos7 = StringFromList(9,dsFilters,";")
+	EndIf
 	
 	//Change the controls
 	UpdateFilterControls(filters)
@@ -2287,16 +2805,19 @@ End
 Function UpdateFilterControls(filters)
 	STRUCT filters &filters
 	
-	SetVariable prefixGroup win=NT,value=_STR:filters.prefix
-	SetVariable groupGroup win=NT,value=_STR:filters.group
-	SetVariable seriesGroup win=NT,value=_STR:filters.series
-	SetVariable sweepGroup win=NT,value=_STR:filters.sweep
-	SetVariable traceGroup win=NT,value=_STR:filters.trace	
-	SetVariable waveGrouping win=NT,value=_STR:filters.wg	
+	SetVariable prefixGroup win=NTP#Data,value=_STR:filters.prefix
+	SetVariable groupGroup win=NTP#Data,value=_STR:filters.group
+	SetVariable seriesGroup win=NTP#Data,value=_STR:filters.series
+	SetVariable sweepGroup win=NTP#Data,value=_STR:filters.sweep
+	SetVariable traceGroup win=NTP#Data,value=_STR:filters.trace
+	SetVariable pos6Group win=NTP#Data,value=_STR:filters.pos6		
+	SetVariable pos7Group win=NTP#Data,value=_STR:filters.pos7
 	
-	SetVariable waveMatch win=NT,value=_STR:filters.match
-	SetVariable waveNotMatch win=NT,value=_STR:filters.notMatch
-	SetVariable relativeFolderMatch win=NT,value=_STR:filters.relFolder
+	SetVariable waveGrouping win=NTP#Data,value=_STR:filters.wg	
+	
+	SetVariable waveMatch win=NTP#Data,value=_STR:filters.match
+	SetVariable waveNotMatch win=NTP#Data,value=_STR:filters.notMatch
+	SetVariable relativeFolderMatch win=NTP#Data,value=_STR:filters.relFolder
 End
 
 //Selects the folders in the folder list in the Navigator list box
@@ -2304,17 +2825,17 @@ Function SelectFolder(folderList)
 	String folderList
 	Variable i,j,numFolders = ItemsInList(folderList,";")
 	
-	DFREF NTF = root:Packages:NT
-	DFREF NTD = root:Packages:NT:DataSets
+	DFREF NPC = $CW
+	DFREF NPD = $DSF
 	
-	SVAR cdf = NTF:currentDataFolder
+	SVAR cdf = NPC:cdf
 	
 	//Data Set Name wave list and filter info
-	Wave/T DSNamesLB_ListWave =NTD:DSNamesLB_ListWave
+	Wave/T DSNamesLB_ListWave =NPD:DSNamesLB_ListWave
 	
 	//Folder list and selection waves
-	Wave/T FolderLB_ListWave = NTF:FolderLB_ListWave
-	Wave FolderLB_SelWave = NTF:FolderLB_SelWave
+	Wave/T FolderLB_ListWave = NPC:FolderLB_ListWave
+	Wave FolderLB_SelWave = NPC:FolderLB_SelWave
 	
 	String folder="",parent="",child="",relFolder="",filters=""
 	
@@ -2334,8 +2855,14 @@ Function SelectFolder(folderList)
 	//Original parent folder
 	folder = StringFromList(0,folderList,";")
 	parent = ParseFilePath(1,folder,":",1,0)
-	SetDataFolder $parent
-	cdf = parent
+	
+	If(!cmpstr(folder,"root:"))
+		SetDataFolder root:
+		cdf = "root:"
+	Else
+		SetDataFolder $parent
+		cdf = parent
+	EndIf
 	
 	//Fill out the folder table from the parent folder
 	GetFolders()
@@ -2361,23 +2888,23 @@ End
 //Redraws the text showing the full path of th selected wave,
 //according to which list box is in-focus
 Function drawFullPathText()
-	DFREF NTF = root:Packages:NT
-	DFREF NTD = root:Packages:NT:DataSets
-	DFREF NTS = root:Packages:NT:Settings
+	DFREF NPC = $CW
+	DFREF NPD = $DSF
+	DFREF NTS = root:Packages:NeuroToolsPlus:Settings
 	
 	NVAR hf =  NTS:hf
-	SVAR listFocus = NTF:listFocus
+	SVAR listFocus = NPC:listFocus
 	Variable i = 0,row = -1
 	
 	//Select the list and selection waves
 	strswitch(listFocus)
 		case "WaveMatch":
-			Wave/T listWave = NTF:MatchLB_ListWave
-			Wave selWave = NTF:MatchLB_SelWave
+			Wave/T listWave = NPC:MatchLB_ListWave
+			Wave selWave = NPC:MatchLB_SelWave
 			break
 		case "DataSet":
-			Wave/T listWave = NTD:DataSetLB_ListWave
-			Wave selWave = NTD:DataSetLB_SelWave
+			Wave/T listWave = NPD:DataSetLB_ListWave
+			Wave selWave = NPD:DataSetLB_SelWave
 			break	
 	endswitch
 	
@@ -2394,15 +2921,15 @@ Function drawFullPathText()
 	
 	//no selection, delete text
 	If(row == -1)
-		DrawAction/W=NT getGroup=fullPathText,delete
+		DrawAction/W=NTP getGroup=fullPathText,delete
 		return 0
 	EndIf
 	
 	//Update the text box
-	DrawAction/W=NT getGroup=fullPathText,delete	
-	SetDrawEnv/W=NT fname=$LIGHT,fstyle=2,fsize=10,gname=fullPathText,gstart
-	DrawText/W=NT 14,464*hf,listWave[row][0][1]
-	SetDrawEnv/W=NT gstop
+	DrawAction/W=NTP getGroup=fullPathText,delete	
+	SetDrawEnv/W=NTP fname=$LIGHT,fstyle=2,fsize=10,gname=fullPathText,gstart
+	DrawText/W=NTP 14,464*hf,listWave[row][0][1]
+	SetDrawEnv/W=NTP gstop
 	
 End	
 
@@ -2413,65 +2940,266 @@ Function/S GetWaveList(ds)
 	Variable wsn //wave set number
 	String list = ""
 	
-	DFREF NTF = root:Packages:NT
-	DFREF NTD = root:Packages:NT:DataSets
+	DFREF NPC = $CW
+	DFREF NPD = $DSF
 	DFREF NTSI = root:Packages:NT:ScanImage
 	
 	//Wave Selector status
-	SVAR WaveSelectorStr = NTF:WaveSelectorStr
-	SVAR cdf = NTF:currentDataFolder
+	SVAR WaveSelectorStr = NPC:WaveSelectorStr
+	SVAR cdf = NPC:cdf
 	
 	Variable i
-	strswitch(ds.name)
-		case "Wave Match":
-			Wave/T listWave = NTF:MatchLB_ListWave
-			break
-		case "Navigator":
-			Wave/T WavesLB_ListWave = NTF:WavesLB_ListWave
-			Wave selWave = NTF:WavesLB_SelWave
-				
-			Duplicate/FREE/T WavesLB_ListWave,listWave
-			For(i=DimSize(selWave,0) - 1;i > -1;i-=1) //go backwards
-				If(selWave[i] != 1)
-					DeletePoints/M=0 i,1,listWave
-				Else
-					listWave[i] = cdf + listWave[i]
-				EndIf
-			EndFor
-			break
-		case "Image Browser":
-			Execute/Q/Z "root:Packages:NT:returnStr = SelectedScanFields(fullpath=1)"
-			SVAR returnStr = NTF:returnStr
-			return returnStr
-			break
-		default:
-			//Data Set
-			Wave/T listWave = GetDataSetWave(ds.name,"ORG")
-			break
-	endswitch
 	
-	Wave/T ws = GetWaveSet(listWave,ds.wsn)
-	If(!WaveExists(ws))
-		return ""
-	EndIf
+	For(i=0;i<ds.numDataSets;i+=1)
+		strswitch(ds.name[i])
+			case "Wave Match":
+				Wave/T listWave = NPC:MatchLB_ListWave
+				break
+			case "Navigator":
+				Wave/T WavesLB_ListWave = NPC:WavesLB_ListWave
+				Wave selWave = NPC:WavesLB_SelWave
+					
+				Duplicate/FREE/T WavesLB_ListWave,listWave
+				For(i=DimSize(selWave,0) - 1;i > -1;i-=1) //go backwards
+					If(selWave[i] != 1)
+						DeletePoints/M=0 i,1,listWave
+					Else
+						listWave[i] = cdf + listWave[i]
+					EndIf
+				EndFor
+				break
+			case "Image Browser":
+				Execute/Q/Z "root:Packages:NT:returnStr = SelectedScanFields(fullpath=1)"
+				SVAR returnStr = NPC:returnStr
+				return returnStr
+				break
+			default:
+				//Data Set
+				Wave/T listWave = GetDataSetWave(ds.name[i],"ORG")
+				break
+		endswitch
+		
+		Wave/T ws = GetWaveSet(listWave,ds.wsn)
+		If(!WaveExists(ws))
+			return ""
+		EndIf
+		
+		list = TextWaveToStringList(ws,";",layer=1)
+	EndFor
 	
-	list = TextWaveToStringList(ws,";",layer=1)
+	
 	
 	return list
 End
 
 //Returns info about the data set
 //Automatically chooses whatever option is selected in the Wave Selector menu
-Function GetDataSetInfo(ds[,extFunc])
+//Function GetDataSetInfo(ds[,extFunc])
+//	STRUCT ds &ds 
+//	Variable extFunc //is this an external function? We ignore the wavelistselector in this case
+//	
+//	DFREF NPC = $CW
+//	DFREF NPD = $DSF
+//	
+//	//Wave Selector status
+//	SVAR WaveSelectorStr = NPC:WaveSelectorStr
+//	SVAR cdf = NPC:cdf
+//	
+//	Variable i
+//	
+//	If(ParamIsDefault(extFunc))
+//		extFunc = 0
+//	EndIf
+//	
+//	If(!extFunc)
+//		strswitch(WaveSelectorStr)
+//			case "Wave Match":
+//				Wave/T listWave = NPC:MatchLB_ListWave
+//				break
+//			case "Navigator":
+//				Wave/T WavesLB_ListWave = NPC:WavesLB_ListWave
+//				Wave selWave = NPC:WavesLB_SelWave
+//					
+//				Duplicate/FREE/T WavesLB_ListWave,listWave
+//				For(i=DimSize(selWave,0) - 1;i > -1;i-=1) //go backwards
+//					If(selWave[i] > 0)
+//						listWave[i] = cdf + listWave[i]
+//					Else
+//						DeletePoints/M=0 i,1,listWave
+//					EndIf
+//				EndFor
+//	
+//				break
+//			case "Image Browser":
+//				Execute/Q/Z "root:Packages:NT:returnStr = SelectedScanFields(fullpath=1)"
+//				SVAR returnStr = NPC:returnStr
+//				
+//				Wave/T listWave = StringListToTextWave(returnStr,";")
+//				break
+//			default:
+//				//Data Set
+//				Wave/T listWave = GetDataSetWave(WaveSelectorStr,"ORG")
+//				
+//		endswitch
+//	Else
+//		//external function call
+//		Wave/T listWave = getExtFuncDataSet()
+//		Wave/T ds.listWave = listWave
+//	EndIf
+//	
+//	If(DimSize(listWave,0) == 0)
+//		SVAR ds.paths = NPD:DataSetWaves
+//		ds.paths = "NULL" //prevents error in 'Run Cmd'
+//		return -1
+//	EndIf
+//	
+//	//Fill out the data set structure
+//	Wave/T ds.listWave = listWave
+//	SVAR ds.name = NPC:WaveSelectorStr
+//	SVAR ds.paths = NPD:DataSetWaves
+//	ds.numWaveSets= GetNumWaveSets(listWave)
+//	ds.wsn = 0
+//	ds.wsi = 0
+//	ds.numWaves = GetNumWaves(listWave,ds.wsn)
+//	Wave/WAVE ds.waves = GetWaveSetRefs(listWave,ds.wsn)
+//	ds.paths = GetWaveSetList(listWave,ds.wsn,1)
+//	
+//	If(extFunc)
+//		ds.name = StringFromList(1,NameOfWave(ds.listWave),"_")
+//	EndIf
+//	
+//	//Fill out the progress bar structure	
+//	ds.progress.steps = ceil((ds.numWaveSets* ds.numWaves) / 10) //number of steps that must be processed for each update to progress bar
+//	ds.progress.increment = 10 //set to 10 increments to limit overhead for ControlUpdate (~5 ms per call)
+//	
+//	NVAR ds.progress.value = NPC:progressVal
+//	ds.progress.value = 0
+//	
+//	NVAR ds.progress.count = NPC:progressCount
+//	ds.progress.count = 0
+//	
+//	ValDisplay progress win=NT,disable=0	
+//	return 0
+//End
+
+//Uses the data set input and suffix to create a new output wave of the correct size
+Function/WAVE MakeOutputWave(ds,suffix,size)
+	STRUCT ds &ds
+	String suffix
+	Variable size //0=number of waves in waveset
+					  //1=size of the first wave in waveset
+					  
+	SetDataFolder GetWavesDataFolder(ds.waves[0][0],1)
+	
+	String outName = NameOfWave(ds.waves[0][0]) + "_" + suffix
+	
+	If(!size)
+		Make/O/N=(ds.numWaves[0]) $outName/Wave=outWave
+	Else
+		Make/O/N=(DimSize(ds.waves[0][0],0)) $outName/Wave=outWave
+	EndIf
+	
+	return outWave
+End
+
+Function GetDataSetInfo(ds)
+	STRUCT ds &ds 
+	
+	DFREF NPC = $CW
+	DFREF NPD = $DSF
+	
+	//Return all of the defined data sets for the function
+	Wave/T listWave = getExtFuncDataSet()
+	Wave/T ds.listWave = listWave
+	
+	//Number of returned data sets
+	ds.numDataSets = DimSize(listWave,1)
+	ds.numDataSets = (!ds.numDataSets) ? 1 : ds.numDataSets
+	
+	//Each data set gets it's own parameter for how many waves it has in the current waveset
+	Make/N=(ds.numDataSets)/O NPD:numDataSetWaves
+	Wave ds.numWaves = NPD:numDataSetWaves
+	
+	Make/WAVE/N=(0)/O NPD:outputWaves
+	Wave/WAVE ds.output = NPD:outputWaves
+	
+	Variable i
+	//Loop through each data set
+	For(i=0;i<ds.numDataSets;i+=1)
+		//Full paths
+		String fullPaths = GetWaveSetList(listWave,ds.wsn,1,dsNum=i)	
+		Variable numItems = ItemsInList(fullPaths,";")
+		
+		If(i == 0)
+			//Full paths
+			Make/O/T/N=(numItems,ds.numDataSets) NPD:DataSetWavePaths
+			Wave/T ds.paths = NPD:DataSetWavePaths
+			
+			//Number of waves in the waveset of each data set
+			Make/O/N=(ds.numDataSets) NPD:numDataSetWaves
+			Wave ds.numWaves = NPD:numDataSetWaves
+			
+			//Data Set Names
+			Make/T/O/N=(ds.numDataSets) NPD:DataSetNames
+			Wave/T ds.name = NPD:DataSetNames
+			
+			//Number of wavesets per data set
+			Make/O/N=(ds.numDataSets) NPD:NumWaveSets
+			Wave ds.numWaveSets= NPD:NumWaveSets
+		Else
+			If(numItems > DimSize(ds.paths,0))
+				Redimension/N=(numItems,-1) ds.paths
+			EndIf
+		EndIf
+				
+		Wave/T tempPaths = StringListToTextWave(fullPaths,";")
+		Redimension/N=(DimSize(ds.paths,0)) tempPaths
+		
+		If(DimSize(ds.paths,0) > 0)
+			ds.paths[][i] = tempPaths[p][0]
+		EndIf
+		
+		If(DimSize(ds.numWaves,0) > 0)
+			ds.numWaves[i] = numItems
+		EndIf
+		
+		If(DimSize(ds.name,0) > 0)
+			ds.name[i] = GetDimLabel(ds.listWave,1,i)
+		EndIf
+		
+		If(DimSize(ds.numWaveSets,0) > 0)
+			ds.numWaveSets[i] = GetNumWaveSets(listWave,dsNum=i)
+		EndIf
+	EndFor
+	
+	ds.wsn = 0
+	ds.wsi = 0
+	
+	Wave/WAVE ds.waves = GetWaveSetRefs(listWave,ds.wsn,ds.name)
+	
+	//Copy over the dimension labels to the other waves that are indexed by data set
+	For(i=0;i<DimSize(ds.waves,1);i+=1)
+		String theLabel = GetDimLabel(ds.waves,1,i)
+		SetDimLabel 0,i,$theLabel,ds.numWaves
+		SetDimLabel 1,i,$theLabel,ds.paths
+	EndFor
+	
+	return 0
+	
+End
+//USES ds structure, which is better for handling multiple data set definitions
+//Returns info about the data set
+//Automatically chooses whatever option is selected in the Wave Selector menu
+//Function GetDataSetInfo(ds[,extFunc])
 	STRUCT ds &ds 
 	Variable extFunc //is this an external function? We ignore the wavelistselector in this case
 	
-	DFREF NTF = root:Packages:NT
-	DFREF NTD = root:Packages:NT:DataSets
+	DFREF NPC = $CW
+	DFREF NPD = $DSF
 	
 	//Wave Selector status
-	SVAR WaveSelectorStr = NTF:WaveSelectorStr
-	SVAR cdf = NTF:currentDataFolder
+	SVAR WaveSelectorStr = NPC:WaveSelectorStr
+	SVAR cdf = NPC:cdf
 	
 	Variable i
 	
@@ -2482,25 +3210,15 @@ Function GetDataSetInfo(ds[,extFunc])
 	If(!extFunc)
 		strswitch(WaveSelectorStr)
 			case "Wave Match":
-				Wave/T listWave = NTF:MatchLB_ListWave
+				Wave/T listWave = NPC:MatchLB_ListWave
 				break
 			case "Navigator":
-				Wave/T WavesLB_ListWave = NTF:WavesLB_ListWave
-				Wave selWave = NTF:WavesLB_SelWave
-					
-				Duplicate/FREE/T WavesLB_ListWave,listWave
-				For(i=DimSize(selWave,0) - 1;i > -1;i-=1) //go backwards
-					If(selWave[i] > 0)
-						listWave[i] = cdf + listWave[i]
-					Else
-						DeletePoints/M=0 i,1,listWave
-					EndIf
-				EndFor
-	
+				Wave/T listWave = GetNavigatorWaveSelection()
+				
 				break
 			case "Image Browser":
 				Execute/Q/Z "root:Packages:NT:returnStr = SelectedScanFields(fullpath=1)"
-				SVAR returnStr = NTF:returnStr
+				SVAR returnStr = NPC:returnStr
 				
 				Wave/T listWave = StringListToTextWave(returnStr,";")
 				break
@@ -2516,83 +3234,245 @@ Function GetDataSetInfo(ds[,extFunc])
 	EndIf
 	
 	If(DimSize(listWave,0) == 0)
-		SVAR ds.paths = NTD:DataSetWaves
+		Wave/T ds.paths = NPD:DataSetWaves
 		ds.paths = "NULL" //prevents error in 'Run Cmd'
 		return -1
 	EndIf
 	
 	//Fill out the data set structure
+	ds.numDataSets = DimSize(listWave,1)
 	Wave/T ds.listWave = listWave
-	SVAR ds.name = NTF:WaveSelectorStr
-	SVAR ds.paths = NTD:DataSetWaves
-	ds.num = GetNumWaveSets(listWave)
+	
+	Make/N=(ds.numDataSets)/O NPD:numDataSetWaves
+	Wave ds.numWaves = NPD:numDataSetWaves
+	
+	For(i=0;i<ds.numDataSets;i+=1)
+		//Full paths
+		String fullPaths = GetWaveSetList(listWave,ds.wsn,1,dsNum=i)	
+		Variable numItems = ItemsInList(fullPaths,";")
+		
+		If(i == 0)
+			//Full paths
+			Make/O/T/N=(numItems,ds.numDataSets) NPD:DataSetWavePaths
+			Wave/T ds.paths = NPD:DataSetWavePaths
+			
+			//Number of waves in the waveset of each data set
+			Make/O/N=(ds.numDataSets) NPD:numDataSetWaves
+			Wave ds.numWaves = NPD:numDataSetWaves
+			
+			//Data Set Names
+			Make/T/O/N=(ds.numDataSets) NPD:DataSetNames
+			Wave/T ds.name = NPD:DataSetNames
+			
+			//Number of wavesets per data set
+			Make/O/N=(ds.numDataSets) NPD:NumWaveSets
+			Wave ds.numWaveSets= NPD:NumWaveSets
+		Else
+			If(numItems > DimSize(ds.paths,0))
+				Redimension/N=(numItems,-1) ds.paths
+			EndIf
+		EndIf
+				
+		Wave/T tempPaths = StringListToTextWave(fullPaths,";")
+		Redimension/N=(DimSize(ds.paths,0)) tempPaths
+		
+		ds.paths[][i] = tempPaths[p][0]
+		ds.numWaves[i] = numItems
+		ds.name[i] = GetDimLabel(ds.listWave,1,i)
+		ds.numWaveSets[i] = GetNumWaveSets(listWave,dsNum=i)
+	EndFor
+	
 	ds.wsn = 0
 	ds.wsi = 0
-	ds.numWaves = GetNumWaves(listWave,ds.wsn)
-	Wave/WAVE ds.waves = GetWaveSetRefs(listWave,ds.wsn)
-	ds.paths = GetWaveSetList(listWave,ds.wsn,1)
 	
-	If(extFunc)
-		ds.name = StringFromList(1,NameOfWave(ds.listWave),"_")
-	EndIf
+	Wave/WAVE ds.waves = GetWaveSetRefs(listWave,ds.wsn,ds.name)
+	
+//	If(extFunc)
+//		ds.name = StringFromList(1,NameOfWave(ds.listWave),"_")
+//	EndIf
 	
 	//Fill out the progress bar structure	
-	ds.progress.steps = ceil((ds.num * ds.numWaves) / 10) //number of steps that must be processed for each update to progress bar
+	ds.progress.steps = ceil((ds.numWaveSets[0] * ds.numWaves[0]) / 10) //number of steps that must be processed for each update to progress bar
 	ds.progress.increment = 10 //set to 10 increments to limit overhead for ControlUpdate (~5 ms per call)
 	
-	NVAR ds.progress.value = NTF:progressVal
+	NVAR ds.progress.value = NPC:progressVal
 	ds.progress.value = 0
 	
-	NVAR ds.progress.count = NTF:progressCount
+	NVAR ds.progress.count = NPC:progressCount
 	ds.progress.count = 0
 	
 	ValDisplay progress win=NT,disable=0	
 	return 0
 End
 
-//Updates the progress bar value, which is then accessed by a background function to update the control
-Function updateProgress(ds)
-	STRUCT ds &ds
+Function/WAVE GetNavigatorWaveSelection()
+	DFREF NPC = $CW
+	Wave/T WavesLB_ListWave = NPC:WavesLB_ListWave
+	Wave selWave = NPC:WavesLB_SelWave
+	SVAR cdf = NPC:cdf
 	
-	ds.progress.count += 1
-	If(!mod(ds.progress.count,ds.progress.steps))
-		ds.progress.value += ds.progress.increment
-		ControlUpdate/W=NT progress
+	Variable i
+	Duplicate/O/T WavesLB_ListWave,NPC:NavigatorSelection_ListWave
+	Wave/T listWave = NPC:NavigatorSelection_ListWave
+	
+	For(i=DimSize(selWave,0) - 1;i > -1;i-=1) //go backwards
+		If(selWave[i] > 0)
+			listWave[i] = cdf + listWave[i]
+		Else
+			DeletePoints/M=0 i,1,listWave
+		EndIf
+	EndFor
+	
+	return listWave
+End
+
+//Updates the progress bar value, which is then accessed by a background function to update the control
+//Function updateProgress(ds)
+//	STRUCT ds &ds
+//	
+//	ds.progress.count += 1
+//	If(!mod(ds.progress.count,ds.progress.steps))
+//		ds.progress.value += ds.progress.increment
+//		ControlUpdate/W=NTP progress
+//	EndIf
+//End
+
+//Removes the spacer and drop down symbol from the button titles on data set defined buttons
+Function/S removeSpacer(dsName)
+	String dsName
+	
+	If(!strlen(dsName))
+		return ""
 	EndIf
+	
+	//must remove the leading spacer
+	dsName = dsName[6,strlen(dsName)-1]
+	Do
+		String c = dsName[0]
+		If(!cmpstr(c," "))
+			dsName = dsName[1,strlen(dsName)-1]
+		Else
+			break	
+		EndIf
+	While(1)	
+	return dsName
 End
 
 //For the selected external function, finds any data sets and returns their listwave
 Function/WAVE getExtFuncDataSet()
 	String func = CurrentExtFunc()
-	Variable i,numParams = str2num(getParam("N_PARAMS",func))
+	Variable i,j,numParams = str2num(getParam("N_PARAMS",func))
 	
-	Make/T/O/N=(0,0,2) root:Packages:NT:DataSets:extFuncDataSets /Wave=extFuncDataSets
+	DFREF NPC = $CW
+	DFREF NPD = $DSF	
+	
+	SVAR cdf = NPC:cdf
+	
+	Make/T/O/N=(0,0,2) NPD:extFuncDataSets /Wave=extFuncDataSets
 	Variable count = 0
 	
 	For(i=0;i<numParams;i+=1)
 		String ctrlName = "param" + num2str(i)
 	
 		//check if it's a pop up menu
-		ControlInfo/W=NT $ctrlName
-		If(abs(V_flag) == 3) 
+		ControlInfo/W=NTP#Func $ctrlName
+		
+		If(abs(V_flag) == 1 || abs(V_flag) == 3) 
 			
 			//Check if the name is a data set reference or current data folder references. If it's not either it is a user defined pop up menu			
 			String name = getParam("PARAM_" + num2str(i) + "_NAME",func)
 			
-			If(!stringmatch(name,"DS_*"))
+			If(stringmatch(name,"CDF_*"))
+				Variable isCDF = 1
+			Else
+				isCDF = 0
+			EndIf
+			
+			If(!stringmatch(name,"DS_*") && !stringmatch(name,"CDF_*"))
 				continue
 			EndIf
 			
 			String dsName = getParam("PARAM_" + num2str(i) + "_VALUE",func)
-			Wave/T ds = GetDataSetWave(dsName,"ORG")
 			
+			If(!strlen(dsName))
+				dsName = S_Title
+				
+				//must remove the leading spacer
+				dsName = removeSpacer(dsName)
+			EndIf
+			
+			
+			If(stringmatch(dsName,"**Wave Match**"))
+				Wave/T ds = NPC:MatchLB_ListWave
+			ElseIf(stringmatch(dsName,"**Navigator**"))
+				Wave/T WavesLB_ListWave = NPC:WavesLB_ListWave
+				Wave WavesLB_SelWave = NPC:WavesLB_SelWave
+				
+				//get selected waves in the navigator
+				Variable navCount = 0
+				Make/N=0/T/O NPC:NavigatorSelectionWave/Wave = navSelect
+				
+				For(j=0;j<DimSize(WavesLB_ListWave,0);j+=1)
+					If(WavesLB_SelWave[j] > 0)
+						navCount += 1
+						Redimension/N=(navCount) navSelect
+						navSelect[navCount - 1] = cdf + WavesLB_ListWave[j][1]
+					EndIf
+				EndFor
+				
+				Wave/T ds = NPC:NavigatorSelectionWave
+			Else
+				//Determine if the data set name is actually a wave path or list of wave paths
+				Variable numItems = ItemsInList(dsName,";") 
+				If(numItems == 1)
+					If(WaveExists($StringFromList(0,dsName,";")))
+						Variable isWaveList = 1
+					Else
+						isWaveList = 0
+					EndIf
+				Else
+					isWaveList = 1
+				EndIf
+				
+				//standard data set definition
+				If(!isCDF && !isWaveList)
+					Wave/T ds = GetDataSetWave(dsName,"ORG")
+				Else
+					//wave list definition
+					Make/N=(numItems,1,2)/O/T NPC:FunctionWaveList/Wave=FunctionWaveList
+					Wave/T list = StringListToTextWave(dsName,";")
+					FunctionWaveList[][] = list[p][0]
+					Wave/T ds = FunctionWaveList
+				EndIf
+			EndIf
+					
 			If(DimSize(ds,0) > DimSize(extFuncDataSets,0))
 				Redimension/N=(DimSize(ds,0),DimSize(extFuncDataSets,1)+1,2) extFuncDataSets
+			ElseIf(isCDF)
+				Redimension/N=(-1,DimSize(extFuncDataSets,1)+1,2) extFuncDataSets
 			Else
 				Redimension/N=(-1,DimSize(extFuncDataSets,1)+1,2) extFuncDataSets
 			EndIf
 			
-			extFuncDataSets[0,DimSize(ds,0)-1][count][] = ds[p][0][r]
+			If(isCDF)
+				Variable size = 1
+			Else
+				size = DimSize(ds,0)
+			EndIf
+			
+			If(size > 0)
+				If(isCDF)
+					extFuncDataSets[0][count][0] = dsName
+					extFuncDataSets[0][count][1] = GetDataFolder(1) + dsName
+				Else
+					extFuncDataSets[0,DimSize(ds,0)-1][count][] = ds[p][0][r]
+				EndIf
+			EndIf
+			
+			//Truncate the DS_ from the data set variable name
+			name = StringsFromList("1-*",name,"_",noEnding=1)
+			SetDimLabel 1,count,$name,extFuncDataSets
+			
 			count += 1
 //			return ds
 		EndIf
@@ -2629,6 +3509,8 @@ End
 Function FlattenWave(inputWave)
 	Wave inputWave
 	
+	DFREF saveDF = GetDataFolderDFR()
+	
 	SetDataFolder GetWavesDataFolder(inputWave,1)
 	Make/O/D/N=0 coefs
 	Duplicate/O inputWave,filtered
@@ -2648,6 +3530,8 @@ Function FlattenWave(inputWave)
 
 	
 	KillWaves/Z filterWave,coefs
+	
+	SetDataFolder saveDF
 End
 
 Function ResetAllTimers()
@@ -2661,9 +3545,17 @@ End
 //Kills wave even if it is a part of a graph or window
 Function ReallyKillWaves(w)
   Wave w
-
+	
+  If(!WaveExists(w))
+  	return 0
+  EndIf
+  
   string name=nameofwave(w)
   string graphs=WinList("*",";","WIN:1") // A list of all graphs
+  
+  //NeuroToolsPlus Viewer needs to be checked
+  graphs += "NTP#Nav#Viewer"
+  
   variable i,j
   for(i=0;i<itemsinlist(graphs);i+=1)
     string graph=stringfromlist(i,graphs)
@@ -2686,6 +3578,7 @@ Function ReallyKillWaves(w)
     	if(whichlistitem(name,traces) != -1) // Assumes that each wave is plotted at most once on a graph.  
       	RemoveFromGraph/Z /W=$graph $name
     	endif	
+    ElseIf(!cmpstr(graph,""))
     Else
     	traces=TraceNameList(graph,";",3)
     
@@ -2694,22 +3587,45 @@ Function ReallyKillWaves(w)
 	    endif
 	 EndIf 
   endfor
+  
 
   string tables=WinList("*",";","WIN:2") // A list of all tables
   for(i=0;i<itemsinlist(tables);i+=1)
     string table=stringfromlist(i,tables)
     j=0
     do
+      
+      String info = TableInfo(table,j)
+      
+      If(!strlen(info))
+      	break
+      EndIf
+      
+      //Name of wave in the column
+      name = StringByKey("WAVE",info,":",";")
+      
+      If(!cmpstr(GetWavesDataFolder(w,2),name))
+      	 RemoveFromTable/Z/W=$table $name.d,$name.l
+      	
+      EndIf
+      
+      
       string column=StringFromList(j,table)
       if(!strlen(column))
       	break
       endif
+      
+      
+      
       if(cmpstr(column,name) == 0)
         RemoveFromTable/Z/W=$table $column
         break
       else
       	j+=1
       endif
+      
+      
+      //Check 
     while(1)
   endfor 
 
@@ -2717,15 +3633,26 @@ Function ReallyKillWaves(w)
 End  
 
 //Returns a list of the #waves in each waveset of the data set
-Function/S GetDataSetDims(dsName)
+Function/S GetDataSetDims(dsName,[WM,Nav])
 	String dsName
+	Variable WM,Nav
 	String dims = ""
+	
+	WM = (ParamIsDefault(WM)) ? 0 : 1
+	Nav = (ParamIsDefault(Nav)) ? 0 : 1
 	
 	If(!strlen(dsName))
 		return ""
 	EndIf
 	
-	Wave/T ds = GetDataSetWave(dsName,"ORG")
+	If(WM)
+		Wave/T ds = root:Packages:NeuroToolsPlus:ControlWaves:MatchLB_ListWave
+	ElseIf(Nav)
+		Wave/T ds = root:Packages:NeuroToolsPlus:ControlWaves:NavigatorSelection_ListWave
+	Else
+		Wave/T ds = GetDataSetWave(dsName,"ORG")
+	EndIf
+	
 	If(!WaveExists(ds))
 		return ""
 	EndIf	
@@ -2739,29 +3666,34 @@ Function/S GetDataSetDims(dsName)
 End
 
 //Returns a string list of angles according to the input expression or list in 'Measure' command for the 'Vector Sum' measurement.
-Function/S GetVectorSumAngles(ds,size)
+Function/S GetVectorSumAngles(ds,angleExpression)
 	STRUCT ds &ds
-	Variable size
+	String angleExpression
 	
-	//Get the angles
-	ControlInfo/W=NT angleWave //this is an expression or list that must be resolved
-	String expression = S_Value
+	//Number of angles to use
+	Variable size = DimSize(ds.waves[ds.wsi],0)
 	
 	//Is it a list?
-	If(stringmatch(expression,"*,*"))
+	If(stringmatch(angleExpression,"*,*"))
 		String separator = ","
-	ElseIf(stringmatch(expression,"*;*"))
+	ElseIf(stringmatch(angleExpression,"*;*"))
 		separator = ";"
 	Else
 		separator = ""
 	EndIf
-
+	
+	//If not expression was input, use the native X scaling of the data wave
+	If(!strlen(angleExpression))
+		angleExpression = num2str(DimOffset(ds.waves[ds.wsi],0)) + " + "
+		angleExpression += num2str(DimDelta(ds.waves[ds.wsi],0)) + "*x"
+	EndIf
+	
 	//If there was no list separator (comma or semi-colon), must be an expression
 	If(!strlen(separator))
 		//resolves a mathematical expression into a semi-colon list of angles
-		String angles = ResolveAngleExpression(expression,size)
+		String angles = ResolveAngleExpression(angleExpression,size)
 	Else
-		angles = ReplaceString(separator,expression,";")
+		angles = ReplaceString(separator,angleExpression,";")
 	EndIf
 
 	return angles
@@ -2772,9 +3704,9 @@ Function/S ResolveAngleExpression(expression,size)
 	String expression
 	Variable size
 	
-	Make/O/N=(size) root:Packages:NT:angleResult
-	Execute "root:Packages:NT:angleResult = " + expression
-	Wave angleResult = root:Packages:NT:angleResult
+	Make/O/N=(size) root:Packages:NeuroToolsPlus:angleResult
+	Execute "root:Packages:NeuroToolsPlus:angleResult = " + expression
+	Wave angleResult = root:Packages:NeuroToolsPlus:angleResult
 	
 	//Ensure that all angles are within 0-360 range, wrap circularly
 	Variable i
@@ -2784,15 +3716,15 @@ Function/S ResolveAngleExpression(expression,size)
 			Variable remainder = angleResult[i]
 			Do
 				remainder -= 360
-			While(remainder > 360)
+			While(remainder >= 360)
 			angleResult[i] = remainder
 			
-		//If the angle is negative
-		ElseIf(angleResult[i] < 0)
+		//If the angle is less than -360°
+		ElseIf(angleResult[i] <= - 360)
 			remainder = angleResult[i]
 			Do
 				remainder += 360
-			While(remainder < 0)
+			While(remainder <= 360)
 			angleResult[i] = remainder
 		EndIf	
 	EndFor
@@ -2815,9 +3747,11 @@ End
 Function/S resolveCmdLine(cmdLineStr,wsn,wsi)
 	String cmdLineStr
 	Variable wsn,wsi
-
+	
+	DFREF NPC = $CW
+	
 	//WaveSet data
-	//ControlInfo/W=NT extFuncDS
+	//ControlInfo/W=NTP extFuncDS
 	//numWaveSets = GetNumWaveSets(S_Value)
 	//wsDims = GetWaveSetDims(S_Value)
 	
@@ -2850,8 +3784,20 @@ Function/S resolveCmdLine(cmdLineStr,wsn,wsi)
 			
 			//Get the referenced data set
 			dsName = cmdLineStr[pos1+1,pos2-1]
-			Wave/T/Z ds = GetDataSetWave(dsName,"ORG")
-				
+			
+			strswitch(dsName)
+				case "WM":
+					//wave match
+					Wave/T/Z ds = NPC:MatchLB_ListWave
+					break
+				case "NAV":
+					Wave/T/Z ds = GetNavigatorWaveSelection()
+					break
+				default:
+					Wave/T/Z ds = GetDataSetWave(dsName,"ORG")
+					break
+			endswitch
+			
 			If(pos3 != -1 && pos2 != -1)
 				//set pos2 to after the waveset specifier for proper string trimming
 				pos2 = pos4
@@ -2891,11 +3837,9 @@ Function/S resolveCmdLine(cmdLineStr,wsn,wsi)
 				Else
 					wsiIndex = wsi
 				EndIf
-				
-				
-			  String theWaveSet = GetWaveSetList(GetDataSetWave(dsName,"ORG"),wsnIndex,1)
-			  String theWaveStr = StringFromList(wsiIndex,theWaveSet,";")
-				
+
+				String theWaveSet = GetWaveSetList(ds,wsnIndex,1)
+				String theWaveStr = StringFromList(wsiIndex,theWaveSet,";")
 			Else
 				//No wsi specifier
 				If(cmpstr(dsName,"wsi") == 0)
@@ -2905,7 +3849,7 @@ Function/S resolveCmdLine(cmdLineStr,wsn,wsi)
 				   theWaveSet = ""
 				   theWaveStr = num2str(wsn)
 				Else
-					theWaveSet = GetWaveSetList(GetDataSetWave(dsName,"ORG"),wsn,1)
+					theWaveSet = GetWaveSetList(ds,wsn,1)
 					
 					//If we're using two data sets, and one is longer than the other, this may occur
 					//Or if we have a single wave data set operating on all waves of a second data set
@@ -2937,10 +3881,10 @@ End
 //Appends the command line entry from 'Run Cmd Line' to the master entry
 //and displays it below
 Function appendCommandLineEntry()
-	DFREF NTF = root:Packages:NT
-	SVAR masterCmdLineStr = NTF:masterCmdLineStr
+	DFREF NPC = $CW
+	SVAR masterCmdLineStr = NPC:masterCmdLineStr
 	
-	ControlInfo/W=NT cmdLineStr
+	ControlInfo/W=NTP cmdLineStr
 	String entry = S_Value
 	
 	If(!strlen(entry))
@@ -2960,36 +3904,36 @@ End
 //Draws each entry of the Master Command Line String to the GUI
 Function DrawMasterCmdLineEntry()
 
-	DFREF NTF = root:Packages:NT
-	SVAR masterCmdLineStr = NTF:masterCmdLineStr
+	DFREF NPC = $CW
+	SVAR masterCmdLineStr = NPC:masterCmdLineStr
 	
 	Variable i,xPos,yPos
 	xPos = 461
 	yPos = 159
 	
 	//Clear previous command string text
-	DrawAction/W=NT getgroup=CmdLineText,delete
+	DrawAction/W=NTP getgroup=CmdLineText,delete
 	
 	//Draw the command string text in lines
-	SetDrawEnv/W=NT gname=CmdLineText,gstart
+	SetDrawEnv/W=NTP gname=CmdLineText,gstart
 	For(i=0;i<ItemsInList(masterCmdLineStr,";/;");i+=1)
-		SetDrawEnv/W=NT fname=$LIGHT,fsize=10
-		DrawText/W=NT xPos,yPos,"\f01" + num2str(i) + ": \f00" + StringFromList(i,masterCmdLineStr,";/;")
+		SetDrawEnv/W=NTP fname=$LIGHT,fsize=10
+		DrawText/W=NTP xPos,yPos,"\f01" + num2str(i) + ": \f00" + StringFromList(i,masterCmdLineStr,";/;")
 		yPos += 20
 	EndFor
-	SetDrawEnv/W=NT gstop
+	SetDrawEnv/W=NTP gstop
 End
 
 //Clears the master command line entry
 Function clearCommandLineEntry()
-	DFREF NTF = root:Packages:NT
-	SVAR masterCmdLineStr = NTF:masterCmdLineStr
+	DFREF NPC = $CW
+	SVAR masterCmdLineStr = NPC:masterCmdLineStr
 	masterCmdLineStr = ""
 	
 	SetVariable cmdLineStr win=NT,value=_STR:""
 	
 	//Clear previous command string text
-	DrawAction/W=NT getgroup=CmdLineText,delete
+	DrawAction/W=NTP getgroup=CmdLineText,delete
 	
 	//Set the window hook for deleting and editing specific entries
 	SetWindow NT hook(cmdLineEntryHook) = $""
@@ -3000,32 +3944,32 @@ End
 
 //Opens the Trace Viewer window
 Function openViewer()
-	DFREF NTF = root:Packages:NT
+	DFREF NPC = $CW
 	DFREF NTS = root:Packages:NT:Settings
 	
-	NVAR viewerOpen = NTF:viewerOpen
-	SVAR viewerRecall = NTF:viewerRecall
+	NVAR viewerOpen = NPC:viewerOpen
+	SVAR viewerRecall = NPC:viewerRecall
 	NVAR hf = NTS:hf
 	
 	Variable r = ScreenResolution / 72
 	
 	//Define guides
-//	DefineGuide/W=NT VT = {FT,0.6315,FB}
-//	DefineGuide/W=NT VB = {FT,0.97,FB}
-	DefineGuide/W=NT VT = {FT,515*hf}
-	DefineGuide/W=NT VB = {FT,790*hf}
+//	DefineGuide/W=NTP VT = {FT,0.6315,FB}
+//	DefineGuide/W=NTP VB = {FT,0.97,FB}
+	DefineGuide/W=NTP VT = {FT,515*hf}
+	DefineGuide/W=NTP VB = {FT,790*hf}
 		
 	//Add an additional 200 pixels to the toolbox on the bottom
 	GetWindow NT wsize
-	MoveWindow/W=NT V_left,V_top,V_right,V_bottom + 300*hf/r
+	MoveWindow/W=NTP V_left,V_top,V_right,V_bottom + 300*hf/r
 	
 	//Open the display window only if it wasn't already open
 	If(viewerOpen == 0)
-		Display/HOST=NT/FG=(FL,VT,FR,VB)/N=ntViewerGraph
+		Display/HOST=NT/FG=(FL,VT,FR,VB)/N=Viewer
 	EndIf	
 	
 	//adjust guide for scanListPanel so it doesn't get in the viewer's way
-	DefineGuide/W=NT listboxBottom={FT,0.61,FB}
+	DefineGuide/W=NTP listboxBottom={FT,0.61,FB}
 	
 	//Display the window controls
 	Button ntViewerAutoScaleButton win=NT,size={50,20},pos={3,793*hf},title="AUTO",proc=ntButtonProc
@@ -3045,29 +3989,29 @@ End
 
 //Closes the Trace Viewer window
 Function closeViewer()
-	DFREF NTF = root:Packages:NT
+	DFREF NPC = $CW
 	DFREF NTS = root:Packages:NT:Settings
-	SVAR viewerRecall = NTF:viewerRecall
-	NVAR viewerOpen = NTF:viewerOpen
+	SVAR viewerRecall = NPC:viewerRecall
+	NVAR viewerOpen = NPC:viewerOpen
 	NVAR hf = NTS:hf
 	
 	Variable r = ScreenResolution / 72
 	
-	viewerRecall = WinRecreation("NT#ntViewerGraph",0)
-	//viewerRecall = ReplaceString("Display/W=(162,200,488,600)/FG=(FL,VT,FR,VB)/HOST=#",viewerRecall,"AppendToGraph/W=NT#ntViewerGraph")
+	viewerRecall = WinRecreation("NTP#Nav#Viewer",0)
+	//viewerRecall = ReplaceString("Display/W=(162,200,488,600)/FG=(FL,VT,FR,VB)/HOST=#",viewerRecall,"AppendToGraph/W=NTP#Nav#Viewer")
 	
 	Variable pos1 = strsearch(viewerRecall,"Display",0)
 	Variable pos2 = strsearch(viewerRecall,"#",0)
 	String matchStr = viewerRecall[pos1,pos2]
-	viewerRecall = ReplaceString(matchStr,viewerRecall,"AppendToGraph/W=NT#ntViewerGraph")
+	viewerRecall = ReplaceString(matchStr,viewerRecall,"AppendToGraph/W=NTP#Nav#Viewer")
 	
-	KillWindow/Z NT#ntViewerGraph
+	KillWindow/Z NTP#Nav#Viewer
 	//Remove 200 pixels to the toolbox on the bottom
 	GetWindow NT wsize
-	MoveWindow/W=NT V_left,V_top,V_right,V_top + 515*hf/r
+	MoveWindow/W=NTP V_left,V_top,V_right,V_top + 515*hf/r
 	
 	//adjust guide for scanListPanel so it doesn't get in the viewer's way
-	DefineGuide/W=NT listboxBottom={FB,-10}
+	DefineGuide/W=NTP listboxBottom={FB,-10}
 	
 	viewerOpen = 0
 End
@@ -3076,23 +4020,27 @@ Function AppendToViewer(listWave,selWave)
 	Wave/T listWave //listwave associated with the clicked listbox
 	Wave selWave
 	
-	DFREF NTF = root:Packages:NT
-	SVAR cdf = NTF:currentDataFolder
+	DFREF NPC = $CW
+	SVAR cdf = NPC:cdf
 	
-	NVAR areHorizSeparated = NTF:areHorizSeparated
-	NVAR areVertSeparated = NTF:areVertSeparated
+	NVAR areHorizSeparated = NPC:areHorizSeparated
+	NVAR areVertSeparated = NPC:areVertSeparated
 	
 	Variable i,j,type,numTraces
 
-	DoWindow/W=NT#ntViewerGraph ntViewerGraph
-		
+	DoWindow/W=NTP#Nav#Viewer Viewer
+	
+//	Variable timerRef = StartMSTimer	
+	
 	//Does the window exist?
 	If(V_flag)
-		String traceList = TraceNameList("NT#ntViewerGraph",";",1)
+		String traceList = TraceNameList("NTP#Nav#Viewer",";",1)
+		traceList += ImageNameList("NTP#Nav#Viewer",";")
 		
 		//Remove all traces
 		For(i=ItemsInList(traceList)-1;i>-1;i-=1)
-			RemoveFromGraph/Z/W=NT#ntViewerGraph $StringFromList(i,traceList,";")
+			RemoveFromGraph/Z/W=NTP#Nav#Viewer $StringFromList(i,traceList,";")
+			RemoveImage/Z/W=NTP#Nav#Viewer $StringFromList(i,traceList,";")
 		EndFor
 		
 		traceList = ""
@@ -3112,48 +4060,274 @@ Function AppendToViewer(listWave,selWave)
 					For(j=0;j<DimSize(ws,0);j+=1)
 						//Prevent duplicates waves from being appended
 						If(!stringmatch(traceList,"*" + ws[j][0][1] + "*"))
-							AppendToGraph/W=NT#ntViewerGraph $ws[j][0][1]
-							traceList += ws[j][0][1] + ";"
+							If(WaveType($ws[j][0][1],1) == 1)
+								AppendToGraph/W=NTP#Nav#Viewer $ws[j][0][1]
+								traceList += ws[j][0][1] + ";"
+							EndIf
 						EndIf
 					EndFor
 				Else
 					//only append numeric waves
+					Wave w = $listWave[i][0][1]
+					CheckDisplayed/W=NTP#Nav#Viewer w
 					
 					//Prevent duplicates waves from being appended
 					If(!stringmatch(traceList,"*" + listWave[i][0][1] + "*"))
+						
+						
 						If(WaveExists($listWave[i][0][1]))
-							AppendToGraph/W=NT#ntViewerGraph $listWave[i][0][1]
-							traceList += listWave[i][0][1] + ";"
+							If(WaveType($listWave[i][0][1],1) == 1)
+								AppendToGraph/W=NTP#Nav#Viewer $listWave[i][0][1]
+								traceList += listWave[i][0][1] + ";"
+							EndIf
 						EndIf
 					EndIf
 				EndIf
 			EndIf	
 		EndFor
+		
+		//if last selected wave has more than a single dimension (image or volume)
+		Wave finalWave = $StringFromList(ItemsInList(traceList,";") - 1,traceList,";")
+		
+		If(WaveDims(finalWave) > 1)
+			traceList = TraceNameList("NTP#Nav#Viewer",";",1)
+			traceList += ImageNameList("NTP#Nav#Viewer",";")
+		
+			//Remove all traces
+			For(i=ItemsInList(traceList)-1;i>-1;i-=1)
+				RemoveFromGraph/Z/W=NTP#Nav#Viewer $StringFromList(i,traceList,";")
+				RemoveImage/Z/W=NTP#Nav#Viewer $StringFromList(i,traceList,";")
+			EndFor
+			
+			AppendImage/W=NTP#Nav#Viewer/L/B finalWave
+			traceList = ImageNameList("NTP#Nav#Viewer",";")
+		EndIf
 	EndIf	
-	
 	
 	If(!strlen(traceList))
 		return 0
 	EndIf
 	
-	ModifyGraph/W=NT#ntViewerGraph zero(left)=3,zeroThick(left)=0.5
-	
-	//Double check the checkbox status
-	ControlInfo/W=NT ntViewerSeparateHoriz
-	areHorizSeparated = V_Value
-	
-	ControlInfo/W=NT ntViewerSeparateVert
-	areVertSeparated = V_Value
+	ModifyGraph/W=NTP#Nav#Viewer zero(left)=3,zeroThick(left)=0.5
 	
 	//Separation of traces? 
 	If(areVertSeparated)
 		SeparateTraces("vert")
+		Button horizSpread win=NTP#Nav,valueColor=(0,0,0) //sets to standard color
+		Button vertSpread win=NTP#Nav,valueColor=(0,0xbbbb,0) //sets to green color
 	EndIf
 	
 	If(areHorizSeparated)
 		SeparateTraces("horiz")
+		Button vertSpread win=NTP#Nav,valueColor=(0,0,0) //sets to standard color
+		Button horizSpread win=NTP#Nav,valueColor=(0,0xbbbb,0) //sets to green color
 	EndIf
+	
+	colorViewerGraph()
+	
+	addThresholdLine()
+	
+//	print StopMSTimer(timerRef) / (1e3),"ms"
+End
 
+//Expands all horizontal or vertical axes
+Function expandAxis(axis)
+	String axis
+	Variable coord1,coord2
+	
+	String list = AxisList("NTP#Nav#Viewer")
+	list = ListMatch(list,axis + "*",";")
+	
+	//Find which axis hold the marquee
+	Variable i
+	For(i=0;i<ItemsInList(list,";");i+=1)
+		String ax = StringFromList(i,list,";")
+		GetMarquee/W=NTP#Nav#Viewer/Z $ax
+		
+		If(!V_flag)
+			continue
+		EndIf
+		
+		GetAxis/W=NTP#Nav#Viewer/Q $ax
+		
+		If(V_left > V_min && V_right < V_max)
+			break
+		EndIf
+	EndFor
+	
+	//adjust the axis range for each axis according to the marquee limits
+	For(i=0;i<ItemsInList(list,";");i+=1)
+		ax = StringFromList(i,list,";")
+		
+		If(!cmpstr(axis,"bottom"))
+			SetAxis/Z/W=NTP#Nav#Viewer $ax V_left,V_right
+		Else
+			SetAxis/Z/W=NTP#Nav#Viewer $ax V_top,V_bottom
+		EndIf
+	EndFor
+	
+	SetMarquee/W=NTP#Nav#Viewer 0,0,0,0
+End
+
+Function expandAxisWheel(axis,steps)
+	String axis //horizontal or vertical
+	Variable steps //each step will be a 5% change in range
+	
+	String list = AxisList("NTP#Nav#Viewer")
+	list = ListMatch(list,axis + "*",";")
+	
+	Variable i
+	For(i=0;i<ItemsInList(list,";");i+=1)
+		String ax = StringFromList(i,list,";")
+		
+		GetAxis/W=NTP#Nav#Viewer/Q $ax
+		Variable range = V_max - V_min
+		
+		SetAxis/Z/W=NTP#Nav#Viewer $ax V_min + (range * 0.025 * steps),V_max - (range * 0.025 * steps)
+	EndFor
+
+End
+
+Function colorViewerGraph()
+	DFREF NPC = root:Packages:NeuroToolsPlus:ControlWaves
+	NVAR areColored = NPC:areColored
+	
+	String theTraces = TraceNameList("NTP#Nav#Viewer",";",1)
+	Variable i,numTraces = ItemsInList(theTraces,";")
+	
+	If(!DataFolderExists("root:Packages:NeuroToolsPlus:CustomColors"))
+		NewDataFolder root:Packages:NeuroToolsPlus:CustomColors
+	EndIf
+	
+	Wave/Z colorTab = root:Packages:NeuroToolsPlus:CustomColors:Rainbow
+	If(!WaveExists(colorTab))
+		DFREF saveDF = GetDataFolderDFR()
+		SetDataFolder root:Packages:NeuroToolsPlus:CustomColors
+		ColorTab2Wave rainbow
+		Duplicate/O root:Packages:NeuroToolsPlus:CustomColors:M_colors,root:Packages:NeuroToolsPlus:CustomColors:Rainbow
+		Wave colorTab = root:Packages:NeuroToolsPlus:CustomColors:Rainbow
+		KillWaves/Z root:Packages:NeuroToolsPlus:CustomColors:M_colors
+		SetDataFolder saveDF
+	EndIf
+	
+	Variable colorDelta = round(DimSize(colorTab,0) / numTraces)
+	Variable tableSize = DimSize(colorTab,0)
+	
+	For(i=0;i<numTraces;i+=1)
+		String traceName = StringFromlist(i,theTraces,";")
+		
+		Variable index = i * colorDelta
+		
+		//Repeats the color table from the start if there are too many waves displayed
+		Variable overRunTimes = floor(index/tableSize)
+	
+		index -= tableSize * overRunTimes
+		
+		If(areColored)
+			ModifyGraph/W=NTP#NaV#Viewer rgb($traceName)=(colorTab[index][0],colorTab[index][1],colorTab[index][2])
+		Else
+			ModifyGraph/W=NTP#NaV#Viewer rgb($traceName)=(0,0,0) //return to black
+		EndIf
+	EndFor
+
+End
+
+
+//Adds range line for user to drag around to visually change the start and end values for a function input
+//Function variable must have the range line assigned to it in the function code itself
+Function addRangeLines()
+	DFREF NPC = $CW
+	NVAR activeRange = NPC:activeRange
+	NVAR rangeLeft = NPC:rangeLeft
+	NVAR rangeRight = NPC:rangeRight
+		
+	If(activeRange)
+		SetWindow NTP hook(viewerHook) = viewerHook
+		Button addRange win=NTP#Nav,valueColor=(0,0xbbbb,0)
+	Else
+		DrawAction/W=NTP#NaV#Viewer getgroup=rangeLines,delete
+		Button addRange win=NTP#Nav,valueColor=(0,0,0)
+		return 0
+	EndIf
+	
+	//Get the range of the x and y axes
+	GetAxis/W=NTP#NaV#Viewer/Q bottom
+	
+	If(V_flag)
+		return 0	
+	EndIf
+	
+	Variable xMin,xMax,xRange,xBottom,xTop
+	xMin = V_min
+	xMax = V_max
+	
+	rangeLeft = (rangeLeft < xMin) ? xMin : rangeLeft
+	rangeRight = (rangeRight > xMax) ? xMax : rangeRight
+	
+	DrawAction/W=NTP#NaV#Viewer getgroup=rangeLines,delete
+	
+	SetDrawEnv/W=NTP#NaV#Viewer xcoord=bottom,ycoord=rel,linethick=1,fillfgc=(0,0,0,0x1000),linefgc=(0,0,0,0x4000)
+	SetDrawEnv/W=NTP#NaV#Viewer gstart,gname=rangeLines
+	DrawRect/W=NTP#NaV#Viewer rangeLeft,0,rangeRight,1
+	SetDrawEnv/W=NTP#NaV#Viewer gstop
+	DoUpdate/W=NTP#NaV#Viewer
+End
+
+//Adds threshold line for user to drag around to visually change the threshold value for a function input
+//Function variable must have the threshold line assigned to it in the function code itself
+Function addThresholdLine()
+	DFREF NPC = $CW
+	NVAR threshold = NPC:threshold
+	
+	NVAR activeThreshold = NPC:activeThreshold
+	
+	//Set window hook for moving threshold bar
+	If(activeThreshold)
+		SetWindow NTP hook(viewerHook) = viewerHook
+		Button addThreshold win=NTP#Nav,valueColor=(0,0xbbbb,0)
+	Else
+		DrawAction/W=NTP#NaV#Viewer getgroup=threshold,delete
+//		SetWindow NTP hook(viewerHook) = $""
+		Button addThreshold win=NTP#Nav,valueColor=(0,0,0)
+		return 0
+	EndIf
+	
+	//Get the range of the x and y axes
+	GetAxis/W=NTP#NaV#Viewer/Q left
+	
+	If(V_flag)
+		return 0	
+	EndIf
+	
+	Variable yMin,yMax,yRange,yBottom,yTop
+	yMin = V_min
+	yMax = V_max
+	
+	threshold = (threshold < yMin) ? yMin : threshold
+	threshold = (threshold > yMax) ? yMax : threshold
+	
+	DrawAction/W=NTP#NaV#Viewer getgroup=threshold,delete
+	
+	SetDrawEnv/W=NTP#NaV#Viewer xcoord=rel,ycoord=left,linethick=1,linefgc=(0,0,0,0x4000)
+	SetDrawEnv/W=NTP#NaV#Viewer gstart,gname=threshold
+	DrawLine/W=NTP#NaV#Viewer 0,threshold,1,threshold
+	SetDrawEnv/W=NTP#NaV#Viewer gstop
+	DoUpdate/W=NTP#NaV#Viewer
+End
+
+//Duplicates the Viewer graph outside of the viewer
+Function displayViewerGraph()
+	String theTraces = TraceNameList("NTP#Nav#Viewer",";",1)
+		
+	String winRec = WinRecreation("NTP#Nav#Viewer",0)
+	
+	Variable pos1 = strsearch(winRec,"/W",0)
+	Variable pos2 = strsearch(winRec,"/HOST",0) - 1
+	
+	String matchStr = winRec[pos1,pos2]
+	winRec = ReplaceString(matchStr,winRec,"/K=1/W=(" + num2str(10) + "," + num2str(10) + "," + num2str(360) + "," + num2str(200) + ")")
+	winRec = ReplaceString("/HOST=#",winRec,"")
+	Execute/Q/Z winRec
 End
 
 //Moves a trace from its current axis to the named axis
@@ -3178,17 +4352,15 @@ End
 //Splits traces on the Viewer either horizontally or vertically
 Function SeparateTraces(orientation)
 	String orientation
-	DFREF NTF = root:Packages:NT
+	DFREF NPC = $CW
 	
-	NVAR areHorizSeparated = NTF:areHorizSeparated
-	NVAR areVertSeparated = NTF:areVertSeparated
+	NVAR areHorizSeparated = NPC:areHorizSeparated
+	NVAR areVertSeparated = NPC:areVertSeparated
 
-	String traceList = TraceNameList("NT#ntViewerGraph",";",1)
+	String traceList = TraceNameList("NTP#Nav#Viewer",";",1)
 	String theTrace,prevTrace
 	Variable numTraces,i,traceMax,traceMin,traceMinPrev,traceMaxPrev,offset
 	offset = 0
-	
-	
 	
 	numTraces = ItemsInList(traceList,";")
 	
@@ -3200,22 +4372,22 @@ Function SeparateTraces(orientation)
 				For(i=1;i<numTraces;i+=1)
 					theTrace = StringFromList(i,traceList,";")
 					offset = 0
-					ModifyGraph/W=NT#ntViewerGraph offset($theTrace)={0,offset}
+					ModifyGraph/W=NTP#Nav#Viewer offset($theTrace)={0,offset}
 				EndFor	
 			Else
 				For(i=1;i<numTraces;i+=1)
 					theTrace = StringFromList(i,traceList,";")
-					Wave theTraceWave = TraceNameToWaveRef("NT#ntViewerGraph",theTrace)
+					Wave theTraceWave = TraceNameToWaveRef("NTP#Nav#Viewer",theTrace)
 					traceMin = WaveMin(theTraceWave)
 					traceMax = WaveMax(theTraceWave)
-					Wave prevTraceWave = TraceNameToWaveRef("NT#ntViewerGraph",StringFromList(i-1,traceList,";"))
+					Wave prevTraceWave = TraceNameToWaveRef("NTP#Nav#Viewer",StringFromList(i-1,traceList,";"))
 					traceMinPrev = WaveMin(prevTraceWave)
 					traceMaxPrev = WaveMax(prevTraceWave)
 					offset -= abs(traceMax - traceMinPrev)
 					
 					String axisName = "left_" + num2str(i)
 					
-					ModifyGraph/W=NT#ntViewerGraph offset($theTrace)={0,offset}
+					ModifyGraph/W=NTP#Nav#Viewer offset($theTrace)={0,offset}
 					
 				EndFor
 								
@@ -3224,31 +4396,46 @@ Function SeparateTraces(orientation)
 			break
 		case "horiz":
 			If(!areHorizSeparated)
-				For(i=0;i<numTraces;i+=1)
+//				For(i=0;i<numTraces;i+=1)
+//					theTrace = StringFromList(i,traceList,";")
+//					offset = 0
+//					changeAxis(theTrace,"NTP#Nav#Viewer","bottom","hor")
+//					ModifyGraph/W=NTP#Nav#Viewer offset($theTrace)={offset,0},zero(left)=3,zeroThick(left)=0.5
+//				EndFor
+				
+				For(i=numTraces - 1;i > -1;i-=1)
 					theTrace = StringFromList(i,traceList,";")
 					offset = 0
-					changeAxis(theTrace,"NT#ntViewerGraph","bottom","hor")
-					ModifyGraph/W=NT#ntViewerGraph offset($theTrace)={offset,0},zero(left)=3,zeroThick(left)=0.5
-				EndFor	
+					changeAxis(theTrace,"NTP#Nav#Viewer","bottom","hor")
+					ModifyGraph/W=NTP#Nav#Viewer offset($theTrace)={offset,0},zero(left)=3,zeroThick(left)=0.5
+				EndFor		
 			Else
 				For(i=1;i<numTraces;i+=1)
 					theTrace = StringFromList(i,traceList,";")
-					Wave theTraceWave = TraceNameToWaveRef("NT#ntViewerGraph",theTrace)
+					Wave theTraceWave = TraceNameToWaveRef("NTP#Nav#Viewer",theTrace)
 					traceMin = DimOffset(theTraceWave,0)
 					traceMax = IndexToScale(theTraceWave,DimSize(theTraceWave,0)-1,0)
-					Wave prevTraceWave = TraceNameToWaveRef("NT#ntViewerGraph",StringFromList(i-1,traceList,";"))
+					Wave prevTraceWave = TraceNameToWaveRef("NTP#Nav#Viewer",StringFromList(i-1,traceList,";"))
 					traceMinPrev = DimOffset(prevTraceWave,0)
 					traceMaxPrev = IndexToScale(prevTraceWave,DimSize(prevTraceWave,0)-1,0)
 //					offset += abs(traceMinPrev+traceMax)
-					ModifyGraph/W=NT#ntViewerGraph zero(left)=3,zeroThick(left)=0.5
+					ModifyGraph/W=NTP#Nav#Viewer zero(left)=3,zeroThick(left)=0.5
 				EndFor
 				
 				If(separateAxis)
-					For(i=0;i<numTraces;i+=1)
+//					For(i=0;i<numTraces;i+=1)
+//						theTrace = StringFromList(i,traceList,";")
+//						axisName = "bottom_" + num2str(i)
+//						changeAxis(theTrace,"NTP#Nav#Viewer",axisName,"hor")
+//						ModifyGraph/W=NTP#Nav#Viewer axisEnab($axisName)={(i)/numTraces,(i+1)/numTraces},zero(left)=3,zeroThick(left)=0.5,freePos($axisName)=0,lblPosMode($axisName)=1
+//					EndFor
+					
+					
+					For(i=numTraces - 1;i > -1;i-=1)
 						theTrace = StringFromList(i,traceList,";")
 						axisName = "bottom_" + num2str(i)
-						changeAxis(theTrace,"NT#ntViewerGraph",axisName,"hor")
-						ModifyGraph/W=NT#ntViewerGraph axisEnab($axisName)={(i)/numTraces,(i+1)/numTraces},zero(left)=3,zeroThick(left)=0.5,freePos($axisName)=0
+						changeAxis(theTrace,"NTP#Nav#Viewer",axisName,"hor")
+						ModifyGraph/W=NTP#Nav#Viewer axisEnab($axisName)={(i)/numTraces,(i+1)/numTraces},zero(left)=3,zeroThick(left)=0.5,freePos($axisName)=0,lblPosMode($axisName)=1
 					EndFor
 				EndIf
 				
@@ -3259,79 +4446,135 @@ End
 
 //Clears all the traces from the Viewer window
 Function clearTraces()
-	String traceList = TraceNameList("NT#ntViewerGraph",";",1)
+	String traceList = TraceNameList("NTP#Nav#Viewer",";",1)
 	Variable numTraces = ItemsInList(traceList,";")
 	Variable i
 	
 	For(i=numTraces - 1;i>-1;i-=1)
 		String theTrace = StringFromList(i,traceList,";")
-		RemoveFromGraph/W=NT#ntViewerGraph $theTrace
+		RemoveFromGraph/W=NTP#Nav#Viewer $theTrace
 	EndFor	
+	
+	String imageList = ImageNameList("NTP#Nav#Viewer",";")
+	numTraces = ItemsInList(imageList,";")
+	For(i=numTraces - 1;i>-1;i-=1)
+		theTrace = StringFromList(i,imageList,";")
+		RemoveImage/Z/W=NTP#Nav#Viewer $theTrace
+	EndFor
+End
+
+//Adds the output wave from a function to the data set structure
+//This is used to create an output data set after a function runs
+Function AddOutput(outWave,ds)
+	Wave outWave
+	STRUCT ds &ds
+	
+	Variable size = DimSize(ds.output,0)
+	Redimension/N=(size + 1) ds.output
+	
+	ds.output[size] = outWave
 End
 
 //Saves the ds structure for later recall by an external function
 Function SaveStruct(ds)
 	STRUCT ds &ds
-	STRUCT ds_numOnly ds2
-	STRUCT ds_progress_numOnly progress2
+	STRUCT ds_numOnly dsNums
+//	STRUCT ds_progress_numOnly progress
 	
-	ds2.num = ds.num
-	ds2.wsi = ds.wsi
-	ds2.wsn = ds.wsn
-	ds2.numWaves = ds.numWaves
+	DFREF NPD = $DSF
 	
-	progress2.value = ds.progress.value
-	progress2.count = ds.progress.count
-	progress2.steps = ds.progress.steps
-	progress2.increment = ds.progress.increment
+//	ds.numWaveSets= ds.num
+	dsNums.wsi = ds.wsi
+	dsNums.wsn = ds.wsn
+	dsNums.numDataSets = ds.numDataSets
+//	ds.numWaves = ds.numWaves
 	
+//	progress.value = ds.progress.value
+//	progress.count = ds.progress.count
+//	progress.steps = ds.progress.steps
+//	progress.increment = ds.progress.increment
+//	
 	//numeric data gets saved
-	StructPut ds2,root:Packages:NT:ds
-	StructPut progress2,root:Packages:NT:progress
+	Make/O NPD:ds//,NPD:progress
+	
+	StructPut dsNums,NPD:ds
+//	StructPut progress,NPD:progress
 	
 	//waves and strings get saved
-	DFREF NTF = root:Packages:NT
+	DFREF NPC = $CW
 		
-	Make/O/N=6/T NTF:ds_refs
-	Wave/T ds_refs = NTF:ds_refs
+	Make/O/N=7/T NPC:ds_refs
+	Wave/T ds_refs = NPC:ds_refs
 	ds_refs[0] = GetWavesDataFolder(ds.listWave,2) //listwave
-	ds_refs[1] =  "root:Packages:NT:WaveSelectorStr" //name
-	ds_refs[2] =  "root:Packages:NT:DataSets:DataSetWaves" //paths
+	ds_refs[1] =  "root:Packages:NeuroToolsPlus:DataSets:DataSetNames" //data set names
+	ds_refs[2] =  "root:Packages:NeuroToolsPlus:DataSets:DataSetWavePaths" //paths
 	ds_refs[3] =  GetWavesDataFolder(ds.waves,2) //name
-	ds_refs[4] = "root:Packages:NT:progressVal" //progress bar value
-	ds_refs[5] = "root:Packages:NT:progressCount" //progress bar count
+//	ds_refs[4] = "root:Packages:NeuroToolsPlus:DataSets:progressVal" //progress bar value
+//	ds_refs[5] = "root:Packages:NeuroToolsPlus:DataSets:progressCount" //progress bar count
+//	ds_refs[6] = "root:Packages:NeuroToolsPlus:DataSets:numDataSetWaves"//num waves per data set
+//	ds_refs[7] = "root:Packages:NeuroToolsPlus:DataSets:NumWaveSets" //num wave sets per data set
+	
+	ds_refs[4] = "root:Packages:NeuroToolsPlus:DataSets:numDataSetWaves"//num waves per data set
+	ds_refs[5] = "root:Packages:NeuroToolsPlus:DataSets:NumWaveSets" //num wave sets per data set
+	ds_refs[6] = "root:Packages:NeuroToolsPlus:DataSets:outputWaves" //any output waves that the functions have generated
 End
 
 //fills out the ds structure with the save data
-Function GetStruct(ds)
+Function GetStruct(ds[,waves])
 	STRUCT ds &ds
-	STRUCT ds_numOnly ds2
-	STRUCT ds_progress_numOnly progress2
+	String waves //optional if a function is being called outside of the NTP GUI from another function
+				    //uses a string list of waves instead of a data set definition to run.
 	
-	DFREF NTF = root:Packages:NT
-	Wave/T ds_refs = NTF:ds_refs
+	STRUCT ds_numOnly dsNums
+//	STRUCT ds_progress_numOnly progress
+	
+	DFREF NPC = $CW
+	DFREF NPD = $DSF
+	
+	Wave/T ds_refs = NPC:ds_refs
 	
 	//fills numeric data
-	StructGet ds2,root:Packages:NT:ds
-	StructGet progress2,root:Packages:NT:progress
+	StructGet dsNums,NPD:ds
+//	StructGet progress,NPD:progress
 	
-	ds.num = ds2.num
-	ds.wsi = ds2.wsi
-	ds.wsn = ds2.wsn
-	ds.numWaves = ds2.numWaves
+//	ds.numWaveSets= ds.num
+	ds.wsi = dsNums.wsi
+	ds.wsn = dsNums.wsn
+	ds.numDataSets = dsNums.numDataSets
+//	ds.numWaves = ds.numWaves
 	
-	ds.progress.value = progress2.value
-	ds.progress.count = progress2.count
-	ds.progress.steps = progress2.steps
-	ds.progress.increment = progress2.increment
+//	ds.progress.value = progress.value
+//	ds.progress.count = progress.count
+//	ds.progress.steps = progress.steps
+//	ds.progress.increment = progress.increment
 	
 	
 	Wave/T ds.listWave = $ds_refs[0]
-	SVAR ds.name = $ds_refs[1]
-	SVAR ds.paths = $ds_refs[2]
+	Wave/T ds.name = $ds_refs[1]
+	Wave/T ds.paths = $ds_refs[2]
 	Wave/WAVE ds.waves = $ds_refs[3]
-	NVAR ds.progress.value = $ds_refs[4]
-	NVAR ds.progress.count = $ds_refs[5]
+	Wave ds.numWaves = $ds_refs[4]
+	Wave ds.numWaveSets= $ds_refs[5]
+	Wave/WAVE ds.output = $ds_refs[6]
+	
+	If(!ParamIsDefault(waves) && ItemsInList(waves,";") > 0)		
+		Variable i,numWaveRefs = ItemsInList(waves,";")
+		Redimension/N=(numWaveRefs) ds.waves,ds.paths
+		
+		For(i=0;i<numWaveRefs;i+=1)
+			ds.waves[i] = $StringFromList(i,waves,";")
+			ds.paths[i] = StringFromList(i,waves,";")
+		EndFor
+		
+		ds.numWaves = numWaveRefs
+		ds.numWaveSets = 1
+	EndIf
+	
+//	NVAR ds.progress.value = $ds_refs[4]
+//	NVAR ds.progress.count = $ds_refs[5]
+//	Wave ds.numWaves = $ds_refs[6]
+//	Wave ds.numWaveSets= $ds_refs[7]
+
 End
 
 //Runs the selected external function (user provided)
@@ -3340,19 +4583,35 @@ Function RunExternalFunction(cmd)
 	
 	strswitch(cmd)
 		case "Write Your Own":
-			DisplayProcedure/W=NT_InsertTemplate "NT_MyFunction"
-			DisplayProcedure/W=NT_ExternalFunctions "ArrangeProcWindows"
+			DisplayProcedure/W=NTP_InsertTemplate "NT_MyFunction"
+			DisplayProcedure/W=NTP_ExternalFunctions "ArrangeProcWindows"
 			ArrangeProcWindows()
 			break
+//		case "RunCmdLine":
+//			DFREF NPC = $CW
+//			Wave/T param = NPC:ExtFunc_Parameters			
+//			String cmdStr = "NT_" + cmd + "("
+//			String value = getParam("PARAM_" + num2str(0) + "_VALUE",cmd)
+//			
+//			value = ReplaceString("\"",value,"\\\"")
+//			cmdStr += "\"" + value + "\")"
+//			
+//			Execute/Q cmdStr
+			//replace all quotations with escape quotes
+			
+			
+//			break
 		default:
+			
 			cmd = getExtFuncCmdStr(cmd)
 			Execute/Q cmd
 			
 			//return to original state, this was changed to force External Functions to use data sets
-			DFREF NTF = root:Packages:NT
-			SVAR WaveSelectorStr = NTF:WaveSelectorStr
-			ControlInfo/W=NT WaveListSelector
-			WaveSelectorStr = TrimString(StringFromList(1,S_Title,"\u005cJL▼"))
+//			DFREF NPC = $CW
+//			SVAR WaveSelectorStr = NPC:WaveSelectorStr
+//			ControlInfo/W=NTP WaveListSelector
+//			WaveSelectorStr = TrimString(StringFromList(1,S_Title,"\u005cJL▼"))
+			break
 	endswitch
 	
 	return 1
@@ -3364,14 +4623,14 @@ End
 Function saveWaveRef(theWave)
 	Wave theWave
 	
-	Make/O/N=1/WAVE root:Packages:NT:savedRefs
-	Wave/Wave savedRefs = root:Packages:NT:savedRefs
+	Make/O/N=1/WAVE root:Packages:NeuroToolsPlus:savedRefs
+	Wave/Wave savedRefs = root:Packages:NeuroToolsPlus:savedRefs
 	savedRefs[0] = theWave
 End
 
 //Pairs with saveWaveRef to recall that reference
 Function/WAVE recallSavedWaveRef()
-	Wave/Wave savedRefs = root:Packages:NT:savedRefs
+	Wave/Wave savedRefs = root:Packages:NeuroToolsPlus:savedRefs
 	
 	If(!WaveExists(savedRefs))
 		Abort "Must save a wave reference before recalling one"
@@ -3387,7 +4646,7 @@ Function SwitchExternalFunction(cmd)
 	//Calculates spacer to ensure centered text on the drop down menu
 	String spacer = ""
 	Variable cmdLen = strlen(cmd)
-	cmdLen = 16 - cmdLen
+	cmdLen = 25 - cmdLen
 	
 	Do
 		spacer += " "
@@ -3398,7 +4657,7 @@ Function SwitchExternalFunction(cmd)
 	KillExtParams()
 	
 	//switches text in the drop down menu
-	Button extFuncPopUp win=NT,font=$LIGHT,pos={460,75},size={125,20},fsize=12,proc=ntButtonProc,title="\\JL▼   " + spacer + cmd,disable=0
+	Button functionPopUp win=NTP#Func,font=$LIGHT,pos={20,40},size={200,20},fsize=12,proc=ntButtonProc,title="\\JL▼   " + spacer + cmd,disable=0
 	
 	//switches controls
 	BuildExtFuncControls(cmd)
@@ -3407,16 +4666,45 @@ End
 
 //Returns the list of external functions
 Function/S GetExternalFunctions()
-	String theFile,theList=""
-	theFile = "NT_ExternalFunctions.ipf"
-	theList = FunctionList("NT_*", ";","WIN:" + theFile)
-	theList = "Write Your Own;" + ReplaceString("NT_",theList,"") //remove NT_ prefixes for the menu
-	return theList
+	String theFileList,theFile,theList="",masterList=""
+	Variable i
+	
+	//these files are the ones searched for NT_ based functions for inclusion in the function menu
+	theFileList = "NTP_Functions.ipf;NTP_ScanImage_Package.ipf;"
+	
+	For(i=0;i<ItemsInList(theFileList,";");i+=1)
+		theFile = StringFromList(i,theFileList,";")
+		theList = FunctionList("NT_*", ";","WIN:" + theFile)
+		theList = ReplaceString("NT_",theList,"") //remove NT_ prefixes for the menu
+		masterList += theList
+	EndFor
+	
+	//Get user installed package functions
+	String userFunctionPath = SpecialDirPath("Igor Pro User Files",0,0,0)	
+	userFunctionPath += "User Procedures:NeuroTools+:Functions"
+	
+	GetFileFolderInfo/Q/Z userFunctionPath
+	
+	NewPath/O/Q userPath,userFunctionPath
+	
+	If(V_isFolder)
+		String userFileList = IndexedFile(userPath,-1,".ipf")
+		
+		For(i=0;i<ItemsInList(userFileList,";");i+=1)
+			theFile = StringFromList(i,userFileList,";")
+			String userFunctionList = FunctionList("NT_*", ";","WIN:" + theFile)
+			userFunctionList = ReplaceString("NT_",userFunctionList,"") //remove NT_ prefixes for the menu
+			masterList += userFunctionList
+		EndFor
+	EndIf
+	
+	return masterList
 End
+
 
 //returns the current selection of the 'MeasureType' drop down menu
 Function/S CurrentMeasureType()
-	ControlInfo/W=NT measureType
+	ControlInfo/W=NTP measureType
 	String func = TrimString(StringFromList(1,S_Title,"\u005cJL▼"))
 	return func
 End
@@ -3428,42 +4716,319 @@ Function/S CurrentCommand()
 		return ""
 	EndIf
 	
-	ControlInfo/W=NT CommandMenu
+	ControlInfo/W=NTP#Func CommandMenu
 	String func = TrimString(StringFromList(1,S_Title,"\u005cJL▼"))
 	return func
 End
 
 //returns the current selection of the external functions drop down menu
 Function/S CurrentExtFunc()
-	ControlInfo/W=NT extFuncPopUp
-	String func = TrimString(StringFromList(1,S_Title,"\u005cJL▼"))
+	ControlInfo/W=NTP#Func functionPopUp
+	String title = TrimString(StringFromList(1,S_Title,"\u005cJL▼"))
+	String func = GetFunctionFromTitle(title)
+	
+//	func = StringsFromList("1-*",func,"_",noEnding=1)
+	
 	return func
 End
 
 //returns the parameter number for the provided control name for an external function
 Function ExtFuncParamIndex(ctrlName)
 	String ctrlName
-	Variable index = str2num(ctrlName[strlen(ctrlName)-1])
+	
+	Variable i = 1
+	Do
+		String c = ctrlName[strlen(ctrlName)-i]
+		
+		//test for numeric
+		Variable n = str2num(c)
+		If(numtype(n) == 2)
+			i -= 1
+			break
+		EndIf
+		
+		i += 1
+	While(1)
+	
+	If(i < 0)
+		return -1
+	Else
+		Variable index = str2num(ctrlName[strlen(ctrlName)-i,strlen(ctrlName)-1])
+	EndIf
+	
 	return index
+End
+
+//Initializes the external functions module, and fills out a text wave with the data for each 
+//main function in NT_ExternalFunctions.ipf'
+Function/Wave GetExternalFunctionData(param)
+	Wave/T param
+	Variable i,j
+	
+	//function list
+	String funcs = GetExternalFunctions()
+	
+	//Wave to hold all the function parameter data
+	Redimension/N=(-1,ItemsInList(funcs,";")) param
+	
+	//Will keep track if there are empty variables in the text wave across all functions
+	Variable isEmpty = 0
+	Variable emptySlots = 100
+	
+	//Keeps track of pop up menus, buttons, and listboxes
+	Variable isPopMenu = 0
+	String popUpStr = ""
+	String buttonStr = ""
+	String listBoxStr = ""
+	String funcRefStr = ""
+	
+	//function data
+	For(i=0;i<ItemsInList(funcs,";");i+=1)
+		String theFunction = StringFromList(i,funcs,";")
+		
+		//Function info
+		String info = FunctionInfo("NT_" + theFunction)
+		
+		//Gets the actual code for the beginning of the function to extract parameter names
+		String fullFunctionStr = ProcedureText("NT_" + theFunction,0)
+		Variable pos = strsearch(fullFunctionStr,")",0)
+		String functionStr = fullFunctionStr[0,pos]
+		functionStr = RemoveEnding(StringFromList(1,functionStr,"("),")")
+		
+		//Determine if there is a submenu definition
+		String subMenuStr = NT_GetFlagString("SUBMENU",fullFunctionStr)
+		
+		//Determine if there is a title string
+		String titleStr = NT_GetFlagString("TITLE",fullFunctionStr)
+		If(!strlen(titleStr))
+			titleStr = theFunction
+		EndIf
+		
+		//Resize according to the parameter number
+		Variable numParams = str2num(StringByKey("N_PARAMS",info,":",";"))
+		If(numtype(numParams) == 2)
+			numParams = 0
+		EndIf
+		
+		If(8 + numParams * 9 > DimSize(param,0))
+			Redimension/N=(8 + numParams * 9,-1) param
+		EndIf
+			
+		String keys = "NAME;TITLE;TYPE;THREADSAFE;RETURNTYPE;N_PARAMS;N_OPT_PARAMS;SUBMENU;"
+		
+		For(j=0;j<numParams;j+=1)
+			keys += "PARAM_" + num2str(j) + "_TYPE;PARAM_" + num2str(j) + "_NAME;PARAM_" + num2str(j) + "_ITEMS;PARAM_" + num2str(j) + "_PROC;PARAM_" + num2str(j) + "_VALUE;"
+			keys += "PARAM_" + num2str(j) + "_LISTWAVE;PARAM_" + num2str(j) + "_SELWAVE;PARAM_" + num2str(j) + "_COORDS;PARAM_" + num2str(j) + "_ASSIGN;"
+		EndFor
+		
+		//Try to find previously created functions
+		Variable col = tableMatch("NT_" + theFunction,param,returnCol=1)
+		
+		//insert the previous column position into the current one, in case of reordering
+		//prevents losing preset values for the parameters when new functions are added
+		If(col != -1)
+			param[][i] = param[p][col]
+		EndIf
+			
+		//Label the dimension for each function column
+		SetDimLabel 1,i,$("NT_" + theFunction),param
+		
+		Variable whichParam = 0
+		For(j=0;j < 8 + numParams * 9;j+=1)
+			String theKey = StringFromList(j,keys,";")
+			
+			//Label the dimension
+			SetDimLabel 0,j,$theKey,param
+			SetDimLabel 1,i,$("NT_" + theFunction),param
+			
+			//Add the function data to the wave
+		
+			If(stringmatch(theKey,"*PARAM*NAME*"))
+				String ctrlName = StringFromList(whichParam,functionStr,",")
+				param[j][i] = ctrlName
+				whichParam += 1
+				
+				//Is it a pop up menu
+				If(stringmatch(param[j][i],"menu_*"))
+					popUpStr = param[j][i]
+				Else
+					popUpStr = ""
+				EndIf 
+				
+				//Is it a button
+				If(stringmatch(param[j][i],"bt_*"))
+					buttonStr = param[j][i]
+				Else
+					buttonStr = ""
+				EndIf 
+				
+				//Is it a list box
+				If(stringmatch(param[j][i],"lb_*"))
+					listBoxStr = param[j][i]
+				Else
+					listBoxStr = ""
+				EndIf
+				
+				//Is it a function reference
+				If(stringmatch(param[j][i],"fn_*"))
+					funcRefStr = param[j][i]
+				Else
+					funcRefStr = ""
+				EndIf
+			ElseIf(stringmatch(theKey,"*PARAM*ITEMS*"))
+
+				If(strlen(popUpStr))
+					param[j][i] = NT_GetPopUpValue(popUpStr,fullFunctionStr)
+					
+					//	//Are the items a literal string expression or a function call?
+					If(stringmatch(param[j][i],"*(*") && stringmatch(param[j][i],"*)*"))
+						Variable isFunctionCall = 1
+					Else
+						isFunctionCall = 0
+					EndIf
+					
+				ElseIf(strlen(funcRefStr))
+					param[j][i] = funcs
+				Else
+					param[j][i] = ""
+				EndIf
+			ElseIf(stringmatch(theKey,"*PARAM*VALUE*"))
+				If(strlen(popUpStr))
+				
+					//Extract the first entry to the actual control
+					If(!strlen(param[j][i]))
+						If(isFunctionCall)
+							param[j][i] = ""
+						Else
+							param[j][i] = StringFromList(0,param[j-2][i],";") //2 rows before the VALUE row is the ITEMS row
+						EndIf
+					EndIf
+						
+					popUpStr = "" //reset
+				ElseIf(strlen(funcRefStr))
+					If(!strlen(param[j][i]))
+						param[j][i] = StringFromList(0,param[j-2][i],";")
+					EndIf
+					
+					funcRefStr = "" //reset
+				
+				Else
+					If(col == -1)
+						col = i
+					EndIf
+					
+					If(!strlen(buttonStr)) //set all parameter variables that aren't buttons to zero by default
+						String varType = getParam("PARAM_" + num2str(whichParam-1) + "_TYPE","NT_" + theFunction)
+						//Set empty values to 0
+						If(!strlen(param[j][col]) && str2num(varType) == 4)
+							param[j][col] = "0"
+						EndIf
+						
+						//set non-numeric or NaN values to 0
+						If(numtype(str2num(param[j][col])) == 2 && str2num(varType) == 4)
+							param[j][col] = "0"
+						EndIf
+					EndIf
+				EndIf
+			ElseIf(stringmatch(theKey,"*PARAM*PROC*"))
+				If(strlen(popUpStr))	
+					param[j][i] = NT_GetSpecialProc(popUpStr,fullFunctionStr)
+				ElseIf(strlen(buttonStr))	
+					param[j][i] = NT_GetSpecialProc(buttonStr,fullFunctionStr)
+				ElseIf(strlen(listBoxStr))	
+					param[j][i] = NT_GetSpecialProc(listBoxStr,fullFunctionStr)
+				Else
+					param[j][i] = ""
+				EndIf
+				
+			ElseIf(stringmatch(theKey,"SUBMENU"))
+				param[j][i] = subMenuStr
+			ElseIf(stringmatch(theKey,"TITLE"))
+				param[j][i] = titleStr
+			ElseIf(stringmatch(theKey,"*PARAM*LISTWAVE*"))
+				If(strlen(listBoxStr))
+					param[j][i] = NT_GetListBoxWaves(listBoxStr,"ListWave",fullFunctionStr)
+				Else
+					param[j][i] = ""
+				EndIf
+			ElseIf(stringmatch(theKey,"*PARAM*SELWAVE*"))
+				If(strlen(listBoxStr))
+					param[j][i] = NT_GetListBoxWaves(listBoxStr,"SelWave",fullFunctionStr)
+				Else
+					param[j][i] = ""
+				EndIf
+			ElseIf(stringmatch(theKey,"*PARAM*COORDS*"))
+				param[j][i] = NT_GetSpecialCoords(ctrlName,fullFunctionStr)
+//				If(strlen(listBoxStr))
+//					param[j][i] = NT_GetSpecialCoords(listBoxStr,fullFunctionStr)
+//				Else
+//					param[j][i] = ""
+//				EndIf
+			ElseIf(stringmatch(theKey,"*PARAM*ASSIGN*"))
+				param[j][i] = NT_GetControlAssignment(ctrlName,fullFunctionStr)
+			Else
+				param[j][i] = StringByKey(theKey,info,":",";")
+			EndIf	
+		EndFor
+		
+		Variable diff = DimSize(param,0) - (8 + numParams * 9)
+		If(diff)
+			param[8 + numParams * 9,DimSize(param,0)-1][i] = ""
+		EndIf
+		
+		If(diff < emptySlots)
+			emptySlots = diff
+		EndIf
+	EndFor
+
+	
+	Redimension/N=(DimSize(param,0) - emptySlots,-1) param
+	
+	return param
+End
+
+//Returns the actual function name for a given function title
+Function/S GetFunctionFromTitle(title)
+	String title
+	DFREF NPC = $CW
+	DFREF NPD = $DSF
+	String func = ""
+	
+	Wave/T param = NPC:ExtFunc_Parameters
+	
+	//find the column that contains that title
+	Variable col = tableMatch(title,param,returnCol=1)
+	Variable row = FindDimLabel(param,0,"NAME")
+	
+	If(col < 0 || row < 0)
+		return ""
+	EndIf
+	
+	func = param[row][col]
+	
+	return func
 End
 
 //Builds the parameters for the selected external function
 Function BuildExtFuncControls(theFunction)
 	String theFunction
-	DFREF NTF = root:Packages:NT
-	DFREF NTD = root:Packages:NT:DataSets
+	DFREF NPC = $CW
+	DFREF NPD = $DSF
 	
-	//holds the parameters of the external functions
-	Wave/T param = NTF:ExtFunc_Parameters
+	//theFunction is just the title of the function, we need the actual function command name
+	theFunction = GetFunctionFromTitle(theFunction)
 	
-	String info = FunctionInfo("NT_" + theFunction)
+	//In case we've added a new function after compiling initially, this will find it.
+	Wave/T param = GetExternalFunctionData(NPC:ExtFunc_Parameters)
+
+	String info = FunctionInfo(theFunction)
 
 	Variable i,pos
 	
 	Variable numParams,numOptParams
 	numParams = str2num(getParam("N_PARAMS",theFunction))
 	numOptParams = str2num(getParam("N_OPT_PARAMS",theFunction))
-	
+		
 	//Kill existing controls
 	KillExtParams()
 	//Function has no extra parameters declared
@@ -3476,18 +5041,27 @@ Function BuildExtFuncControls(theFunction)
 	paramType = ""
 
 	//gets the type for each input parameter
-	SVAR isOptional = NTF:isOptional
+	SVAR isOptional = NPC:isOptional
 	isOptional = ""
 	
 	//Gets the names of each inputs in the selected function
-	functionStr = ProcedureText("NT_" + theFunction,0)
+	functionStr = ProcedureText(theFunction,0)
+	
+	//Get the optional function note to display
+	String functionNote = GetFunctionNote(functionStr)
+	
 	pos = strsearch(functionStr,")",0)
 	functionStr = functionStr[0,pos]
 	functionStr = RemoveEnding(StringFromList(1,functionStr,"("),")")
 	
 	String extParamNames = functionStr
-	Variable left=480,top=110
+	
+	Variable left=60,top=70 //top left starting position of the controls
+	
+	Variable fontSize = 12
 	String type,name,ctrlName,items
+	
+	String menuProcEngageList = ""
 	
 	For(i=0;i<numParams;i+=1)
 		name = getParam("PARAM_" + num2str(i) + "_NAME",theFunction)
@@ -3495,8 +5069,21 @@ Function BuildExtFuncControls(theFunction)
 		type = getParam("PARAM_" + num2str(i) + "_TYPE",theFunction)
 		items = getParam("PARAM_" + num2str(i) + "_ITEMS",theFunction)
 		
-		//Check if the control is a pop up menu or not
+		If(stringmatch(name,"*[*]*")) //is it an optional parameter?
+			continue
+		EndIf
+		
+		//Check if the control is a pop up menu or button or not
 		Variable isMenu = 0
+		Variable isButton = 0
+		Variable isListBox = 0
+		Variable isFuncRef = 0
+		
+		If(stringmatch(name,"fn_*"))
+			isFuncRef = 1
+		Else
+			isFuncRef = 0
+		EndIf
 		
 		If(stringmatch(name,"menu_*"))
 			isMenu = 1
@@ -3504,6 +5091,18 @@ Function BuildExtFuncControls(theFunction)
 			isMenu = 0
 		EndIf
 		
+		If(stringmatch(name,"bt_*"))
+			isButton = 1
+		Else
+			isButton = 0
+		EndIf
+		
+		If(stringmatch(name,"lb_*"))
+			isListBox = 1
+		Else
+			isListBox = 0
+		EndIf
+
 		strswitch(type)
 			case "4"://variable
 				Variable valueNum = str2num(getParam("PARAM_" + num2str(i) + "_VALUE",theFunction))
@@ -3514,19 +5113,27 @@ Function BuildExtFuncControls(theFunction)
 					valueNum = (valueNum > 0) ? 1 : 0
 					SetParam("PARAM_" + num2str(i) + "_VALUE",theFunction,num2str(valueNum))
 					
-					CheckBox/Z $ctrlName win=NT,pos={left,top},size={90,20},bodywidth=50,side=1,title=name,value=valueNum,disable=0,proc=ntExtParamCheckProc
+					CheckBox/Z $ctrlName win=NTP#Func,pos={left+65,top},align=1,size={90,20},bodywidth=50,fsize=fontSize,font=$LIGHT,side=1,title=name,value=valueNum,disable=0,proc=ntExtParamCheckProc
 				Else
-					SetVariable/Z $ctrlName win=NT,pos={left,top},size={90,20},bodywidth=50,title=name,value=_NUM:valueNum,disable=0,proc=ntExtParamProc
+					
+					SetVariable/Z $ctrlName win=NTP#Func,focusRing=0,pos={left+125,top},align=1,size={90,20},fsize=fontSize,font=$LIGHT,bodywidth=75,title=name,value=_NUM:valueNum,disable=0,proc=ntExtParamProc
+					
+					//Is there an assignment with this variable?
+					String controlAssignment = getParam("PARAM_" + num2str(i) + "_ASSIGN",theFunction)
+					
+					If(strlen(controlAssignment))
+						Button/Z $(ctrlname + "_assign") win=NTP#Func,pos={left+175,top-2},align=1,size={45,20},fsize=fontSize,font=$LIGHT,title="Get",disable=0,mode=1,proc=ControlAssignmentButtonProc
+					EndIf
+					
 				EndIf
 				
 				break
 			case "8192"://string
 			
 				//Popup menu designation
-				If(isMenu)
-					name = RemoveListItem(0,name,"_") //removes the "pop" prefix
+				If(isMenu || isFuncRef)
 					
-					//Is this a literal string expression or a function call?
+					//Are the items a literal string expression or a function call?
 					If(stringmatch(items,"*(*") && stringmatch(items,"*)*"))
 						String itemStr = items
 					Else
@@ -3534,23 +5141,161 @@ Function BuildExtFuncControls(theFunction)
 					EndIf
 					
 					String valueStr = getParam("PARAM_" + num2str(i) + "_VALUE",theFunction)	
-
-					PopUpMenu/Z $ctrlName win=NT,pos={left,top},size={185,20},bodywidth=150,title=name,value=#itemStr,disable=0,proc=ntExtParamPopProc	
-					PopUpMenu/Z $ctrlName win=NT,popmatch=valueStr
-					break
+					
+					//check for a coordinates definition
+					String coordStr = getParam2(name,"COORDS",theFunction)
+					
+					If(!strlen(coordStr))
+						Variable leftPos = left
+						Variable topPos = top
+					Else
+						leftPos = str2num(StringFromList(0,coordStr,";"))
+						topPos = str2num(StringFromList(1,coordStr,";"))
+					EndIf
+					
+					String theProc = getParam("PARAM_" + num2str(i) + "_PROC",theFunction)	 //special procedure reference
+					
+					name = RemoveListItem(0,name,"_") //removes the "menu" prefix
+					
+					If(!strlen(theProc))
+						theProc = "ntExtParamPopProc"//default procedure
+					Else
+						If(isMenu)
+							menuProcEngageList += "menu_" + name + ";"
+						ElseIf(isFuncRef)
+							menuProcEngageList += "fn_" + name + ";"
+						EndIf
+					EndIf
+				
+					If(isMenu)
+						PopUpMenu/Z $ctrlName win=NTP#Func,pos={leftPos+200,topPos},align=1,size={185,20},fsize=fontSize,font=$LIGHT,bodywidth=150,title=name,value=#itemStr,disable=0,proc=$theProc	
+						
+						If(!strlen(valueStr)) //no set pop up selection
+							ControlInfo/W=NTP#Func $ctrlName
+							
+							//insert the existing selection in the control into the parameter table
+							setParam("PARAM_" + num2str(i) + "_VALUE",theFunction,S_Value)
+						Else
+							PopUpMenu/Z $ctrlName win=NTP#Func,popmatch=valueStr
+						EndIf					
+						
+					ElseIf(isFuncRef)				
+						PopUpMenu/Z $ctrlName win=NTP#Func,pos={leftPos+200,topPos},align=1,size={185,20},fsize=fontSize,font=$LIGHT,bodywidth=150,title=name,value=GetExternalFunctions(),disable=0,proc=$theProc
+						PopUpMenu/Z $ctrlName win=NTP#Func,popmatch=valueStr
+						Button/Z $(ctrlName + "_goto") win=NTP#Func,pos={leftPos+250,topPos},align=1,size={45,20},fsize=fontSize,font=$LIGHT,title="GoTo",disable=0,mode=1,proc=DataSetButtonProc
+					EndIf
+					
+				ElseIf(isButton)
+					
+					theProc = getParam("PARAM_" + num2str(i) + "_PROC",theFunction)	 //special procedure reference
+					If(!strlen(theProc))
+						theProc = "ntButtonProc"//default procedure
+					EndIf
+					
+					//check for a coordinates definition
+					coordStr = getParam2(name,"COORDS",theFunction)
+					
+					If(!strlen(coordStr))
+						leftPos = left
+						topPos = top
+						Variable width = 185
+						Variable height = 20
+					Else
+						leftPos = str2num(StringFromList(0,coordStr,";"))
+						topPos = str2num(StringFromList(1,coordStr,";"))
+						width = str2num(StringFromList(2,coordStr,";"))
+						height = str2num(StringFromList(3,coordStr,";"))
+					EndIf
+					
+					name = RemoveListItem(0,name,"_") //removes the "bt" prefix
+					
+					Button/Z $ctrlName win=NTP#Func,pos={leftPos+200,topPos},align=1,size={width,height},fsize=fontSize,font=$LIGHT,bodywidth=150,title=name,disable=0,proc=$theProc
+				ElseIf(isListBox)
+					
+					String listWaveStr = getParam2(name,"LISTWAVE",theFunction)
+					String selWaveStr = getParam2(name,"SELWAVE",theFunction)
+					
+					If(strlen(listWaveStr) && !WaveExists($listWaveStr))
+						Make/N=0/T $listWaveStr
+					EndIf
+					
+					If(strlen(selWaveStr) && !WaveExists($selWaveStr))
+						Make/N=0 $selWaveStr
+					EndIf
+					
+					If(WaveExists($listWaveStr) && WaveExists($selWaveStr))
+						Wave listWave=$listWaveStr
+						Wave selWave=$selWaveStr
+						Redimension/N=(DimSize(listWave,0)) selWave
+					EndIf
+					
+					coordStr = getParam2(name,"COORDS",theFunction)
+					
+					If(!strlen(coordStr))
+						DoAlert 0,"Must supply a coordinates flag in the function for all list boxes"
+						continue
+					EndIf
+					
+					name = RemoveListItem(0,name,"_") //removes the "lb" prefix
+					
+					Variable mode
+					If(!strlen(selWaveStr))
+						mode = 0 //no selection possible
+					Else
+						mode = 9 //multiple, disjointed selections with shift selection 
+					EndIf
+					
+				
+					leftPos = str2num(StringFromList(0,coordStr,";"))
+					topPos = str2num(StringFromList(1,coordStr,";"))
+					width = str2num(StringFromList(2,coordStr,";"))
+					height = str2num(StringFromList(3,coordStr,";"))
+					
+					theProc = getParam("PARAM_" + num2str(i) + "_PROC",theFunction)	 //special procedure reference
+					If(!strlen(theProc))
+						theProc = "ntListBoxProc"//default procedure
+					EndIf
+					
+					//position is added to the base positioning of all other controls using 'left' and 'top' variables
+					ListBox/Z $ctrlName win=NTP#Func,pos={left + leftPos,top + topPos},userColumnResize=1,size={width,height},listWave=$listWaveStr,selWave=$selWaveStr,fsize=fontSize,font=$LIGHT,disable=0,mode=mode,proc=$theProc
+					top -=25
 				Else
 					valueStr = getParam("PARAM_" + num2str(i) + "_VALUE",theFunction)
+					
 				EndIf
 				
 				//test if the string is a data set reference, in which case make it a popup menu
 				If(stringmatch(name,"DS_*"))		
 					//Data Set Menu			
-					SVAR DSNameList = NTD:DSNameList
-					DSNameList = textWaveToStringList(NTD:DSNamesLB_ListWave,";")
-					String selection = getParam("PARAM_" + num2str(i) + "_VALUE",theFunction)
-					Variable selectionIndex = WhichListItem(selection,DSNameList,";")
+					SVAR DSNameList = NPD:DSNameList
+					DSNameList = textWaveToStringList(NPD:DSNamesLB_ListWave,";")
+					DSNameList = "**Wave Match**;**Navigator**;" + DSNameList
 					
-					PopUpMenu/Z $ctrlName win=NT,pos={left,top},size={185,20},bodywidth=150,title=StringFromList(1,name,"_"),value=#"root:Packages:NT:DataSets:DSNameList",disable=0,mode=1,popValue=selection,proc=ntExtParamPopProc
+					String selection = getParam("PARAM_" + num2str(i) + "_VALUE",theFunction)
+					If(!strlen(selection))
+						selection = StringFromList(0,DSNameList,";") //will always at least have Wave Match as the first item
+					EndIf
+					
+					Variable selectionIndex = WhichListItem(selection,DSNameList,";")
+				
+					
+//					PopUpMenu/Z $ctrlName win=NTP#Func,pos={left+200,top},align=1,size={185,20},fsize=fontSize,font=$LIGHT,bodywidth=150,title=StringFromList(1,name,"_"),value=GetDataSetNamesList(),disable=0,mode=1,popValue=selection,proc=ntExtParamPopProc
+					//Make a button with a contextual pop up menu, so we can have submenus
+					String spacedStr = getSpacer(selection,18)
+					Button/Z $ctrlname win=NTP#Func,pos={left+200,top},align=1,size={150,20},fsize=fontSize,font=$LIGHT,title=spacedStr,disable=0,mode=1,proc=DataSetButtonProc
+					//extra button comes with data set definitions to automatically load up that data set to the list box
+					Button/Z $(ctrlname + "_show") win=NTP#Func,pos={left+250,top},align=1,size={45,20},fsize=fontSize,font=$LIGHT,title="Show",disable=0,mode=1,proc=DataSetButtonProc
+					
+					ControlInfo/W=NTP#Func $ctrlname
+					
+					//Text label for the data set input
+					SetDrawLayer/W=NTP#Func UserBack
+					DrawAction/W=NTP#Func getGroup=$("DSNameLabel" + num2str(i)),delete
+					SetDrawEnv/W=NTP#Func gname=$("DSNameLabel" + num2str(i)),gstart
+					SetDrawEnv/W=NTP#Func xcoord= abs,ycoord= abs, fsize=fontSize, textxjust= 2,textyjust= 1,fname=$LIGHT //right aligned
+					DrawText/W=NTP#Func V_left - 5,V_top + 10,StringsFromList("1-*",name,"_",noEnding=1) 
+					SetDrawEnv/W=NTP#Func gname=$("DSNameLabel" + num2str(i)),gstop
+					
 				ElseIf(stringmatch(name,"CDF_*"))
 					//Current Data Folder Waves Menu
 					selection = getParam("PARAM_" + num2str(i) + "_VALUE",theFunction)
@@ -3560,20 +5305,31 @@ Function BuildExtFuncControls(theFunction)
 						selectionIndex = 0
 					EndIf
 					
-					PopUpMenu/Z $ctrlName win=NT,pos={left,top},size={185,20},bodywidth=150,title=StringFromList(1,name,"_"),value=WaveList("*",";",""),disable=0,mode=1,popValue=selection,proc=ntExtParamPopProc
-				Else
-					SetVariable/Z $ctrlName win=NT,pos={left,top},size={120,20},bodywidth=80,title=name,value=_STR:valueStr,disable=0,proc=ntExtParamProc
+					PopUpMenu/Z $ctrlName win=NTP#Func,pos={left,top},size={185,20},font=$LIGHT,fsize=fontSize,bodywidth=150,title=StringFromList(1,name,"_"),value=WaveList("*",";",""),disable=0,mode=1,popValue=selection,proc=ntExtParamPopProc
+				ElseIf(!isButton && !isMenu && !isFuncRef && !isListBox)
+						//Potential custom coordinates
+					coordStr = getParam2(name,"COORDS",theFunction)
+					leftPos = str2num(StringFromList(0,coordStr,";"))
+					topPos = str2num(StringFromList(1,coordStr,";"))
+					width = str2num(StringFromList(2,coordStr,";"))
+					height = str2num(StringFromList(3,coordStr,";"))
+					
+					If(strlen(coordStr))
+						SetVariable/Z $ctrlName win=NTP#Func,focusRing=0,pos={left+leftPos,top+topPos},align=1,size={width+40,height},fsize=fontSize,font=$LIGHT,bodywidth=width,title=name,value=_STR:valueStr,disable=0,proc=ntExtParamProc
+					Else
+						SetVariable/Z $ctrlName win=NTP#Func,focusRing=0,pos={left+200,top},align=1,size={190,20},fsize=fontSize,font=$LIGHT,bodywidth=150,title=name,value=_STR:valueStr,disable=0,proc=ntExtParamProc
+					EndIf	
 				EndIf
 				
 				break
 			case "16386"://wave
 				valueStr = getParam("PARAM_" + num2str(i) + "_VALUE",theFunction)
 				//this will convert a wave path to a wave reference pointer
-				SetVariable/Z $ctrlName win=NT,pos={left,top},size={140,20},bodywidth=100,title=name,value=_STR:valueStr,disable=0,proc=ntExtParamProc
+				SetVariable/Z $ctrlName win=NTP#Func,pos={left,top},size={140,20},focusRing=0,fsize=fontSize,font=$LIGHT,bodywidth=100,title=name,value=_STR:valueStr,disable=0,proc=ntExtParamProc
 				
 				//confirm validity of the wave reference
 				validWaveText("",0,deleteText=1)
-				ControlInfo/W=NT $ctrlName
+				ControlInfo/W=NTP#Func $ctrlName
 				validWaveText(valueStr,V_top+13)
 				
 				break
@@ -3585,8 +5341,139 @@ Function BuildExtFuncControls(theFunction)
 		
 	EndFor
 	
+	//intitiate structure for pop up menus
+	STRUCT WMPopupAction pa
+	 
+	For(i=0;i<ItemsInList(menuProcEngageList,";");i+=1)
+		name = StringFromList(i,menuProcEngageList,";")
+		ctrlName = getParam2(name,"CTRL",theFunction)
+		theProc = getParam2(name,"PROC",theFunction)
+		selection = getParam2(name,"VALUE",theFunction)
+		
+		//set the pop up menu structure
+		pa.ctrlName = ctrlName 
+		pa.eventCode = 2 //mouse up
+		pa.popStr = selection //selection
+		pa.popNum = 0 //default to zero, don't need it
+		
+		FUNCREF popUpProtoFunc f = $theProc
+		f(pa)
+	EndFor
+	
+	//Display the function note where the data set notes usually go
+	DisplayFunctionNote(theFunction,functionNote)
+	
 End
 
+//Proto function for engaging arbitrary pop up menu procs programatically
+Function popUpProtoFunc(pa)
+	STRUCT WMPopupAction &pa
+End
+
+Function/S GetDataSetNamesList()
+	DFREF NPD = $DSF
+	SVAR DSNameList = NPD:DSNameList
+	
+	DSNameList = "**Wave Match**;" + GetDataGroup("All")
+	return DSNameList
+End
+
+Function DisplayFunctionNote(func,functionNote)
+	String func,functionNote
+	
+	DFREF NPD = $DSF
+	DFREF NPC = $CW
+	
+	NVAR funcPanelWidth = NPC:funcPanelWidth
+		
+	//Find position of previously built panels
+	ControlInfo/W=NTP#Data dataSetPanel
+	Variable topPos = V_top
+	Variable height = V_height
+	
+	GroupBox DSNotesBox win=NTP#Func,pos={0,topPos},size={funcPanelWidth - 5,height},disable=0
+	
+	topPos += 8
+	
+	//Delete the existing notes
+	SetDrawLayer/W=NTP#Func Overlay
+	DrawAction/W=NTP#Func getgroup=dsNotesText,delete
+	
+	SetDrawLayer/W=NTP#Func Overlay
+	SetDrawEnv/W=NTP#Func gstart,gname=dsNotesText,xcoord= abs,ycoord= abs, fsize=16, textxjust= 0,textyjust= 2,fname="Helvetica Light"
+	DrawText/W=NTP#Func 15,topPos,"Notes:    \f01" + func
+	
+	SetDrawEnv/W=NTP#Func xcoord= abs,ycoord= abs, fsize=12, textxjust= 0,textyjust= 2,fname=$LIGHT
+	DrawText/W=NTP#Func 15,topPos + 35,functionNote
+	
+	SetDrawEnv/W=NTP#Func gstop
+End
+
+//Returns the optional function note from the procedural text
+//Syntax is Note = {this is the note to be displayed}
+Function/S GetFunctionNote(functionStr)
+	String functionStr
+	String funcNote = ""
+	
+	Variable loc = strsearch(functionStr,"Note",0)
+	
+	If(loc == -1)
+		return ""
+	EndIf
+	
+	Variable startLoc = strsearch(functionStr,"{",loc) + 1
+	
+	If(startLoc == -1 || startLoc - loc > 10) //prevents other instances of { from triggering the note search
+		return ""
+	EndIf
+	
+	Variable endLoc = strsearch(functionStr,"}",startLoc) - 1
+	
+	If(endLoc == -1)
+		return ""
+	EndIf
+	
+	funcNote = functionStr[startLoc,endLoc]
+	
+	//Remove starting return
+	If(!cmpstr(funcNote[0],"\r"))
+		funcNote = ReplaceString("\r",funcNote,"",0,1)
+	EndIf
+	
+	//Remove comment lines
+	funcNote = ReplaceString("//",funcNote,"")
+	
+	//Remove all tabs
+	funcNote = ReplaceString("\t",funcNote,"")
+	
+	return funcNote
+End
+
+//Gets flags from functions. //SUBMENU or //TITLE flags return their value 
+//e.g. //SUBMENU=Imaging returns imaging for NT_GetFlagString("SUBMENU",functionStr)
+Function/S NT_GetFlagString(flag,functionStr)
+	String flag
+	String functionStr
+	
+	String flagStr = ""
+	
+	//Determine if there is a submenu definition
+	Variable locStart = strsearch(functionStr,flag,0)
+	Variable locEnd = strsearch(functionStr,"\r",locStart)
+	
+	If(locStart == -1)
+		return ""
+	Else
+		flagStr = functionStr[locStart,locEnd]
+	EndIf
+	
+	flagStr = StringByKey(flag,flagStr,"=")
+	flagStr = RemoveEnding(flagStr," ") //remove whitespace
+	flagStr = RemoveEnding(flagStr,"\r") //remove carraige return
+	flagStr = RemoveEnding(flagStr,"\n") //remove new line
+	
+	return flagStr
+End
 
 //Finds the pop up menu values from the code
 Function/S NT_GetPopUpValue(popUpStr,functionStr)
@@ -3656,20 +5543,286 @@ Function/S NT_GetPopUpValue(popUpStr,functionStr)
 	return values
 End
 
+Function/S NT_GetControlAssignment(ctrlStr,functionStr)
+	String ctrlStr,functionStr
+	
+	If(!strlen(ctrlStr) || !strlen(functionStr))
+		return ""
+	EndIf
+	
+	//Syntax for referencing the list box coordinates
+	String ref = ctrlStr + "_Assign"
+	Variable pos = strsearch(functionStr,ref,0)
+	
+	If(pos == -1)
+		return ""
+	EndIf
+	
+	//Extracts the referenced item list using string quotations as a list separator
+	String text = functionStr[pos,pos + 400]
+	
+	//Get the equals sign position searching forward
+	pos = strsearch(text,"=",0)
+	
+	//From here find the first quotations mark for the procedure reference
+	Variable firstQuote = strsearch(text,"\"",pos)
+	If(firstQuote == -1)
+		return ""
+	Else
+		firstQuote += 1//move up a space because of the quote
+	EndIf
+	
+	Variable secondQuote = strsearch(text,"\"",firstQuote + 1)
+	If(secondQuote == -1)
+		return ""
+	Else
+		secondQuote -= 1//move up a space because of the quote
+	EndIf
+	
+	String assignStr = text[firstQuote,secondQuote]
+	
+	
+	//Ensure no leading or trailing quotations
+	If(!cmpstr(assignStr[0],"\""))
+		assignStr = assignStr[1,strlen(assignStr) - 1]
+	EndIf
+	
+	assignStr = RemoveEnding(assignStr,"\"")
+	assignStr = RemoveEnding(assignStr," ")
+	
+	return assignStr
+End
+
+Function/S  NT_GetSpecialCoords(ctrlStr,functionStr)
+	String ctrlStr,functionStr
+	
+	If(!strlen(ctrlStr) || !strlen(functionStr))
+		return ""
+	EndIf
+	
+	//Syntax for referencing the list box coordinates
+	String ref = ctrlStr + "_Pos"
+	Variable pos = strsearch(functionStr,ref,0)
+	
+	If(pos == -1)
+		return ""
+	EndIf
+	
+	//Extracts the referenced item list using string quotations as a list separator
+	String text = functionStr[pos,pos + 400]
+	
+	//Get the equals sign position searching forward
+	pos = strsearch(text,"=",0)
+	
+	//From here find the first quotations mark for the procedure reference
+	Variable firstQuote = strsearch(text,"\"",pos)
+	If(firstQuote == -1)
+		return ""
+	Else
+		firstQuote += 1//move up a space because of the quote
+	EndIf
+	
+	Variable secondQuote = strsearch(text,"\"",firstQuote + 1)
+	If(secondQuote == -1)
+		return ""
+	Else
+		secondQuote -= 1//move up a space because of the quote
+	EndIf
+	
+	String coordStr = text[firstQuote,secondQuote]
+	
+	
+	//Ensure no leading or trailing quotations
+	If(!cmpstr(coordStr[0],"\""))
+		coordStr = coordStr[1,strlen(coordStr) - 1]
+	EndIf
+	
+	coordStr = RemoveEnding(coordStr,"\"")
+	coordStr = RemoveEnding(coordStr," ")
+	
+	return coordStr
+	
+End
+
+Function/S NT_GetListBoxWaves(ctrlStr,key,functionStr)
+	String ctrlStr,key,functionStr
+	
+	If(!strlen(ctrlStr) || !strlen(functionStr))
+		return ""
+	EndIf
+	
+	//Syntax for referencing a the list box waves
+	String ref = ctrlStr + "_" + key
+	Variable pos = strsearch(functionStr,ref,0)
+	
+	If(pos == -1)
+		return ""
+	EndIf
+	
+	//Extracts the referenced item list using string quotations as a list separator
+	String text = functionStr[pos,pos + 400]
+	
+	//Get the equals sign position searching forward
+	pos = strsearch(text,"=",0)
+	
+	//From here find the first quotations mark for the procedure reference
+	Variable firstQuote = strsearch(text,"\"",pos)
+	If(firstQuote == -1)
+		return ""
+	Else
+		firstQuote += 1//move up a space because of the quote
+	EndIf
+	
+	Variable secondQuote = strsearch(text,"\"",firstQuote + 1)
+	If(secondQuote == -1)
+		return ""
+	Else
+		secondQuote -= 1//move up a space because of the quote
+	EndIf
+	
+	String theWaveStr = text[firstQuote,secondQuote]
+	
+	//Ensure no leading or trailing quotations
+	If(!cmpstr(theWaveStr[0],"\""))
+		theWaveStr = theWaveStr[1,strlen(theWaveStr) - 1]
+	EndIf
+	
+	theWaveStr = RemoveEnding(theWaveStr,"\"")
+	theWaveStr = RemoveEnding(theWaveStr," ") //white space check
+	
+	//Make sure the wave exists
+	Wave theWave = $theWaveStr
+	If(!WaveExists(theWave))
+		//make the wave if it doesn't exist
+		If(!cmpstr(key,"ListWave"))
+			Make/O/N=0/T $theWaveStr
+		ElseIf(!cmpstr(key,"SelWave"))
+			Make/O/N=0 $theWaveStr
+		EndIf
+	EndIf
+	
+	return theWaveStr
+End
+
+Function/S NT_GetSpecialProc(ctrlStr,functionStr)
+	String ctrlStr,functionStr
+	
+	If(!strlen(ctrlStr) || !strlen(functionStr))
+		return ""
+	EndIf
+	
+	//Syntax for referencing a procedure for a user defined menu
+	String ref = ctrlStr + "_Proc"
+	Variable pos = strsearch(functionStr,ref,0)
+	
+	If(pos == -1)
+		return ""
+	EndIf
+	
+	//Extracts the referenced item list using string quotations as a list separator
+	String text = functionStr[pos,pos + 400]
+	
+	//Get the equals sign position searching forward
+	pos = strsearch(text,"=",0)
+	
+	//From here find the first quotations mark for the procedure reference
+	Variable firstQuote = strsearch(text,"\"",pos)
+	If(firstQuote == -1)
+		return ""
+	Else
+		firstQuote += 1//move up a space because of the quote
+	EndIf
+	
+	Variable secondQuote = strsearch(text,"\"",firstQuote + 1)
+	If(secondQuote == -1)
+		return ""
+	Else
+		secondQuote -= 1//move up a space because of the quote
+	EndIf
+	
+	String theProc = text[firstQuote,secondQuote]
+	
+	//Ensure no leading or trailing quotations
+	If(!cmpstr(theProc[0],"\""))
+		theProc = theProc[1,strlen(theProc) - 1]
+	EndIf
+	
+	theProc = RemoveEnding(theProc,"\"")
+	theProc = RemoveEnding(theProc," ")
+	
+	//Make sure this checks out as a real function in the procedure file
+	String info = FunctionInfo(theProc)
+	
+	//Is it a pop up menu type procedure?
+	String type = StringByKey("SUBTYPE",info,":",";")
+	If(!cmpstr(type,"PopupMenuControl") || !cmpstr(type,"ButtonControl") || !cmpstr(type,"ListBoxControl"))
+		return theProc
+	Else
+		print "GetPopUpProc Error: The procedure file " + theProc + " must be a PopupMenuControl procedure"
+		return ""
+	EndIf
+End
+
 //Returns the named parameter from the external functions data wave
 Function/S getParam(key,func)
 	String key,func
-	DFREF NTF = root:Packages:NT
-	Wave/T param = NTF:ExtFunc_Parameters
+	DFREF NPC = $CW
+	Wave/T param = NPC:ExtFunc_Parameters
 	
 	Variable row = FindDimLabel(param,0,key)
 	Variable col = FindDimLabel(param,1,func)
 	
 	If(row < 0 || col < 0)
-		
+		return ""
 	EndIf
 	
 	return param[row][col]
+End
+
+//Returns the named parameter from the external functions data wave for the named control
+//extra functionality for this version of the function for returning the control name and control index
+Function/S getParam2(ctrlName,key,func)
+	String ctrlName,key,func
+	
+	DFREF NPC = $CW
+	Wave/T param = NPC:ExtFunc_Parameters
+	
+
+	Variable col = FindDimLabel(param,1,func)
+	If(col < 0)
+		return ""
+	EndIf
+	
+	Variable row = tableMatch(ctrlName,param,whichCol=col)
+	
+	If(row < 0)
+		return ""
+	EndIf
+	
+	String paramLabel = GetDimLabel(param,0,row)
+	String whichParam = StringFromList(1,paramLabel,"_")
+	If(!strlen(whichParam))
+		return ""
+	EndIf
+	
+	strswitch(key)
+		case "CTRL":
+			//returns the control name as in param0, or param1
+			return "param" + whichParam
+			break
+		case "INDEX":
+			return whichParam
+			break
+		default:
+			key = "PARAM_" + whichParam  + "_" + key 
+	
+			row = FindDimLabel(param,0,key)
+			If(row < 0 || col < 0)
+				return ""
+			EndIf
+			
+			return param[row][col]
+	endswitch
 End
 
 
@@ -3677,8 +5830,8 @@ End
 Function setParam(key,func,value)
 	String key,func,value
 	
-	DFREF NTF = root:Packages:NT
-	Wave/T param = NTF:ExtFunc_Parameters
+	DFREF NPC = $CW
+	Wave/T param = NPC:ExtFunc_Parameters
 	
 	Variable row = FindDimLabel(param,0,key)
 	Variable col = FindDimLabel(param,1,func)
@@ -3718,7 +5871,7 @@ Function/S SetExtFuncCmd()
 	runCmdStr = "NT_" + theFunction + "("
 
 	For(i=0;i<numExtParams;i+=1)
-		ControlInfo/W=NT $("param" + num2str(i))
+		ControlInfo/W=NTP $("param" + num2str(i))
 		type = str2num(StringFromList(i,extParamTypes,";"))
 		name = StringFromList(i,extParamNames,",")
 		
@@ -3763,30 +5916,49 @@ End
 
 Function/S getExtFuncCmdStr(func)
 	String func
-	Wave/T param = root:Packages:NT:ExtFunc_Parameters
-	Variable i,numParams = str2num(getParam("N_PARAMS",func))
 	
-	String cmdStr = "NT_" + func + "("
+	DFREF NPC = $CW
+	Wave/T param = NPC:ExtFunc_Parameters
+	
+	Variable col = tableMatch(func,param,returnCol=1)
+	If(col == -1)
+		return ""
+	EndIf
+	
+	String title = GetDimLabel(param,1,col)
+	
+	Variable i,numParams = str2num(getParam("N_PARAMS",title))
+	
+	String cmdStr = func + "("
 	For(i=0;i<numParams;i+=1)
-		String value = getParam("PARAM_" + num2str(i) + "_VALUE",func)
-		String type =  getParam("PARAM_" + num2str(i) + "_TYPE",func)
+		String value = getParam("PARAM_" + num2str(i) + "_VALUE",title)
+		String type = getParam("PARAM_" + num2str(i) + "_TYPE",title)
+		String name = getParam("PARAM_" + num2str(i) + "_NAME",title)
+		
+		If(stringmatch(name,"*[*]*"))
+			continue
+		EndIf
 		
 		strswitch(type)
 			case "4": //variable
 				cmdStr += value + "," 
 				break
 			case "8192": //string
-				cmdStr += "\"" + value + "\"" + "," 
+				If(!cmpstr(func,"RunCmdLine"))
+					value = ReplaceString("\"",value,"\\\"")
+					cmdStr += "\"" + value + "\"" + ","
+				Else
+					cmdStr += "\"" + value + "\"" + "," 
+				EndIf
 				break
 			case "16386": //wave
 				cmdStr += value + "," 
 				break
 		endswitch
-		
-		
+
 	EndFor
 	
-	cmdStr = RemoveEnding(cmdStr,",") + ")"
+	cmdStr = RemoveEnding(cmdStr,",") + ")" //remove final comma
 	return cmdStr
 End
 
@@ -3795,14 +5967,17 @@ Function KillExtParams()
 
 	Variable i
 	Do
-		ControlInfo/W=NT $("param" + num2str(i))
+
+		KillControl/W=NTP#Func $("param" + num2str(i))
 		
-		If(V_flag != 0)
-			KillControl/W=NT $("param" + num2str(i))
-		EndIf
+		SetDrawLayer/W=NTP#Func UserBack
+		DrawAction/W=NTP#Func getGroup=$("DSNameLabel" + num2str(i)),delete
+		KillControl/W=NTP#Func $("param" + num2str(i) + "_show")
+		KillControl/W=NTP#Func $("param" + num2str(i) + "_goto")
+		KillControl/W=NTP#Func $("param" + num2str(i) + "_assign")
 		
 		i += 1
-	While(V_flag != 0)
+	While(i < 30) //maximum 30 different controls
 	
 	//Kill wave validity text
 	validWaveText("",0,deleteText=1)
@@ -3816,21 +5991,183 @@ Function validWaveText(path,ypos,[,deleteText])
 	Variable deleteText
 	
 	If(!ParamIsDefault(deleteText))
-		DrawAction/W=NT getgroup=ValidWaveText,delete
+		DrawAction/W=NTP#Func getgroup=ValidWaveText,delete
 		return 0
 	EndIf
 	
 	If(WaveExists($path))
-		SetDrawEnv/W=NT textrgb= (3,52428,1),fstyle=2,fsize=10, textxjust= 0,textyjust= 0,gname=ValidWaveText,gstart
-		DrawText/W=NT 626,ypos,"Valid"
-		SetDrawEnv/W=NT gstop
+		SetDrawEnv/W=NTP#Func textrgb= (3,52428,1),fstyle=2,fsize=10, textxjust= 0,textyjust= 0,gname=ValidWaveText,gstart
+		DrawText/W=NTP 400,ypos,"Valid"
+		SetDrawEnv/W=NTP#Func gstop
 	Else
-		SetDrawEnv/W=NT textrgb= (65535,0,0),fstyle=2,fsize=10, textxjust= 0,textyjust= 0,gname=ValidWaveText,gstart
-		DrawText/W=NT 626,ypos,"Invalid"
-		SetDrawEnv/W=NT gstop
+		SetDrawEnv/W=NTP#Func textrgb= (65535,0,0),fstyle=2,fsize=10, textxjust= 0,textyjust= 0,gname=ValidWaveText,gstart
+		DrawText/W=NTP#Func 400,ypos,"Invalid"
+		SetDrawEnv/W=NTP#Func gstop
 	EndIf
 	
-	SetDrawEnv/W=NT textrgb=(0,0,0), textxjust= 1,textyjust= 1
+	SetDrawEnv/W=NTP#Func textrgb=(0,0,0), textxjust= 1,textyjust= 1
+End
+
+Function/S TT_GetStimList(fileID)
+	Variable fileID
+	
+	//Open the data group
+	Variable DataGroup_ID
+	HDF5OpenGroup/Z fileID,"/Data",DataGroup_ID
+	
+	//Gets the series list
+	HDF5ListGroup/TYPE=1/Z DataGroup_ID,"/Data"
+	String seriesList = S_HDF5ListGroup
+	
+	Variable i,seriesID
+	String protocolList = ""
+	
+	For(i=0;i<ItemsInList(seriesList,";");i+=1)
+		String series = StringFromList(i,seriesList,";")
+		HDF5LoadData/A="Protocol"/N=prot/TYPE=1 fileID,"/Data/" + series
+		Wave/T prot
+		protocolList += prot[0] + ";"
+		
+		KillWaves prot
+	EndFor
+
+	KillWaves prot
+	return protocolList
+End
+
+Function/S TT_GetProtocolList(fileID)
+	Variable fileID
+	
+	//Open the data group
+	Variable DataGroup_ID
+	HDF5OpenGroup/Z fileID,"/Data",DataGroup_ID
+	
+	//Gets the series list
+	HDF5ListGroup/TYPE=1/Z DataGroup_ID,"/Data"
+	String seriesList = S_HDF5ListGroup
+	
+	Variable i,seriesID
+	String protocolList = ""
+	
+	For(i=0;i<ItemsInList(seriesList,";");i+=1)
+		String series = StringFromList(i,seriesList,";")
+		HDF5LoadData/A="Protocol"/N=prot/TYPE=1 fileID,"/Data/" + series
+		Wave/T prot
+		protocolList += prot[0] + ";"
+		
+		KillWaves prot
+	EndFor
+
+	KillWaves prot
+	return protocolList
+
+End
+
+//Returns the list of data series in the provided turntable ephys file
+Function/S TT_GetSeriesList(fileID)
+	Variable fileID
+	
+	//Open the data group
+	Variable DataGroup_ID
+	HDF5OpenGroup/Z fileID,"/Data",DataGroup_ID
+	
+	//Gets the series list
+	HDF5ListGroup/TYPE=1/Z DataGroup_ID,"/Data"
+	String seriesList = S_HDF5ListGroup
+	
+	//alphanumeric sort
+	seriesList = SortList(seriesList,";",2)
+	
+	return seriesList
+End
+
+//Returns the list of sweeps in the provided turntable ephys file and series number
+Function/S TT_GetSweepList(fileID,series)
+	Variable fileID
+	String series
+	
+	//Open the data group
+	Variable DataGroup_ID
+	HDF5OpenGroup/Z fileID,"/Data",DataGroup_ID
+
+	//Gets the series list
+	HDF5ListGroup/TYPE=1/Z DataGroup_ID,"/Data"
+	HDF5CloseGroup/Z DataGroup_ID
+	
+	String seriesList = S_HDF5ListGroup
+	
+	//Is the series requested valid?
+	Variable err = WhichListItem(series,seriesList,";")
+	
+	If(err == -1)
+		return ""
+	EndIf
+	
+	String address = "/Data/" + series + "/Ch1"
+	HDF5OpenGroup/Z fileID,address,DataGroup_ID
+	HDF5ListGroup/TYPE=2/Z DataGroup_ID,address
+	String sweepList = S_HDF5ListGroup
+	
+	HDF5CloseGroup/Z DataGroup_ID
+	
+	sweepList = SortList(sweepList,";",2)
+	return sweepList
+End
+
+//Returns the list of sweeps in the provided turntable ephys file and series number
+Function/S TT_GetSeriesUnits(fileID,series)
+	Variable fileID
+	String series
+	
+	//Open the data group
+	Variable DataGroup_ID
+	HDF5OpenGroup/Z fileID,"/Data",DataGroup_ID
+	
+	//Gets the series list
+	String sweepList = TT_GetSweepList(fileID,series)
+	
+	Variable i,seriesID
+	String unitList = ""
+	
+	For(i=0;i<ItemsInList(sweepList,";");i+=1)
+		String sweep = StringFromList(i,sweepList,";")
+		
+		HDF5LoadData/A="IGORWaveUnits"/N=units/TYPE=2/O fileID,"/Data/" + series + "/Ch1/" + sweep
+		Wave/T units
+		unitList += units[0] + ";"
+	
+		KillWaves units
+	EndFor
+	
+	return unitList
+End
+
+//Returns the list of sweeps in the provided turntable ephys file and series number
+Function/S TT_GetSeriesScale(fileID,series)
+	Variable fileID
+	String series
+	
+	//Open the data group
+	Variable DataGroup_ID
+	HDF5OpenGroup/Z fileID,"/Data",DataGroup_ID
+	
+	//Gets the series list
+	String sweepList = TT_GetSweepList(fileID,series)
+	
+	Variable i,seriesID
+	String scaleList = ""
+	
+	For(i=0;i<ItemsInList(sweepList,";");i+=1)
+		String sweep = StringFromList(i,sweepList,";")
+		
+		HDF5LoadData/A="IGORWaveScaling"/N=scale/TYPE=2/O fileID,"/Data/" + series + "/Ch1/" + sweep
+		Wave scale
+		scaleList += num2str(scale[1][0]) + ";"
+	
+		KillWaves scale
+	EndFor
+	
+	return scaleList
 End
 
 //Opens a wavesurfer HDF5 file, and lists out the sweep contents in the list boxes
@@ -3838,11 +6175,12 @@ Function UpdateWaveSurferLists(fileID,path,file)
 	Variable fileID
 	String path,file
 	
-	
-	DFREF NTF = root:Packages:NT
-	Wave/T wsSweepListWave = NTF:wsSweepListWave
-	Wave/T wsFileListWave = NTF:wsFileListWave
-	Wave wsFileSelWave = NTF:wsFileSelWave
+	DFREF NPC = $CW
+	Wave/T param = NPC:ExtFunc_Parameters
+			
+	Wave/T wsSweepListWave = $getParam2("lb_SweepList","LISTWAVE","NT_LoadEphys")
+	Wave/T wsFileListWave = $getParam2("lb_FileList","LISTWAVE","NT_LoadEphys")
+	Wave wsFileSelWave = $getParam2("lb_FileList","SELWAVE","NT_LoadEphys")
 	
 	//Fill the file list box
 	NewPath/O/Q wsPath,path
@@ -3865,15 +6203,29 @@ Function UpdateWaveSurferLists(fileID,path,file)
 	Wave/T sweepList = StringListToTextWave(S_HDF5ListGroup,";")
 	Redimension/N=(DimSize(sweepList,0)) wsSweepListWave
 	wsSweepListWave = sweepList
+		
+	HDF5LoadData/Q/O/Z/A="Name"/TYPE=1 fileID,"/StimGen/Stimulus"
+	Wave/Z/T name = $StringFromList(0,S_waveNames,";")
 	
+	If(WaveExists(name))
+		wsSweepListWave += "/" + name[0]
+	EndIf
+	
+	KillWaves/Z name
+	
+		
 	//Get the possible channels, and adjust the drop down menu
-	HDF5LoadData/N=channels/Q fileID,"/header/AIChannelNames"
+	HDF5LoadData/Z/N=channels/Q fileID,"/header/AIChannelNames"
 	Wave/T channels = :channels
 	
 	String quote = "\""
 	String channelList = quote + "All;" + ReplaceString(",",textWaveToStringList(channels,","),";") + quote
 	
-	PopUpMenu ChannelSelector win=NT,value=#channelList
+	Variable col = FindDimLabel(param,1,"NT_LoadEphys")
+	Variable row = tableMatch("menu_Channels",param,whichCol=col)
+	String whichParam = GetDimLabel(param,0,row)
+	String paramName = "param" + StringFromList(1,whichParam,"_")
+	PopUpMenu $paramName win=NTP#Func,value=#channelList
 	
 	KillWaves/Z channels
 
@@ -4102,6 +6454,24 @@ Function polarMath(pnt1,pnt2,degrad,op,signed)
 		case "rad":
 			angOut = (angOut > 2*pi) ? (angOut - 2*pi) : angOut
 			angOut = (angOut < 0) ? (angOut + 2*pi) : angOut
+			
+			//Determine the sign. Direction of point 2 relative to point 1
+			If(signed)	
+				
+				signTest = pnt1 + angOut
+				
+				If(signTest > 2*pi)
+					signTest -= 2*pi
+				EndIf	
+
+				If(abs(signTest - pnt2) < 0.0001) 
+					theSign = 1
+				Else
+					theSign = -1
+				EndIf
+				
+				angOut *= theSign
+			EndIf
 			break
 	endswitch
 	
@@ -4133,7 +6503,12 @@ End
 Function/WAVE GetStimulusData(fileID)
 	Variable fileID
 	
-	Wave/T wsStimulusDataListWave = root:Packages:NT:wsStimulusDataListWave
+	DFREF NPC = $CW
+	Wave/T wsStimulusDataListWave = NPC:wsStimulusDataListWave
+	
+	If(!fileID)
+		return $""
+	EndIf
 	
 	//Get the groups in the file
 	HDF5ListGroup/F/R/TYPE=1 fileID,"/"
@@ -4158,7 +6533,7 @@ Function/WAVE GetStimulusData(fileID)
 	
 	//Get the stimulus name
 	String path = "/StimGen/Stimulus"
-	HDF5LoadData/Z/Q/O/A="Name"/TYPE=1/N=stimData fileID, path
+	HDF5LoadData/Z/Q/O/A="Name"/TYPE=1 fileID, path
 	Wave/T data = $StringFromList(0,S_waveNames,";")
 	String stimName = data[0]
 	KillWaves/Z data
@@ -4192,11 +6567,12 @@ Function/S GetAttribute(fileID,objectNum,attr)
 	String attr
 	
 	DFREF saveDF = GetDataFolderDFR()
-	SetDataFolder root:Packages:NT
+	DFREF NPC = $CW
+	SetDataFolder NPC
 	
 	String path = "/StimGen/Stimulus/" + num2str(objectNum)
-	
-	HDF5LoadData/Z/Q/O/A=attr/TYPE=1/N=stimData fileID, path
+
+	HDF5LoadData/Z/Q/O/A=attr/TYPE=1 fileID, path
 	String stimWave = StringFromList(0,S_waveNames,";")
 	
 	Variable type = WaveType($stimWave,1)
@@ -4226,7 +6602,7 @@ Function/S GetAttribute(fileID,objectNum,attr)
 			break
 	endswitch
 	
-	KillWaves/Z data,textData
+	KillWaves/Z data,textData,stimWave
 	SetDataFolder saveDF
 	
 	return value
@@ -4311,8 +6687,8 @@ Function fillTrajectoryAssignments(stimData,attrList,fileID)
 	stimData[rows][0] = trajName
 	stimData[rows][1] = theTrajectory
 	
-	String angle = StringByKey("angle",theTrajectory,":",";")
-	String duration = StringByKey("duration",theTrajectory,":",";")
+	String angle = StringByKey("angle",theTrajectory,":","//")
+	String duration = StringByKey("duration",theTrajectory,":","//")
 	
 	Variable numAngles = ItemsInList(angle,",")
 	Variable i
@@ -4340,7 +6716,7 @@ Function fillTrajectoryAssignments(stimData,attrList,fileID)
 End
 
 //Returns the angle and duration in a key-value list of the named trajectory
-Function/S getTrajectory(trajName,fileID)
+Function/S GetTrajectory(trajName,fileID)
 	String trajName
 	Variable fileID
 	String theTrajectory = ""
@@ -4359,6 +6735,7 @@ Function/S getTrajectory(trajName,fileID)
 	theTrajectory = ReplaceString("}",theTrajectory,"")
 	theTrajectory = ReplaceString("'",theTrajectory,"")
 	theTrajectory = ReplaceString("[",theTrajectory,"")
+	theTrajectory = ReplaceString("],",theTrajectory,"//")
 	theTrajectory = ReplaceString("]",theTrajectory,"")
 	theTrajectory = ReplaceString(" ",theTrajectory,"")
 	theTrajectory = ReplaceString(",duration",theTrajectory,";duration")
@@ -4394,6 +6771,24 @@ Function fillSequenceAssignments(stimData,attrList,fileID)
 	EndFor
 End
 
+//returns the sequence assignment of the named attribute (diameter, angle, etc.)
+Function/S GetSequenceAssignment(fileID,objectNum,attr)
+	Variable fileID,objectNum
+	String attr
+	String assign = ""
+	
+	String path = "/StimGen/Sequence Assignments/" + num2str(objectNum)
+	HDF5LoadData/Z/Q/O/A=attr/TYPE=1/N=stimData fileID, path
+	
+	If(strlen(S_waveNames))
+		Wave/T data = $StringFromList(0,S_waveNames,";")
+		assign = data[0]
+	EndIf
+	
+	return assign
+End
+
+//Returns the sequence definition of the named sequence
 Function/S GetSequence(seqName,fileID)
 	String seqName
 	Variable fileID
@@ -4433,26 +6828,24 @@ Function cleanStimData(stimData,fileID)
 	
 	strswitch(type)
 		case "Circle":
-		
-			//Diameter
 	 		String attrList = "Stimulus;objectType;diameter;xPos;yPos;contrastType;contrast;modulationType;motionType;delay;duration;trialTime;"
 	 		
 			break
-		case "Rectangle":
-		
-			//Diameter
+		case "Rectangle":		
 	 		attrList = "Stimulus;objectType;length;width;orientation;xPos;yPos;contrastType;contrast;modulationType;motionType;delay;duration;trialTime;"
 	 		
 			break
 		case "Grating":
-			//Diameter
 	 		attrList = "Stimulus;objectType;gratingType;spatialFreq;spatialPhase;orientation;xPos;yPos;contrastType;contrast;modulationType;motionType;delay;duration;trialTime;"
 	 		
 			break
 		case "Noise":
 			attrList = "Stimulus;objectType;noiseType;noiseSize;noiseFreq;noiseSeed;xPos;yPos;contrastType;contrast;delay;duration;trialTime;"
 			break
-		
+			
+		case "Cloud":
+			attrList = "Stimulus;objectType;cloudSF;cloudSFBand;cloudSpeedX;cloudSpeedY;cloudSpeedBand;cloudOrient;cloudOrientBand;contrastType;contrast;delay;duration;trialTime;xPos;yPos;"
+			break
 	endswitch
 	
 	//Adds motion and modulation parameters to the attribute list according to the stimulus

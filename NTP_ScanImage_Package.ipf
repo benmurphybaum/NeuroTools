@@ -1,7 +1,7 @@
 ﻿#pragma TextEncoding = "UTF-8"
 #pragma rtGlobals=3		// Use modern global access method and strict wave access.
 
-#include "NT_ImageRegistration"
+#include "NTP_ImageRegistration"
 
 //Package for analyzing images acquired using ScanImage.
 //General imaging analysis routine
@@ -11,21 +11,21 @@
 Function SI_CreatePackage()
 	
 	//Make the ScanImage package folder
-	If(!DataFolderExists("root:Packages:NT:ScanImage"))
-		NewDataFolder root:Packages:NT:ScanImage
+	If(!DataFolderExists("root:Packages:NeuroToolsPlus:ScanImage"))
+		NewDataFolder root:Packages:NeuroToolsPlus:ScanImage
 	EndIf
 	
 	//Make the ScanImage Scans folder
-	If(!DataFolderExists("root:Scans"))
-		NewDataFolder root:Scans
-	EndIf
+//	If(!DataFolderExists("root:Scans"))
+//		NewDataFolder root:Scans
+//	EndIf
 	
 	//Make the ScanImage ROI folder
-	If(!DataFolderExists("root:Packages:NT:ScanImage:ROIs"))
-		NewDataFolder root:Packages:NT:ScanImage:ROIs
+	If(!DataFolderExists("root:Packages:NeuroToolsPlus:ScanImage:ROIs"))
+		NewDataFolder root:Packages:NeuroToolsPlus:ScanImage:ROIs
 	EndIf
 	
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = $SI
 	
 	//Are we creating scanimage file structures or 2PLSM?
 	String/G NTSI:imagingSoftware
@@ -85,6 +85,10 @@ Function SI_CreatePackage()
 	Variable/G NTSI:rollingAverageCount
 	NVAR rollingAverageCount = NTSI:rollingAverageCount
 	rollingAverageCount = 0
+	
+	Variable/G NTSI:lockAspect
+	NVAR lockAspect = NTSI:lockAspect
+	lockAspect = 1
 	
 	//Hook time out. This works around a possible bug where the resize hook is triggered multiple times
 	//when the Image Browser panel is first opened.
@@ -208,15 +212,20 @@ Function SI_CreatePackage()
 	//If this is 2PLSM, need to make it so the scan folders are the scan groups
 	If(!cmpstr(software,"2PLSM"))
 		Redimension/N=(DimSize(ScanFolderListWave,0),-1,-1) ScanGroupListWave,ScanGroupSelWave
-		ScanGroupListWave[][0][0] = ScanFolderListWave
 		
+		If(DimSize(ScanFolderListWave,0) > 0)
+			ScanGroupListWave[][0][0] = ScanFolderListWave
+		EndIf
+
 		If(DimSize(ScanFolderSelWave,0) > 0)
 			ScanGroupSelWave = ScanFolderSelWave
 		EndIf
 		
 		Redimension/N=(1,-1,-1) ScanFolderListWave,ScanFolderSelWave
-		ScanFolderListWave[0] = "2PLSM"
-		ScanFolderSelWave[0] = 1 
+		If(DimSize(ScanFolderSelWave,0) > 0)
+			ScanFolderListWave[0] = "2PLSM"
+			ScanFolderSelWave[0] = 1 
+		EndIf
 	Else
 		ScanFolderListWave = listWave
 	EndIf
@@ -237,18 +246,68 @@ Function SI_CreatePackage()
 		ScanFieldSelWave[0][0][0] = 1
 	EndIf
 	
+	//Scan Field match string
+	String/G NTSI:scanFieldMatchStr
+	SVAR scanFieldMatchStr = NTSI:scanFieldMatchStr
+	scanFieldMatchStr = ""
+	
+//	SI_CreateControls()
+//	SI_CreateControlLists()
+//	
+	//Scan Registration variables, etc.
+	If(!DataFolderExists("root:Packages:NeuroToolsPlus:ScanImage:Registration"))
+		NewDataFolder root:Packages:NeuroToolsPlus:ScanImage:Registration
+	EndIf
+	
+	DFREF NTSR = root:Packages:NeuroToolsPlus:ScanImage:Registration
+	String/G NTSR:roiXlist
+	String/G NTSR:roiYlist
+	Variable/G NTSR:hidden
+	
+End
+
+Function OpenImageBrowser()
+	//Create the ScanImage Browsing panel
+	GetWindow/Z SI wsize
+	If(!V_flag)
+		DoWindow/F SI
+		return 0
+	Else			
+		GetMouse
+		NewPanel/N=SI/K=1/W=(V_left-460,V_top + 25,V_left,V_top + 245) as "Image Browser"
+	EndIF
+
+	DFREF NTSI = $SI
+	
+	Wave/T ScanFolderListWave = NTSI:ScanFolderListWave
+	Wave ScanFolderSelWave =  NTSI:ScanFolderSelWave
+
+	//The scan group
+	Wave/T ScanGroupListWave =  NTSI:ScanGroupListWave
+	Wave ScanGroupSelWave = NTSI:ScanGroupSelWave
+	
+	//The scans themselves
+	Wave/T ScanFieldListWave = NTSI:ScanFieldListWave
+	Wave ScanFieldSelWave =  NTSI:ScanFieldSelWave 
+	
+	//ROIs
+	Wave/T ROIListWave = NTSI:ROIListWave 
+	Wave ROISelWave = NTSI:ROISelWave 
 	
 	//Scan Field match string
 	String/G NTSI:scanFieldMatchStr
 	SVAR scanFieldMatchStr = NTSI:scanFieldMatchStr
 	scanFieldMatchStr = ""
 	
-	//Create the ScanImage Browsing panel
-	KillWindow/Z SI
+	//list and selection waves for the ROI Group list box
+	If(!WaveExists(NTSI:ROIGroupListWave))
+		Make/O/T/N=0 NTSI:ROIGroupListWave /Wave = ROIGroupListWave
+		Make/O/N=0 NTSI:ROIGroupSelWave /Wave = ROIGroupSelWave
+	Else
+		Wave/T ROIGroupListWave = NTSI:ROIGroupListWave 
+		Wave ROIGroupSelWave = NTSI:ROIGroupSelWave
+	EndIf
 	
-	GetWindow NT wsize
-	
-	NewPanel/N=SI/K=2/W=(V_left-460,V_top,V_left,V_top + 245) as "Image Browser"
 	
 	ListBox scanFolders win=SI,pos={5,40},size={85,200},title="",listWave=ScanFolderListWave,selWave=ScanFolderSelWave,mode=2,proc=siListBoxProc,disable=0
 	ListBox scanGroups win=SI,pos={95,40},size={85,200},title="",listWave=ScanGroupListWave,selWave=ScanGroupSelWave,mode=9,proc=siListBoxProc,disable=0
@@ -260,7 +319,7 @@ Function SI_CreatePackage()
 	CheckBox selectAllScanFields win=SI,pos={190,23},font="Calibri Light",fsize=12,size={20,20},title="Scan Fields",value=0,proc=siCheckBoxProc,disable=0
 	CheckBox selectAllScanGroups win=SI,pos={96,23},font="Calibri Light",fsize=12,size={20,20},title="Scan Groups",value=0,proc=siCheckBoxProc,disable=0
 	
-	PopUpMenu targetImage win=SI,pos={330,224},size={120,20},bodywidth=120,font=$LIGHT,title="",mode=1,value=#"root:Packages:NT:ScanImage:availableImages",proc=siPopProc
+	PopUpMenu targetImage win=SI,pos={330,224},size={120,20},bodywidth=120,font=$LIGHT,title="",mode=1,value=#"root:Packages:NeuroToolsPlus:ScanImage:availableImages",proc=siPopProc
 //	Button appendToTop win=SI,pos={395,223},size={60,20},title="Append",disable=0,proc=siButtonProc
 	
 	
@@ -280,28 +339,18 @@ Function SI_CreatePackage()
 	CheckBox monitorScans win=SI,pos={150,4},size={70,20},title="Monitor New Scans",font=$LIGHT,proc=siCheckBoxProc,disable=1
 	Button browseMonitorFolder win=SI,pos={275,1},size={20,20},title="...",font=$LIGHT,proc=siButtonProc,disable=0
 	
-	SI_CreateControls()
-	SI_CreateControlLists()
-	
-	//Scan Registration variables, etc.
-	If(!DataFolderExists("root:Packages:NT:ScanImage:Registration"))
-		NewDataFolder root:Packages:NT:ScanImage:Registration
-	EndIf
-	DFREF NTSR = root:Packages:NT:ScanImage:Registration
-	String/G NTSR:roiXlist
-	String/G NTSR:roiYlist
-	Variable/G NTSR:hidden
-	
 	//set resize hook on the Image Browser for vertical sizing only
 	SetWindow SI hook(resizeHook) = resizeHook
 	
+	//Start a mouse hook for hovering over the in-between spaces between list boxes for resizing purposes
+	SetWindow SI hook(ImageBrowserMouseHook) = ImageBrowserMouseHook
 End
 
 //Creates the controls that are used in scanimage analysis functions
 Function SI_CreateControls()
 	Variable pos = 100
 	
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	
 	//Get ROI
 	PopUpMenu channelSelect win=NT,size={120,20},bodywidth=50,pos={461,pos},title="Channel",value="1;2;1/2;2/1;",disable=1	
@@ -321,9 +370,6 @@ Function SI_CreateControls()
 //	pos += 20
 	SetVariable filterSize win=NT,size={120,20},bodywidth=40,pos={461,pos},limits={-1,inf,2},title="Filter Size",value=_NUM:9,disable=1,proc=siVarProc
 	pos += 20	
-	
-	
-	
 	
 	//Load Scans
 	Button BrowseScans win=NT,pos={460,80},font=$LIGHT,fsize=10,size={50,20},title="Browse",disable=1,proc=siButtonProc
@@ -373,17 +419,16 @@ Function SI_CreateControls()
 //	CheckBox SR_useProjection win=NT,pos={465,130},size={75,20},title="Use Projection",disable=1
 	Button SR_getRefScan win=NT,pos={677,106},size={40,20},title="Grab",proc=NT_ScanRegistryButtonProc,disable=1
 	
-	If(!DataFolderExists("root:Packages:NT:ScanImage:Registration"))
-		NewDataFolder root:Packages:NT:ScanImage:Registration
+	If(!DataFolderExists("root:Packages:NeuroToolsPlus:ScanImage:Registration"))
+		NewDataFolder root:Packages:NeuroToolsPlus:ScanImage:Registration
 	EndIf
-	String/G root:Packages:NT:ScanImage:Registration:templateList
-	SVAR templateList = root:Packages:NT:ScanImage:Registration:templateList
+	String/G root:Packages:NeuroToolsPlus:ScanImage:Registration:templateList
+	SVAR templateList = root:Packages:NeuroToolsPlus:ScanImage:Registration:templateList
 	templateList = GetTemplateList()
-	PopUpMenu SR_templatePopUp win=NT,pos={34+426,238+25},size={100,20},title="Templates",value=#"root:Packages:NT:ScanImage:Registration:templateList",proc=NT_ScanRegistryPopUpProc,disable=1
+	PopUpMenu SR_templatePopUp win=NT,pos={34+426,238+25},size={100,20},title="Templates",value=#"root:Packages:NeuroToolsPlus:ScanImage:Registration:templateList",proc=NT_ScanRegistryPopUpProc,disable=1
 //	CheckBox SR_UseAnalysisToolsCheck win=NT,pos={34+426,258},size={40,20},title="Use Scan List",disable=1
 
-	//Start a mouse hook for hovering over the in-between spaces between list boxes for resizing purposes
-	SetWindow SI hook(ImageBrowserMouseHook) = ImageBrowserMouseHook
+	
 End
 
 
@@ -454,7 +499,7 @@ End
 
 //Returns a text wave with all available scan folders (immediate subfolders within the root:Scans: directory)
 Function/Wave SI_GetScanFolders()
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	SVAR software = NTSI:imagingSoftware
 	
 	strswitch(software)
@@ -465,6 +510,11 @@ Function/Wave SI_GetScanFolders()
 			DFREF NTS = root:Scans
 			break
 	endswitch
+	
+	If(!DataFolderRefStatus(NTS))
+		Make/FREE/N=0/T listWave
+		return listWave
+	EndIf
 	
 	String folders = StringByKey("FOLDERS",DataFolderDir(1,NTS),":",";")
 	Wave/T listWave = StringListToTextWave(folders,",")
@@ -478,7 +528,7 @@ End
 Function/Wave SI_GetScanGroups([folder])
 	String folder
 	
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	Wave/T ScanFolderListWave = NTSI:ScanFolderListWave
 	
 	DFREF saveDF = GetDataFolderDFR()
@@ -526,7 +576,7 @@ Function/Wave SI_GetScanFields(folder[,group])
 	String folder,group 
 	
 	DFREF saveDF = $GetDataFolder(1)
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	Wave/T ScanGroupListWave = NTSI:ScanGroupListWave
 	
 	Wave/T ScanFieldListWave = NTSI:ScanFieldListWave
@@ -596,7 +646,7 @@ End
 Function/Wave SI_GetROIs(group)
 	String group //this can be a list of groups
 	
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	
 	DFREF saveDF = GetDataFolderDFR()
 	
@@ -607,7 +657,7 @@ Function/Wave SI_GetROIs(group)
 			String roiFolder = "root:twoP_ROIS:"
 			break
 		case "ScanImage":
-			roiFolder = "root:Packages:NT:ScanImage:ROIs:"
+			roiFolder = "root:Packages:NeuroToolsPlus:ScanImage:ROIs:"
 			
 			//No group, return empty
 			If(!strlen(group))
@@ -712,7 +762,7 @@ End
 
 //Finds all of the existing ROI groups and returns a listwave of them
 Function/Wave SI_GetROIGroups()
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	
 	String/G NTSI:imagingSoftware
 	SVAR software = NTSI:imagingSoftware
@@ -723,7 +773,7 @@ Function/Wave SI_GetROIGroups()
 			DFREF NTR = root:twoP_ROIS
 			break
 		case "ScanImage":
-			DFREF NTR = root:Packages:NT:ScanImage:ROIs
+			DFREF NTR = root:Packages:NeuroToolsPlus:ScanImage:ROIs
 			break
 	endswitch
 	
@@ -755,7 +805,7 @@ End
 
 //Returns the full paths of the selected scan fields
 Function/S GetSelectedImages()
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	Wave/T listWave = NTSI:ScanFieldListWave
 	Wave selWave = NTSI:ScanFieldSelWave
 	
@@ -768,16 +818,48 @@ Function/S GetSelectedImages()
 	EndFor
 	return imageList
 End
+
+Function GetHotSpots(imagePaths)
+	String imagePaths
 	
+	Variable numImages = ItemsInList(imagePaths,";")
+	
+	Variable i,j
+	For(i=0;i<numImages;i+=1)
+		Wave theImage = $StringFromList(i,imagePaths,";")
+		If(!WaveExists(theImage))
+			continue
+		EndIf
+		
+		Variable rows = DimSize(theImage,0)
+		Variable cols = DimSize(theImage,1)
+		Variable frames = DimSize(theImage,2)
+		
+		//First make a variance map
+	   Make/FREE/S/N=(rows,cols,0) varMap
+		varMap = 0
+		
+		//Calculate variance across frames
+		MatrixOP/FREE/O theMean = sumBeams(theImage)
+		MultiThread theMean /= frames
+		
+		For(j=0;j<frames;j+=1)
+			MultiThread varMap += (theImage[p][q][j] - theMean[p][q])^2
+		EndFor
+	EndFor
+
+End
+
 //Opens the scanfield display and displays the selected image stack
 Function DisplayScanField(imageList[,add])
 	String imageList
 	Variable add
 	
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	
 	//Reset the mouse drag indicator to prevent image from moving with mouse...
 	//...immediately without a click
+	Variable/G NTSI:mouseDrag
 	NVAR mouseDrag = NTSI:mouseDrag
 	mouseDrag = 0
 	
@@ -949,6 +1031,21 @@ Function DisplayScanField(imageList[,add])
 			SetWindow SIDisplay hook(zoomScrollHook) = zoomScrollHook
 			SetWindow SIDisplay hook(killWindowHook) = killWindowHook
 
+			
+			//total x width for scale bar
+			Variable width = round((xRange(theImage) * 0.1 * 10^6)) * 10^-6 //should get rounded microns number at 10% total width
+			Variable leftPos = leftx(theImage) + 0.5 * width //5% from left side of the image
+			Variable rightPos = leftPos + width
+			Variable yPos = DimOffset(theImage,1) + yRange(theImage) * 0.05
+			Variable textPos = yPos * 1.02
+			
+			//Append a scale bar
+			SetDrawEnv/W=SIDisplay#$subPanel#$graph linefgc=(0xffff,0xffff,0xffff),textrgb=(0xffff,0xffff,0xffff),linethick=2,xcoord=top,ycoord=left
+			SetDrawLayer/W=SIDisplay#$subPanel#$graph UserFront
+			DrawLine/W=SIDisplay#$subPanel#$graph leftPos,yPos,rightPos,yPos
+			SetDrawEnv/W=SIDisplay#$subPanel#$graph textxjust=1,textrgb=(0xffff,0xffff,0xffff),linethick=2,xcoord=top,ycoord=left
+			DrawText/W=SIDisplay#$subPanel#$graph 0.5 * (rightPos + leftPos),textPos,num2str(width * 10^6) + " µm"
+			
 			count += 1
 			
 			If(count == numImages)
@@ -965,13 +1062,16 @@ Function DisplayScanField(imageList[,add])
 	Button stepFrame win=SIDisplay#control,pos={115,0},size={40,20},font=$LIGHT,title="Step",disable=0,proc=handlePlayFrames
 	Button autoScale win=SIDisplay#control,pos={160,0},size={40,20},font=$LIGHT,title="Auto",disable=0,proc=siButtonProc
 	Button maxProj win=SIDisplay#control,pos={205,0},size={60,20},font=$LIGHT,title="Max Proj",disable=0,proc=siButtonProc
-	Button liveROIs win=SIDisplay#control,pos={270,20},size={40,20},font=$LIGHT,title="ROIs",disable=0,proc=siButtonProc
+	Button liveROIs win=SIDisplay#control,pos={270,25},size={40,20},font=$LIGHT,title="ROIs",disable=0,proc=siButtonProc
 	Button dynamicROI win=SIDisplay#control,pos={270,0},size={40,20},font=$LIGHT,title="Live",disable=0,proc=siButtonProc
+	Button crossHairs win=SIDisplay#control,pos={315,25},size={27,20},font=$LIGHT,fsize=20,title="⊕",disable=0,proc=siButtonProc 
+	Button lockAspectRatio win=SIDisplay#control,pos={345,25},size={27,20},font=$LIGHT,fsize=10,title="L.A.",disable=0,proc=siButtonProc 
+//	Button signalID win=SIDisplay#control,pos={205,25},size={60,20},font=$LIGHT,title="ID",disable=0,proc=siButtonProc 
 	
 	NVAR size = NTSI:dynamicROI_Size
 
-	SetVariable dynamicROISize win=SIDisplay#control,pos={315,3},size={40,20},font=$LIGHT,title=" ",value=size,disable=0,proc=siVarProc
-	SetVariable selectROI win=SIDisplay#control,pos={315,22},size={40,20},font=$LIGHT,title=" ",value=_NUM:1,limits={1,inf,1},disable=0,proc=siVarProc
+	SetVariable dynamicROISize win=SIDisplay#control,pos={315,3},size={40,20},fsize=10,font=$LIGHT,title=" ",value=size,disable=0,proc=siVarProc
+//	SetVariable selectROI win=SIDisplay#control,pos={315,25},size={40,20},fsize=10,font=$LIGHT,title=" ",value=_NUM:1,limits={1,inf,1},disable=0,proc=siVarProc
 	
 	String/G NTSI:availableImages
 	SVAR availableImages = NTSI:availableImages
@@ -986,9 +1086,9 @@ Function DisplayScanField(imageList[,add])
 	EndFor
 	availableImages = "SIDisplay;" + availableImages
 	
-//	PopUpMenu targetImage win=SIDisplay#control,pos={315,1},size={80,20},font=$LIGHT,title="",mode=1,value=#"root:Packages:NT:ScanImage:availableImages"
+//	PopUpMenu targetImage win=SIDisplay#control,pos={315,1},size={80,20},font=$LIGHT,title="",mode=1,value=#"root:Packages:NeuroToolsPlus:ScanImage:availableImages"
 	
-	SetVariable rollingAverage win=SIDisplay#control,pos={200,4},size={60,25},font=$LIGHT,fsize=12,title="Avg",value=_NUM:1,limits={1,inf,1},disable=1,proc=siVarProc
+//	SetVariable rollingAverage win=SIDisplay#control,pos={200,4},size={60,25},font=$LIGHT,fsize=12,title="Avg",value=_NUM:1,limits={1,inf,1},disable=1,proc=siVarProc
 	
 	//Create custom color table wave for ROI masks
 	Make/O/N=(10,4) NTSI:ROI_ColorTable
@@ -1003,25 +1103,106 @@ Function DisplayScanField(imageList[,add])
 	
 	Slider darkValueSlider win=SIDisplay#control,pos={5,25},size={75,20},vert=0,side=0,limits={0,100,1},value=0,proc=siSliderProc
 	Slider brightValueSlider win=SIDisplay#control,pos={5,35},size={75,20},vert=0,side=0,limits={0,100,1},value=100,proc=siSliderProc
-	Button scale94pct win=SIDisplay#control,pos={90,23},size={36,20},title="94%",proc=siButtonProc
+	Button scale94pct win=SIDisplay#control,pos={90,25},size={40,20},title="98%",proc=siButtonProc
 	
 	//Bring panel to the front
 	DoWindow/F SIDisplay
 	
 	//Ensure that the image selection drop down list is filled with something.
 	PopUpMenu targetImage win=SI,mode=1
-
+	
+	//Set the resize hook to allow for aspect ratio lock functionality
+	SetWindow SIDisplay hook(ImageResizeHook) = ImageResizeHook	
+	NVAR lockAspect = NTSI:lockAspect
+	If(lockAspect)
+		Button lockAspectRatio win=SIDisplay#control,fcolor=(0x0000,0xa000,0x0000)
+		GetWindow/Z SIDisplay wsize
+		MoveWindow/W=SIDisplay V_left,V_top,V_right+1,V_bottom
+		GetWindow/Z SIDisplay wsize
+		MoveWindow/W=SIDisplay V_left,V_top,V_right-1,V_bottom
+	Else
+		Button lockAspectRatio win=SIDisplay#control,fcolor=(0,0,0)
+	EndIf
 End
 
+
+
+//Returns the X range of a wave
+Function xRange(w)
+	Wave w
+	
+	return abs((rightx(w) - DimDelta(w,0)) - leftx(w))
+End
+
+//Returns the X range of a wave
+Function yRange(w)
+	Wave w
+	return (DimSize(w,1)-1) * DimDelta(w,1)
+End
+
+//Returns the last X point in a wave
+Function xEnd(w)
+	Wave w
+	return rightx(w) - DimDelta(w,0)
+End
+
+//Returns the last Y point in a wave
+Function yEnd(w)
+	Wave w
+	return (DimSize(w,1) - 1) * DimDelta(w,1) + DimOffset(w,1)
+End
+
+//handles resize events on the SI Display
+Function ImageResizeHook(s)
+	STRUCT WMWinHookStruct &s
+	DFREF NTSI = $SI
+	
+	//paths to the currently displayed images		
+	SVAR SIDisplay_ImagePaths = NTSI:SIDisplay_ImagePaths
+	NVAR numImages = NTSI:numImages
+	NVAR lockAspect = NTSI:lockAspect
+	
+	Variable hookResult = 0
+	switch(s.eventCode)
+		case 0: //Activate
+			break
+		case 1: //Deactivate
+			break
+		case 6: //Resize
+			Variable r = ScreenResolution / 72
+			
+			If(lockAspect)
+				//current sizing info for the window
+				GetWindow/Z SIDisplay wsize
+				
+				//get the aspect ratio of the image. Only can be done with single image for now
+				Wave theImage = $StringFromList(0,SIDisplay_ImagePaths,";")
+				Variable aspect = abs(yRange(theImage) / xRange(theImage))
+				
+				Variable numCols = ceil(numImages / 3)
+				If(numCols > 1)
+					Variable numRows = 3
+				Else
+					numRows = numImages
+				EndIf
+				
+				//Use the x size as the base size for controlling the aspect of the image.
+				//Image paneling starts 50 pixels from the top of the window.
+				Variable newHeight = round((V_right - V_left) * aspect * numRows) + 50
+				MoveWindow/W=SIDisplay V_left,V_top,V_right,V_top + newHeight
+			EndIf
+			break
+	endswitch
+	
+	return hookResult
+End
 
 //handles resize events on the Image Browser
 Function resizeHook(s)
 	STRUCT WMWinHookStruct &s
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = $SI
 	Wave resizeListBoxPositions = NTSI:resizeListBoxPositions
-	
-	DFREF NTSI = root:Packages:NT:ScanImage
-	
+		
 	//Are we currently resizing a column?
 	NVAR columnDrag = NTSI:columnDrag
 	
@@ -1142,7 +1323,7 @@ Function killWindowHook(s)
 		case 1: //Deactivate
 			break
 		case 2: //killing window
-			DFREF NTSI = root:Packages:NT:ScanImage
+			DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 			NVAR numImages = NTSI:numImages
 			NVAR isMaxProj = NTSI:isMaxProj
 	 		Variable i
@@ -1168,7 +1349,7 @@ End
 
 Function ImageBrowserMouseHook(s)
 	STRUCT WMWinHookStruct &s
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	
 	//Are we currently resizing a column?
 	NVAR columnDrag = NTSI:columnDrag
@@ -1337,8 +1518,8 @@ End
 //Window hook function for handling mouse scrolls for zooming, and drag and drop image movements
 Function zoomScrollHook(s)
 	STRUCT WMWinHookStruct &s
-	DFREF NTSI = root:Packages:NT:ScanImage
-	DFREF NTSR = root:Packages:NT:ScanImage:ROIs
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
+	DFREF NTSR = root:Packages:NeuroToolsPlus:ScanImage:ROIs
 	NVAR clickROIStatus = NTSI:clickROIStatus
 	NVAR scaleCumulative = NTSI:scaleCumulative
 	NVAR ROI_Engaged = NTSI:ROI_Engaged
@@ -1424,8 +1605,9 @@ Function zoomScrollHook(s)
 		 		 			 	
 			//Skip dynamic ROI if we're dragging the frame around
 			If(!mouseDrag)
+				String target = "SIDisplay#image" + num2str(sw) + "#graph" + num2str(sw)
+				
 				If(drawROI_Engaged)
-					String target = "SIDisplay#image" + num2str(sw) + "#graph" + num2str(sw)
 					//Horizontal index of image
 					Variable hPixel = AxisValFromPixel(target,"top",s.mouseLoc.h)
 					
@@ -1468,8 +1650,6 @@ Function zoomScrollHook(s)
 					rows = DimSize(theImage,0)
 					cols = DimSize(theImage,1)
 					
-					
-					target = "SIDisplay#image" + num2str(sw) + "#graph" + num2str(sw)
 					//Horizontal index of image
 					hPixel = AxisValFromPixel(target,"top",s.mouseLoc.h)
 					hPixel = ScaleToIndex(theImage,hPixel,0)
@@ -1547,6 +1727,13 @@ Function zoomScrollHook(s)
 
 					
 				EndIf
+				
+			
+				If(strlen(target))					
+					//Draw ROI square
+					DrawROISquare(target,AxisValFromPixel(target,"top",s.mouseLoc.h),AxisValFromPixel(target,"left",s.mouseLoc.v))
+				EndIf
+				
 				return 1
 			Else
 				//Drag the image around
@@ -1726,7 +1913,7 @@ Function whichSubWindow()
 	Variable mouseX,mouseY
 	mouseX = V_left;mouseY = V_top
 	
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	NVAR numImages = NTSI:numImages
 
 	Variable i
@@ -1742,12 +1929,44 @@ Function whichSubWindow()
 	return -1	
 End
 
+//Animates a drawn square the size of the ROI onto the image when mousing over it.
+Function DrawROISquare(target,hPixel,vPixel)
+	String target //target window
+	Variable hPixel,vPixel
+	
+	If(!strlen(target))
+		return 0
+	EndIf
+	
+	DoWindow/Z/W=SIDisplay#ROIPanel ROIPanel
+	If(!V_flag)
+		return 0
+	EndIf
+	
+	//Get the size of the square, this might slow things down
+	ControlInfo/W=SIDisplay#ROIPanel roiWidth
+	Variable width = V_Value
+	ControlInfo/W=SIDisplay#ROIPanel roiHeight
+	Variable height = V_Value
+	
+	
+	Variable left = hPixel - 0.5 * (width *1e-6)
+	Variable right = hPixel + 0.5 * (width *1e-6)
+	Variable bottom = vPixel - 0.5 * (height *1e-6)
+	Variable top = vPixel + 0.5 * (height *1e-6)
+	
+	SetDrawLayer/W=$target/K Overlay
+	SetDrawEnv/W=$target xcoord=top,ycoord=left,linethick=2,linefgc=(0,0xffff,0),fillfgc=(0,0,0,0)
+	DrawRect/W=$target left,top,right,bottom
+	
+End
+
 //Returns the X and Y ROI waves at the provided axis coordinates on the image graph 'graphRef'
 Function/WAVE ClickedROI(mx,my,graphRef)
 	Variable mx,my
 	String graphRef
 	
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	Make/O/WAVE/N=2 NTSI:clickedROIRef/Wave=clickedROIRef
 	
 	String info = TraceFromPixel(mx,my,"WINDOW:" + graphRef + ";DELTAX:4;DELTAY:4")
@@ -1765,7 +1984,7 @@ End
 //Starts and stops the frame play background task
 Function handlePlayFrames(ba) : ButtonControl
 	STRUCT WMButtonAction &ba
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	
 	switch( ba.eventCode )
 		case 2: // mouse up
@@ -1850,7 +2069,7 @@ End
 
 //Puts in the real images to the SIDisplay panel instead of max projections
 Function flipMaxProj()
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	SVAR SIDisplay_ImagePaths = NTSI:SIDisplay_ImagePaths
 	NVAR plane = NTSI:imagePlane
 	NVAR isMaxProj = NTSI:isMaxProj
@@ -1876,11 +2095,11 @@ End
 
 //Start the background task for playing image frames
 Function StartFramePlay()
-	NVAR isPlaying = root:Packages:NT:ScanImage:isPlaying
-	NVAR numTicks = root:Packages:NT:ScanImage:numTicks //refresh speed
+	NVAR isPlaying = root:Packages:NeuroToolsPlus:ScanImage:isPlaying
+	NVAR numTicks = root:Packages:NeuroToolsPlus:ScanImage:numTicks //refresh speed
 	
 	//Make sure to remove max projection images with actual images
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = $SI
 	NVAR isMaxProj = NTSI:isMaxProj
 	If(isMaxProj)
 		flipMaxProj()
@@ -1898,7 +2117,7 @@ End
 
 //Stop the background task for playing image frames
 Function StopFramePlay()
-	NVAR isPlaying = root:Packages:NT:ScanImage:isPlaying
+	NVAR isPlaying = root:Packages:NeuroToolsPlus:ScanImage:isPlaying
 	CtrlNamedBackground play, stop
 	isPlaying = 0
 	
@@ -1909,7 +2128,7 @@ End
 
 //Steps a single frame of the image stacks
 Function StepFrame()
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	NVAR plane = NTSI:imagePlane
 	NVAR numImages = NTSI:numImages
 	
@@ -1951,7 +2170,7 @@ End
 //Background task for playing the image frames
 Function playFramesBackroundTask(s)
 	STRUCT WMBackgroundStruct &s
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	
 	NVAR rollingAverage = NTSI:rollingAverage
 	NVAR rollingAverageCount = NTSI:rollingAverageCount
@@ -1965,7 +2184,7 @@ Function playFramesBackroundTask(s)
 	
 	plane += deltaPlane
 	
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	NVAR numImages = NTSI:numImages
 	
 	SVAR imagePaths = NTSI:SIDisplay_ImagePaths
@@ -2022,7 +2241,7 @@ Function RemoveFromSIDisplay(w)
 		return 0
 	EndIf
 	
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	NVAR numImages = NTSI:numImages
 	numImages = GetNumImages("SIDisplay","image")
 	
@@ -2038,7 +2257,7 @@ Function updateImageBrowserLists([skipROIList])
 	
 	skipROIList = (ParamIsDefault(skipROIList)) ? 0 : 1
 	
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = $SI
 	
 	SVAR software = NTSI:imagingSoftware
 	
@@ -2139,7 +2358,7 @@ Function siListBoxProc(lba) : ListBoxControl
 	WAVE/Z selWave = lba.selWave
 	Variable errorCode = 0
 	
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	
 	//list and selection waves for the ScanImage list boxes
 	Wave/T ScanFolderListWave = NTSI:ScanFolderListWave
@@ -2176,102 +2395,102 @@ Function siListBoxProc(lba) : ListBoxControl
 		case -1: // control being killed
 			break
 		case 1: // mouse down
-				String optionStr = ""
-				
-				strswitch(lba.ctrlName)
-					case "scanFolders":	
-						optionStr = "GoTo"
-					case "scanGroups":
-					case "scanFields":
-						
-						If(!strlen(optionStr))
-							optionStr = "GoTo;Stimulus Data;"
-						EndIf
-						
-						If(lba.eventMod == 16 || lba.eventMod == 17)
-							//Goto ROI contextual menu
-							PopupContextualMenu/C=(lba.mouseLoc.h, lba.mouseLoc.v) optionStr
-							
-							If(V_flag)
-								strswitch(S_selection)
-									case "GoTo":
-										strswitch(lba.ctrlName)	
-											case "scanFolders":
-												String folderPath = "root:Scans:" + ScanFolderListWave[row]
-												break
-											case "scanGroups":
-												String scanFolder = SelectedScanFolder()
-												folderPath = "root:Scans:" + scanFolder + ":" + ScanGroupListWave[row]
-												break
-											case "scanFields":
-												String scanfieldPath = ScanFieldListWave[row][0][1]
-												folderPath = ParseFilePath(1,scanfieldPath,":",1,0)
-												break
-										endswitch
-									
-										ModifyBrowser collapseAll//close all folders first
-										CreateBrowser //activates the data browser focus
-										ModifyBrowser setDataFolder = folderPath
-										
-										If(!cmpstr(lba.ctrlName,"scanFields"))
-											ModifyBrowser clearSelection,selectList=scanfieldPath //selects waves 
-										EndIf
-										
-										break
-									case "Stimulus Data":
-										strswitch(lba.ctrlName)	
-											case "scanGroups":
-												scanFolder = SelectedScanFolder()
-												String infoPath = "root:Scans:" + scanFolder + ":" + ScanGroupListWave[row] + ":scanInfo"
-												break
-											case "scanFields":
-												scanfieldPath = ScanFieldListWave[row][0][1]
-												infoPath = ParseFilePath(1,scanfieldPath,":",1,0) + "scanInfo"
-												break
-										endswitch
-										
-										//Get the scan info wave
-										Wave/T info = $infoPath
-										
-										If(!WaveExists(info))
-											return 0
-										EndIf
-										
-										Variable index = tableMatch("Stimulus Path",info)
-										If(index != -1)
-											String stimPath = info[index][1]
-										Else
-											return 0
-										EndIf
-										
-										If(!strlen(stimPath))
-											return 0
-										EndIf
-										
-										Variable fileID					
-										HDF5OpenFile/R fileID as stimPath
+			String optionStr = ""
 			
-										If(V_flag == -1) //cancelled
+			strswitch(lba.ctrlName)
+				case "scanFolders":	
+					optionStr = "GoTo"
+				case "scanGroups":
+				case "scanFields":
+					
+					If(!strlen(optionStr))
+						optionStr = "GoTo;Stimulus Data;"
+					EndIf
+					
+					If(lba.eventMod == 16 || lba.eventMod == 17)
+						//Goto ROI contextual menu
+						PopupContextualMenu/C=(lba.mouseLoc.h, lba.mouseLoc.v) optionStr
+						
+						If(V_flag)
+							strswitch(S_selection)
+								case "GoTo":
+									strswitch(lba.ctrlName)	
+										case "scanFolders":
+											String folderPath = "root:Scans:" + ScanFolderListWave[row]
 											break
-										EndIf
-										
-										//Retrieve stimulus data							
-										Wave/T stimData = GetStimulusData(fileID)
-										If(WaveExists(stimData))
-											DoWindow/W=StimData StimData
-											If(!V_flag)
-												Edit/K=1/N=StimData/W=(0,0,250,400)	 stimData as "Stimulus Data"
-											Else
-												DoWindow/F/W=StimData StimData
-											EndIf
-										EndIf
-										
-										HDF5CloseFile/A fileID
+										case "scanGroups":
+											String scanFolder = SelectedScanFolder()
+											folderPath = "root:Scans:" + scanFolder + ":" + ScanGroupListWave[row]
+											break
+										case "scanFields":
+											String scanfieldPath = ScanFieldListWave[row][0][1]
+											folderPath = ParseFilePath(1,scanfieldPath,":",1,0)
+											break
+									endswitch
+								
+									ModifyBrowser collapseAll//close all folders first
+									CreateBrowser //activates the data browser focus
+									ModifyBrowser setDataFolder = folderPath
+									
+									If(!cmpstr(lba.ctrlName,"scanFields"))
+										ModifyBrowser clearSelection,selectList=scanfieldPath //selects waves 
+									EndIf
+									
+									break
+								case "Stimulus Data":
+									strswitch(lba.ctrlName)	
+										case "scanGroups":
+											scanFolder = SelectedScanFolder()
+											String infoPath = "root:Scans:" + scanFolder + ":" + ScanGroupListWave[row] + ":scanInfo"
+											break
+										case "scanFields":
+											scanfieldPath = ScanFieldListWave[row][0][1]
+											infoPath = ParseFilePath(1,scanfieldPath,":",1,0) + "scanInfo"
+											break
+									endswitch
+									
+									//Get the scan info wave
+									Wave/T info = $infoPath
+									
+									If(!WaveExists(info))
+										return 0
+									EndIf
+									
+									Variable index = tableMatch("Stimulus Path",info)
+									If(index != -1)
+										String stimPath = info[index][1]
+									Else
+										return 0
+									EndIf
+									
+									If(!strlen(stimPath))
+										return 0
+									EndIf
+									
+									Variable fileID					
+									HDF5OpenFile/R fileID as stimPath
+		
+									If(V_flag == -1) //cancelled
 										break
-								endswitch
-																
-							EndIf
+									EndIf
+									
+									//Retrieve stimulus data							
+									Wave/T stimData = GetStimulusData(fileID)
+									If(WaveExists(stimData))
+										DoWindow/W=StimData StimData
+										If(!V_flag)
+											Edit/K=1/N=StimData/W=(0,0,250,400)	 stimData as "Stimulus Data"
+										Else
+											DoWindow/F/W=StimData StimData
+										EndIf
+									EndIf
+									
+									HDF5CloseFile/A fileID
+									break
+							endswitch
+															
 						EndIf
+					EndIf
 					break
 				case "roiGroups":
 					If(lba.eventMod == 16 || lba.eventMod == 17)
@@ -2281,6 +2500,7 @@ Function siListBoxProc(lba) : ListBoxControl
 							strswitch(S_Selection)
 								case "Rename":
 									ROIGroupSelWave[row] = 2 //set to editable
+									ListBox roiGroups win=SI,setEditCell={row,0,-1,0}
 									break
 								case "GoTo":	
 									//Browse to the selected wave
@@ -2290,7 +2510,7 @@ Function siListBoxProc(lba) : ListBoxControl
 									If(!cmpstr(software,"2PLSM"))
 										ModifyBrowser setDataFolder="root:twoP_ROIS:" + roiGroup
 									Else
-										ModifyBrowser setDataFolder="root:Packages:NT:ScanImage:ROIs:" + roiGroup
+										ModifyBrowser setDataFolder="root:Packages:NeuroToolsPlus:ScanImage:ROIs:" + roiGroup
 									EndIf
 									break
 								case "Get Center":
@@ -2307,7 +2527,7 @@ Function siListBoxProc(lba) : ListBoxControl
 										If(!cmpstr(software,"2PLSM"))
 											String ROIFolder ="root:twoP_ROIS:" + roiGroup + ":"
 										Else
-											ROIFolder = "root:Packages:NT:ScanImage:ROIs:" + roiGroup + ":"
+											ROIFolder = "root:Packages:NeuroToolsPlus:ScanImage:ROIs:" + roiGroup + ":"
 										EndIf
 										
 										If(DimSize(ROIListWave,0) > 0)										
@@ -2454,7 +2674,7 @@ Function siListBoxProc(lba) : ListBoxControl
 										If(!cmpstr(software,"2PLSM"))
 											ROIFolder ="root:twoP_ROIS:" + roiGroup + ":"
 										Else
-											ROIFolder = "root:Packages:NT:ScanImage:ROIs:" + roiGroup + ":"
+											ROIFolder = "root:Packages:NeuroToolsPlus:ScanImage:ROIs:" + roiGroup + ":"
 										EndIf
 										
 										//All the ROIs in the selected ROI group
@@ -2549,7 +2769,7 @@ Function siListBoxProc(lba) : ListBoxControl
 					If(!cmpstr(software,"2PLSM"))
 						RenameDataFolder root:twoP_ROIS:$oldROIGroupName,$ROIGroupListWave[row]
 					Else
-						RenameDataFolder root:Packages:NT:ScanImage:ROIs:$oldROIGroupName,$ROIGroupListWave[row]
+						RenameDataFolder root:Packages:NeuroToolsPlus:ScanImage:ROIs:$oldROIGroupName,$ROIGroupListWave[row]
 						
 						If(DataFolderExists("root:Analysis:'" + oldROIGroupName + "'"))
 							RenameDataFolder root:Analysis:$oldROIGroupName,$ROIGroupListWave[row]
@@ -2578,7 +2798,7 @@ Function siListBoxProc(lba) : ListBoxControl
 							DFREF NTR = root:twoP_ROIS
 						EndIf
 					Else
-						DFREF NTR = root:Packages:NT:ScanImage:ROIs:$roiGroup
+						DFREF NTR = root:Packages:NeuroToolsPlus:ScanImage:ROIs:$roiGroup
 					EndIf
 					
 					If(stringmatch(oldROIGroupName,"*soma"))
@@ -2643,8 +2863,8 @@ Function HandleSelectionRightClick(selection,software,ROIListWave,ROISelWave)
 				baseROIPath = "root:twoP_ROIS:"
 			EndIf
 		Else
-			DFREF NTR = root:Packages:NT:ScanImage:ROIs:$roiGroup
-			baseROIPath = "root:Packages:NT:ScanImage:ROIs:"
+			DFREF NTR = root:Packages:NeuroToolsPlus:ScanImage:ROIs:$roiGroup
+			baseROIPath = "root:Packages:NeuroToolsPlus:ScanImage:ROIs:"
 		EndIf
 		
 		//Handle the right click selection
@@ -2677,7 +2897,7 @@ Function HandleSelectionRightClick(selection,software,ROIListWave,ROISelWave)
 						ModifyBrowser setDataFolder="root:twoP_ROIS"
 					EndIf
 				Else
-					ModifyBrowser setDataFolder="root:Packages:NT:ScanImage:ROIs:" + roiGroup
+					ModifyBrowser setDataFolder="root:Packages:NeuroToolsPlus:ScanImage:ROIs:" + roiGroup
 				EndIf
 				
 				ModifyBrowser clearSelection,selectList=GetWavesDataFolder(roiX,2) //selects waves
@@ -2719,11 +2939,63 @@ Function HandleSelectionRightClick(selection,software,ROIListWave,ROISelWave)
 	
 End
 
+//Adds crosshairs for center of image and scaled center 
+Function AddCrossHairs()
+	
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
+	NVAR numImages = NTSI:numImages
+	
+	numImages = getNumImages("SIDisplay","image")
+	
+	Variable i
+	
+	Variable/G NTSI:crosshairsActive
+	NVAR crosshairsActive = NTSI:crosshairsActive
+	
+	For(i=0;i<numImages;i+=1)		
+		String subpanel = "image" + num2str(i)
+		String graph = "graph" + num2str(i)
+		
+		//Kill the crosshairs; do a few times to ensure deletion - kind of finicky
+		DrawAction/L=ProgFront/W=SIDisplay#$subpanel#$graph delete
+		
+		If(crosshairsActive == 0)
+			
+			//New draw group for crosshairs
+			SetDrawEnv/W=SIDisplay#$subpanel#$graph gstart,gname=$("crossHairGroup" + num2str(i))
+			SetDrawLayer/W=SIDisplay#$subpanel#$graph ProgFront
+			
+			//Draw vertical line through middle
+			SetDrawEnv/W=SIDisplay#$subpanel#$graph linefgc=(0xffff,0xffff,0xffff),linethick=0.5,xcoord=rel,ycoord=rel
+			DrawLine/W=SIDisplay#$subpanel#$graph 0.5,0,0.5,1
+			
+			//Draw horizontal line through middle
+			SetDrawEnv/W=SIDisplay#$subpanel#$graph linefgc=(0xffff,0xffff,0xffff),linethick=0.5,xcoord=rel,ycoord=rel
+			DrawLine/W=SIDisplay#$subpanel#$graph 0,0.5,1,0.5
+			
+			//Draw vertical line through X = 0
+			SetDrawEnv/W=SIDisplay#$subpanel#$graph linefgc=(0,0xffff,0),linethick=0.5,xcoord=top,ycoord=rel
+			DrawLine/W=SIDisplay#$subpanel#$graph 0,0,0,1
+			
+			//Draw horizontal line through Y = 0
+			SetDrawEnv/W=SIDisplay#$subpanel#$graph linefgc=(0,0xffff,0),linethick=0.5,xcoord=rel,ycoord=left
+			DrawLine/W=SIDisplay#$subpanel#$graph 0,0,1,0
+			
+			SetDrawEnv/W=SIDisplay#$subpanel#$graph gstop
+			
+			//Set back to user front
+			SetDrawLayer/W=SIDisplay#$subpanel#$graph UserFront
+		EndIf
+	EndFor
+	
+	crosshairsActive = (crosshairsActive) ? 0 : 1
+End
+
 //Handles list box selections in the ScanImage package
 Function siButtonProc(ba) : ButtonControl
 	STRUCT WMButtonAction &ba
 	
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	NVAR ROI_Width = NTSI:ROI_Width
 	NVAR ROI_Height = NTSI:ROI_Height
 	NVAR ROI_PctThreshold = NTSI:ROI_PctThreshold
@@ -2789,7 +3061,18 @@ Function siButtonProc(ba) : ButtonControl
 						
 						//Set the window hook to the target window back to normal
 						SetWindow $target hook(zoomScrollHook) = zoomScrollHook
-					
+						
+						//Remove they ROI hover square
+						NVAR numImages = NTSI:numImages
+						numImages = getNumImages("SIDisplay","image")
+							
+						For(i=0;i<numImages;i+=1)		
+							String subpanel = "image" + num2str(i)
+							String graph = "graph" + num2str(i)
+							
+							SetDrawLayer/W=SIDisplay#$subpanel#$graph/K Overlay
+						EndFor
+						
 						KillWindow/Z SIDisplay#ROIPanel
 						break
 					EndIf
@@ -2804,8 +3087,8 @@ Function siButtonProc(ba) : ButtonControl
 						SetWindow SIDisplay hook(zoomScrollHook) = $""
 					EndIf
 
-					SetVariable roiWidth,win=SIDisplay#ROIPanel,pos={2,35},size={60,20},bodywidth=30,title="Width",font=$LIGHT,limits={0.5,inf,1},value=ROI_Width,disable=1
-					SetVariable roiHeight,win=SIDisplay#ROIPanel,pos={2,55},size={60,20},bodywidth=30,title="Height",font=$LIGHT,limits={0.5,inf,1},value=ROI_Height,disable=1
+					SetVariable roiWidth,win=SIDisplay#ROIPanel,pos={100,35},size={93,20},bodywidth=50,title="W (µm)",align=1,font=$LIGHT,limits={0.5,inf,1},value=ROI_Width,disable=1
+					SetVariable roiHeight,win=SIDisplay#ROIPanel,pos={100,55},size={93,20},bodywidth=50,title="H (µm)",align=1,font=$LIGHT,limits={0.5,inf,1},value=ROI_Height,disable=1
 					SetVariable ROIname win=SIDisplay#ROIPanel,pos={3,35},size={93,20},font=$LIGHT,value=_STR:"",title="Name",disable=0
 					
 					updateImageBrowserLists()
@@ -2816,7 +3099,7 @@ Function siButtonProc(ba) : ButtonControl
 					SVAR GroupList = NTSI:GroupList
 					GroupList = "**NEW**;" + TextWaveToStringList(ROIGroupListWave,";")
 					
-					PopUpMenu roiGroupSelect,win=SIDisplay#ROIPanel,pos={54,55},bodywidth=72,title="Group",font=$LIGHT,value=#"root:Packages:NT:ScanImage:GroupList",proc=siPopProc
+					PopUpMenu roiGroupSelect,win=SIDisplay#ROIPanel,pos={54,55},bodywidth=72,title="Group",font=$LIGHT,value=#"root:Packages:NeuroToolsPlus:ScanImage:GroupList",proc=siPopProc
 					SetVariable pctFillThreshold,win=SIDisplay#ROIPanel,pos={47,35},size={60,20},bodywidth=30,title="%",value=ROI_PctThreshold,disable=1
 					Button nudgeROI win=SIDisplay#ROIPanel,pos={9,77},size={93,20},font=$LIGHT,valueColor=(0,0x9999,0),title="Nudge ROIs",disable=0,proc=siButtonProc
 					Button addROI win=SIDisplay#ROIPanel,pos={2,100},size={20,20},font=$LIGHT,valueColor=(0,0x9999,0),title="+",disable=0,proc=siButtonProc
@@ -2882,8 +3165,8 @@ Function siButtonProc(ba) : ButtonControl
 						
 						If(!cmpstr(target,"SIDisplay"))
 							For(i=0;i<numImages;i+=1)
-								String graph = "graph" + num2str(i)
-								String subPanel = "image" + num2str(i)
+								graph = "graph" + num2str(i)
+								subPanel = "image" + num2str(i)
 								
 								AppendToGraph/W=SIDisplay#$subPanel#$graph/L/T roiY vs roiX
 							EndFor
@@ -2974,7 +3257,18 @@ Function siButtonProc(ba) : ButtonControl
 								
 								//Enable the mouse movement hook for the SIDisplay window
 								SetWindow SIDisplay hook(zoomScrollHook) = zoomScrollHook	
-					
+								
+								//Remove the ROI square
+								//Remove they ROI hover square
+								NVAR numImages = NTSI:numImages
+								numImages = getNumImages("SIDisplay","image")
+									
+								For(i=0;i<numImages;i+=1)		
+									subpanel = "image" + num2str(i)
+								 	graph = "graph" + num2str(i)
+									
+									SetDrawLayer/W=SIDisplay#$subpanel#$graph/K Overlay
+								EndFor
 							Else
 								//Begin creating ROIs
 								ROI_Engaged = 1
@@ -3060,7 +3354,7 @@ Function siButtonProc(ba) : ButtonControl
 						return 0
 					EndIf
 					
-					If(WaveExists($("root:Packages:NT:ScanImage:ROIs:" + S_Value + "_soma")))
+					If(WaveExists($("root:Packages:NeuroToolsPlus:ScanImage:ROIs:" + S_Value + "_soma")))
 						DoAlert/T="Overwrite ROI?" 1,"ROI already exists. Overwrite?"
 						If(V_flag == 2) //clicked no
 							return 0
@@ -3096,7 +3390,7 @@ Function siButtonProc(ba) : ButtonControl
 					StopFramePlay()
 					
 					//Get max projection of every image in the SIDisplay
-					SVAR SIDisplay_ImagePaths = root:Packages:NT:ScanImage:SIDisplay_ImagePaths
+					SVAR SIDisplay_ImagePaths = root:Packages:NeuroToolsPlus:ScanImage:SIDisplay_ImagePaths
 					
 					GetMaxProj(SIDisplay_ImagePaths)
 					
@@ -3167,7 +3461,7 @@ Function siButtonProc(ba) : ButtonControl
 					break
 				case "scale94pct":
 					//auto-stretches the image to 94% margins
-					autoStretch(94)
+					autoStretch(98)
 					break
 					
 				case "browseMonitorFolder":
@@ -3192,26 +3486,73 @@ Function siButtonProc(ba) : ButtonControl
 				case "getNewScans":
 					SVAR scanMonitorPath = NTSI:scanMonitorPath
 					SVAR ScanLoadPath = NTSI:ScanLoadPath
+
 					
-					//If no monitor folder is set, browse
-					If(!strlen(scanMonitorPath))
-						//Set the default dialog path
-						PathInfo/S scanMonitorPath
+					// get File Paths
+					Variable refnum
+
+					Open/D/R/F="*.tif"/M="Select images to load"/MULT=1 refNum
+					
+					if (strlen(S_FileName) == 0) // user cancelled or some error occured
+					    return -1
+					endif
+					
+					fileList = S_FileName
+					
+					fileList = ReplaceString("\r",fileList,";")
+					
+					scanMonitorPath = ParseFilePath(1,StringFromList(0,fileList,";"),":",1,0)
+					
+					//See if there is a corresponding stimulus h5 file
+					For(i=0;i<ItemsInList(fileList,";");i+=1)
+					
+						stimFile = StringFromList(i,fileList,";")
+						stimFile = ParseFilePath(0,stimFile,":",1,0)
 						
-						//Pick a folder
-						NewPath/O monitorPath
+						//Load the new file
+						imageList = SI_LoadScans(scanMonitorPath,stimFile)
 						
-						PathInfo monitorPath
-						scanMonitorPath = S_path
-						ScanLoadPath = scanMonitorPath
-						
-						If(!strlen(S_path))
-							break
+						If(!strlen(imageList))
+							return 0
 						EndIf
+							
+						//Update the image browser lists
+						updateImageBrowserLists()
+							
+						//Update the selection in the Image Browser
+						Wave ScanGroupSelWave = NTSI:ScanGroupSelWave
+						ScanGroupSelWave = 0
+						ScanGroupSelWave[i] = 1
+						
+						//Update the image browser lists
+						updateImageBrowserLists()
+			
+					EndFor
+								
+					break
+				case "signalID":
+					//gets a variance map to ID signal hotspots in a 3D image
+					SVAR SIDisplay_ImagePaths = root:Packages:NeuroToolsPlus:ScanImage:SIDisplay_ImagePaths
+					GetHotSpots(	SIDisplay_ImagePaths)
+							
+					break
+				case "crossHairs":
+					AddCrossHairs()
+					break
+				case "lockAspectRatio":
+					NVAR lockAspect = NTSI:lockAspect
+					lockAspect = (lockAspect) ? 0 : 1
+					
+					If(lockAspect)
+						Button lockAspectRatio win=SIDisplay#control,fcolor=(0x0000,0xa000,0x0000)
+						GetWindow/Z SIDisplay wsize
+						MoveWindow/W=SIDisplay V_left,V_top,V_right+1,V_bottom
+						GetWindow/Z SIDisplay wsize
+						MoveWindow/W=SIDisplay V_left,V_top,V_right-1,V_bottom
+					Else
+						Button lockAspectRatio win=SIDisplay#control,fcolor=(0,0,0)
 					EndIf
 					
-					ScanMonitor()
-						
 					break
 			endswitch
 			break
@@ -3225,7 +3566,7 @@ End
 //Handles all check box clicks
 Function siCheckBoxProc(cba) : CheckBoxControl
 	STRUCT WMCheckboxAction &cba
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	
 	Wave ScanFieldSelWave = NTSI:ScanFieldSelWave
 	Wave ScanGroupSelWave = NTSI:ScanGroupSelWave
@@ -3306,7 +3647,7 @@ End
 Function ScanMonitor()
 //	STRUCT WMBackgroundStruct &s
 	
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	
 	SVAR ScanLoadPath = NTSI:ScanLoadPath
 	SVAR scanMonitorPath = NTSI:scanMonitorPath 
@@ -3383,7 +3724,7 @@ Function ScanMonitor()
 	EndIf
 	
 	//Get max projection of every image in the SIDisplay
-	SVAR SIDisplay_ImagePaths = root:Packages:NT:ScanImage:SIDisplay_ImagePaths			
+	SVAR SIDisplay_ImagePaths = root:Packages:NeuroToolsPlus:ScanImage:SIDisplay_ImagePaths			
 	GetMaxProj(SIDisplay_ImagePaths)
 					
 	//auto stretch
@@ -3424,7 +3765,7 @@ End
 //Handles the variable inputs on the SI display panel
 Function siVarProc(sva) : SetVariableControl
 	STRUCT WMSetVariableAction &sva
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	
 	switch( sva.eventCode )
 		case 1: // mouse up
@@ -3575,7 +3916,7 @@ End
 
 Function siSliderProc(sa) : SliderControl
 	STRUCT WMSliderAction &sa
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	
 	switch( sa.eventCode )
 		case -3: // Control received keyboard focus
@@ -3649,7 +3990,7 @@ End
 //Switches control display on the ROI Creation Panel according to ROI type
 Function SwitchROIControls(roiType)
 	String roiType
-	
+		
 	strswitch(roiType)
 		case "Marquee":
 			SetVariable roiWidth,win=SIDisplay#ROIPanel,disable=1
@@ -3702,7 +4043,7 @@ Function SwitchROIControls(roiType)
 End
 
 Function refreshROIGroupList()
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	
 	//Refresh the ROI group list
 	Wave/T ROIGroupListWave = NTSI:ROIGroupListWave
@@ -3716,7 +4057,7 @@ End
 Function StartDynamicROI(theImage)
 	Wave theImage
 	
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	NVAR scaleCumulative = NTSI:scaleCumulative
 	
 	//Make a new display window
@@ -3737,7 +4078,7 @@ Function StartDynamicROI(theImage)
 	Variable delta = DimDelta(theImage,2)
 	Variable offset = DimOffset(theImage,2)
 	
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	Make/O/N=(frames) NTSI:dynamicROI/Wave=dROI
 	
 	SetScale/P x,offset,delta,dROI
@@ -3767,11 +4108,15 @@ End
 
 //Returns the currently selected scan folder
 Function/S SelectedScanFolder()
-	Wave/T listWave = root:Packages:NT:ScanImage:ScanFolderListWave
+	Wave/T listWave = root:Packages:NeuroToolsPlus:ScanImage:ScanFolderListWave
 	ControlInfo/W=SI scanFolders
 	
 	If(DimSize(listWave,0) == 0)
 		return ""
+	EndIf
+	
+	If(V_Value > DimSize(listWave,0) - 1)
+		V_Value = 0
 	EndIf
 	
 	return listWave[V_Value][0][0]
@@ -3779,8 +4124,8 @@ End
 
 //Returns the currently selected scan groups
 Function/S SelectedScanGroups()
-	Wave/T listWave = root:Packages:NT:ScanImage:ScanGroupListWave
-	Wave selWave = root:Packages:NT:ScanImage:ScanGroupSelWave
+	Wave/T listWave = root:Packages:NeuroToolsPlus:ScanImage:ScanGroupListWave
+	Wave selWave = root:Packages:NeuroToolsPlus:ScanImage:ScanGroupSelWave
 	
 	Variable i
 	String groups = ""
@@ -3804,8 +4149,8 @@ Function/S SelectedScanFields([fullpath])
 		fullpath = 1
 	EndIf
 	
-	Wave/T listWave = root:Packages:NT:ScanImage:ScanFieldListWave
-	Wave selWave = root:Packages:NT:ScanImage:ScanFieldSelWave
+	Wave/T listWave = root:Packages:NeuroToolsPlus:ScanImage:ScanFieldListWave
+	Wave selWave = root:Packages:NeuroToolsPlus:ScanImage:ScanFieldSelWave
 	
 	Variable i
 	String fields = ""
@@ -3827,7 +4172,7 @@ End
 Function/S matchScanFields(matchStr)
 	String matchStr
 	
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	
 	If(!strlen(matchStr))
 		matchStr = "*"
@@ -3871,8 +4216,8 @@ End
 //returns names of the selected ROI Group in the Image Browser
 Function/S SelectedROIGroup()
 	String groupList = ""
-	Wave selWave = root:Packages:NT:ScanImage:ROIGroupSelWave
-	Wave/T listWave = root:Packages:NT:ScanImage:ROIGroupListWave
+	Wave selWave = root:Packages:NeuroToolsPlus:ScanImage:ROIGroupSelWave
+	Wave/T listWave = root:Packages:NeuroToolsPlus:ScanImage:ROIGroupListWave
 	
 	Variable i
 	For(i=0;i<DimSize(selWave,0);i+=1)
@@ -3891,8 +4236,8 @@ Function/S SelectedROIs([groups])
 	groups = (ParamIsDefault(groups)) ? 0 : 1
 	
 	String roiList = ""
-	Wave selWave = root:Packages:NT:ScanImage:ROISelWave
-	Wave/T listWave = root:Packages:NT:ScanImage:ROIListWave
+	Wave selWave = root:Packages:NeuroToolsPlus:ScanImage:ROISelWave
+	Wave/T listWave = root:Packages:NeuroToolsPlus:ScanImage:ROIListWave
 	
 	Variable i
 	For(i=0;i<DimSize(selWave,0);i+=1)
@@ -3921,15 +4266,15 @@ Function/WAVE CreateROI(left,top,right,bottom,[group,baseName,autoName])
 		group = "**NEW**"
 	EndIf
 	
-	If(!DataFolderExists("root:Packages:NT:ScanImage:ROIs"))
-		NewDataFolder root:Packages:NT:ScanImage:ROIs
+	If(!DataFolderExists("root:Packages:NeuroToolsPlus:ScanImage:ROIs"))
+		NewDataFolder root:Packages:NeuroToolsPlus:ScanImage:ROIs
 	EndIf
 	
 	String software = whichImagingSoftware()
 	
 	strswitch(software)
 		case "ScanImage":
-			String roiFolder = "root:Packages:NT:ScanImage:ROIs:"
+			String roiFolder = "root:Packages:NeuroToolsPlus:ScanImage:ROIs:"
 			break
 		case "2PLSM":
 			roiFolder = "root:twoP_ROIS:"
@@ -4021,7 +4366,7 @@ Function/WAVE CreateROI(left,top,right,bottom,[group,baseName,autoName])
 	//Set the ROI Group Selector to the current group, in case ***NEW** group was created.
 	//This will allow you to click-create ROIs in a NEW group without having to choose the group that
 	//was just created. 
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	
 	updateImageBrowserLists()
 	refreshROIGroupList()
@@ -4043,11 +4388,11 @@ Function FindSomas(theImage,roiName)
 	Wave theImage
 	String roiName
 	
-	If(!DataFolderExists("root:Packages:NT:ScanImage:ROIs"))
-		NewDataFolder root:Packages:NT:ScanImage:ROIs
+	If(!DataFolderExists("root:Packages:NeuroToolsPlus:ScanImage:ROIs"))
+		NewDataFolder root:Packages:NeuroToolsPlus:ScanImage:ROIs
 	EndIf
 	
-	DFREF NTSR = root:Packages:NT:ScanImage:ROIs
+	DFREF NTSR = root:Packages:NeuroToolsPlus:ScanImage:ROIs
 	
 	DFREF saveDF = GetDataFolderDFR()
 	
@@ -4417,7 +4762,7 @@ Function appendROIsToImage(groupList,roiList)
 	
 	//If groupList or roiList are empty strings, just removes all ROIs
 	
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	NVAR numImages = NTSI:numImages
 	
 	String software = whichImagingSoftware()
@@ -4476,7 +4821,7 @@ Function appendROIsToImage(groupList,roiList)
 							Wave roiMask = $("root:twoP_ROIS:" + roiName + "_flatNum") //append the flattened ROI mask wave
 						EndIf
 					Else
-						Wave roiMask = $("root:Packages:NT:ScanImage:ROIs:" + roiGroup + ":" + roiName + "_flatNum") //append the flattened ROI mask wave
+						Wave roiMask = $("root:Packages:NeuroToolsPlus:ScanImage:ROIs:" + roiGroup + ":" + roiName + "_flatNum") //append the flattened ROI mask wave
 					EndIf
 									
 					If(!WaveExists(roiMask))
@@ -4500,8 +4845,8 @@ Function appendROIsToImage(groupList,roiList)
 							Wave roiY = $("root:twoP_ROIS:" + roiName + "_y")
 						EndIf
 					Else
-						Wave roiX = $("root:Packages:NT:ScanImage:ROIs:" + roiGroup + ":" + roiName + "_x")
-						Wave roiY = $("root:Packages:NT:ScanImage:ROIs:" + roiGroup + ":" + roiName + "_y")
+						Wave roiX = $("root:Packages:NeuroToolsPlus:ScanImage:ROIs:" + roiGroup + ":" + roiName + "_x")
+						Wave roiY = $("root:Packages:NeuroToolsPlus:ScanImage:ROIs:" + roiGroup + ":" + roiName + "_y")
 					EndIf
 												
 					If(!WaveExists(roiX) || !WaveExists(roiY))
@@ -4544,7 +4889,7 @@ Function appendROIsToImage(groupList,roiList)
 				DFREF NTSR = root:twoP_ROIS
 			EndIf
 		Else
-			DFREF NTSR = root:Packages:NT:ScanImage:ROIs:$roiGroup
+			DFREF NTSR = root:Packages:NeuroToolsPlus:ScanImage:ROIs:$roiGroup
 		EndIf
 		
 		If(stringmatch(roiName,"*soma"))
@@ -4572,6 +4917,9 @@ Function appendROIsToImage(groupList,roiList)
 				case "/T/R":
 					AppendImage/W=$graphName/T=$hAxisName/R=$vAxisName roiWave
 					break
+				default:
+					AppendImage/W=$graphName roiWave
+					break
 			endswitch
 			
 			Else
@@ -4588,6 +4936,9 @@ Function appendROIsToImage(groupList,roiList)
 					case "/T/R":
 						AppendToGraph/W=$graphName/T=$hAxisName/R=$vAxisName yROI vs xROI
 						break
+					default:
+						AppendToGraph/W=$graphName yROI vs xROI
+						break
 				endswitch	
 		EndIf
 	EndFor
@@ -4595,7 +4946,7 @@ End
 
 
 //Get ROI ------------------------------------
-Function/WAVE NT_GetROI(ds)
+//Function/WAVE NT_GetROI1(ds)
 	STRUCT ds &ds
 	
 	STRUCT IMAGING img
@@ -4803,8 +5154,543 @@ Function/WAVE NT_GetROI(ds)
 	return outputWaveRefs
 End
 
+
+//Function NT_ROISegmentation(DS_Images)
+	String DS_Images
+	
+	STRUCT ds ds
+	GetStruct(ds)
+	
+	ds.wsi = 0
+	Do
+		Wave theWave = ds.waves[ds.wsi]
+		Redimension/B/U theWave //make into 8 bit unsigned
+		
+		MatrixOP/FREE stack = sumBeams(theWave)
+		MatrixOP/FREE var = varBeams(theWave)
+		
+		Duplicate/FREE theWave,image
+		
+		ImageFilter/B=0 median3d image
+		
+		ImageStats/BEAM image
+		Wave maxProjection = W_ISBeamMax
+		
+		ds.wsi += 1
+	While(ds.wsi < ds.numWaves[0])
+	
+End
+
+//Function NT_FilterROIs(DS_SNR,Threshold)
+//	String DS_SNR
+//	Variable Threshold
+//	
+//	String Threshold_Assign = "root:Packages:NeuroToolsPlus:ControlWaves:threshold"
+//	
+//	//Get the data set information
+//	STRUCT ds ds
+//	GetStruct(ds)
+//	
+//	ds.wsi = 0
+//	
+//	SetDataFolder GetWavesDataFolder(ds.waves[0],1)
+//	
+//	
+//	//Loop through each ROI wave
+//	Do
+//		Wave SNR = ds.waves[ds.wsi]
+//		Duplicate/O SNR,$(NameOfWave(ds.waves[ds.wsi]) + "_SNRfilter")
+//		
+//		Wave filter = $(NameOfWave(ds.waves[ds.wsi]) + "_SNRfilter")
+//		
+//		filter = (SNR < Threshold) ? 0 : 1
+//		
+//		ds.wsi += 1
+//	While(ds.wsi < ds.numWaves[0])
+//
+//End
+
+
+
+Function NT_FilterROIs(DS_ROIs,menu_ROIGroup,BaselineStart,BaselineEnd,SNR_Threshold)
+	//TITLE=Filter ROIs
+	//SUBMENU=Imaging
+	String DS_ROIs //Ca signals; 
+	String menu_ROIGroup //ROI group associated with those signals
+	Variable BaselineStart,BaselineEnd //Start and end times for the baseline variance measurement
+	Variable SNR_Threshold //Signal to noise threshold for determining ROI rejection
+	
+	DFREF SIR = root:Packages:NT:ScanImage:ROIs
+	
+	If(SNR_Threshold < 0)
+		Abort "SNR_Threshold must be > 0"
+	EndIf
+	
+	//Defines the list of ROI Groups found in the drop down menu
+	String menu_ROIGroup_List = TextWaveToStringList(root:Packages:NeuroToolsPlus:ScanImage:ROIGroupListWave,";") 
+	
+	//Get the data set information
+	STRUCT ds ds
+	GetStruct(ds)
+
+	//Get the ROI group contents
+	Wave/T roiList = SI_GetROIs(menu_ROIGroup)	
+	
+	If(DimSize(roiList,0) != DimSize(ds.waves,0))
+		Abort "There must be the same number of ROIs in the group as there are traces."
+	EndIf
+	
+	If(DataFolderExists("root:Analysis:" + menu_ROIGroup))
+		SetDataFolder $("root:Analysis:" + menu_ROIGroup)
+	Else
+		SetDataFolder GetWavesDataFolder(ds.waves[0],1)
+	EndIf
+	
+	Make/O/N=(numpnts(ds.waves)) $(menu_ROIGroup + "_SNR")/Wave=SNR
+	Make/O/N=(numpnts(ds.waves)) $(menu_ROIGroup + "_ROIFilter")/Wave=filter
+	
+	DoWindow/F SIDisplay
+	Variable imageOpen = V_flag
+	
+	ds.wsi = 0
+	
+	//Loop through each ROI wave
+	Do
+		Wave ROI = ds.waves[ds.wsi]
+		
+		//Baseline variance
+		Variable baseVariance = Variance(ROI,BaselineStart,BaselineEnd)
+		Variable baseSTDEV = sqrt(baseVariance)
+		
+		Variable pkStart = BaselineEnd
+		Variable pkEnd = pnt2x(ROI,numpnts(ROI) - 1) 
+		
+		//Peak value
+		Variable pkValue = WaveMax(ROI,pkStart,pkEnd)
+		
+		//Standard deviations above the noise
+		SNR[ds.wsi] = pkValue / baseSTDEV
+		
+		ds.wsi += 1
+	While(ds.wsi < ds.numWaves[0])
+	
+	
+	//Get number of ROIs
+	Variable i,j,numROIs = DimSize(roiList,0)
+	
+	//Open a side display that shows the accepted and rejected ROIs
+	GetWindow/Z AR wsize
+	If(!V_flag)
+		Variable left = V_left
+		Variable top = V_top
+		Variable bottom = V_bottom
+		Variable right = V_right
+		KillWindow/Z AR
+	Else
+		left = 0
+		top = 0
+		bottom = 800
+		right = 200
+	EndIf
+	
+	Display/W=(left,top,right,bottom)/K=1/N=AR/L=left_0/B=bottom_0 as "ROI Accept/Reject"
+	
+	Variable numAccept = 0
+	Variable numReject = 0
+	
+	filter = (SNR > SNR_Threshold) ? 1 : 0
+	
+	//Display the ROIs
+	For(i=0;i<numROIs;i+=1)		
+		Wave theROI = ds.waves[i]
+		
+		If(SNR[i] < SNR_Threshold)	
+			//rejected ROI
+			numReject += 1
+			
+			String leftAxis = "left_" + num2str(numReject - 1)
+			
+			AppendToGraph/W=AR/L=$leftAxis/B=bottom_1 theROI
+			ModifyGraph/W=AR rgb($NameOfWave(theROI)) = (65535,0,0)		
+		Else
+			//accepted ROI
+			numAccept += 1
+			leftAxis = "left_" + num2str(numAccept - 1)
+			
+			AppendToGraph/W=AR/L=$leftAxis/B=bottom_0 theROI	
+			ModifyGraph/W=AR rgb($NameOfWave(theROI)) = (0,0,0)	 			
+		EndIf
+	EndFor
+	
+	//Set all the axes
+	If(numReject > 0)
+		ModifyGraph/W=AR axisEnab(bottom_0)={0,0.5},axisEnab(bottom_1)={0.5,1},freePos(bottom_0)=0,freePos(bottom_1)=0
+	Else
+		ModifyGraph/W=AR freePos(bottom_0)=0
+	EndIf
+	
+	Variable totalSize = max(numAccept,numReject)
+	Variable axisFraction = 0
+	Variable delta = 1 / totalSize
+	i = 0
+	For(i=0;i<totalSize;i+=1)
+		leftAxis = "left_" + num2str(i)
+		GetAxis/Q/W=AR $leftAxis
+		
+		axisFraction = i * delta
+		axisFraction = (axisFraction + delta > 1) ? 1 : axisFraction
+		
+		ModifyGraph/W=AR axisEnab($leftAxis)={axisFraction,axisFraction + delta},freePos($leftAxis)=0
+	EndFor
+	
+	//Check if the ROI is currently being displayed by the image browser
+	If(imageOpen)
+		
+		//Get number of images displayed in the SIDisplay
+		Variable numImages = getNumImages("SIDisplay","image")
+		
+		//Get the ROI group contents
+		Wave/T roiList = SI_GetROIs(menu_ROIGroup)		
+		
+		//Loop through each ROI, check if it is displayed in the SIDisplay, and change its color based on the SNR filter threshold
+		For(j=0;j<numImages;j+=1)
+			String graphName = "SIDisplay#image" + num2str(j) +  "#graph" + num2str(j)
+			
+			String RoisOnImage = TraceNameList(graphName,";",1)
+			
+			For(i=0;i<numROIs;i+=1)
+				//If the ROI is displayed on the image
+				If(WhichListItem(roiList[i] + "_y",RoisOnImage,";") != -1)
+				
+					//check the SNR of that ROI, and change color accordingly
+					Wave theROI = TraceNameToWaveRef(graphName,StringFromList(i,RoisOnImage,";"))//StringFromList(i,ROIsOnImage,";")
+					
+					If(SNR[i] < SNR_Threshold)	
+						ModifyGraph/W=$graphName rgb($NameOfWave(theROI))=(0,65535,65535)
+					Else
+						ModifyGraph/W=$graphName rgb($NameOfWave(theROI))=(65535,0,0)					
+					EndIf
+				EndIf
+				
+			EndFor
+		EndFor		
+		
+	EndIf
+End
+
+
+Function DisplayLastROIsProc(ba) : ButtonControl
+	STRUCT WMButtonAction &ba
+	
+	DFREF NTSI = $SI
+	Wave/WAVE/Z roiRefs = NTSI:roiRefs
+	
+	switch( ba.eventCode )
+		case 2: // mouse up
+			// click code here
+			If(!WaveExists(roiRefs))
+				return 0
+			EndIf
+			 
+			If(DimSize(roiRefs,0) == 0)
+				return 0
+			EndIf
+			
+			String waves = WaveRefWaveToList(roiRefs,0)
+			NT_Display(waves,"Vertical")
+			
+			break	
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+	
+End
+
+//Get ROI ------------------------------------
+Function/WAVE NT_GetROI(menu_Measure,menu_Channel,BaselineStart,BaselineEnd,menu_FilterType,Filter,bt_Display_Last)
+	String menu_Measure,menu_Channel
+	Variable BaselineStart,BaselineEnd
+	String menu_FilterType
+	Variable Filter
+	String bt_Display_Last
+	
+	String menu_Measure_List = "∆F/F;SDEV;ABS;"
+	String menu_Channel_List = "1;2;1/2;2/1;"
+	String menu_FilterType_List = "None;S-G 2nd;S-G 4th;Boxcar;Gaussian;"
+	
+	String bt_Display_Last_Pos = "30;220;120;20"
+	String bt_Display_Last_Proc = "DisplayLastROIsProc"
+	
+	//SUBMENU=Imaging
+	//TITLE=Get ROI
+	
+//	Note={
+//	Extracts the time-varying fluorescence from selected scans at specified ROIs.
+//	
+//	Use the Image Browser to select scans and the ROIs before running (Ctrl-1)
+//	
+//	\f01Measure\f00 : Measurement type (∆F/F, Standard Dev. above baseline, or absolute F)
+//	\f01Channel\f00 : Channel of the scan, and defines ∆G/R etc. potentially
+//	\f01BaselineStart\f00 : Start of baseline region for ∆F calculation, in seconds
+//	\f01BaselineEnd\f00 : End of baseline region for ∆F calculation, in seconds
+//	\f01Filter\f00 : Savitsky-Golay filter, odd numbered greater than 5
+//	     -9 is a good starting point usually.
+//	}
+	
+	STRUCT ds ds
+	GetStruct(ds)
+	
+	STRUCT IMAGING img
+	
+	initParam(img,ds)
+	
+	DFREF NPC = $CW
+	DFREF NTSI = $SI
+	DFREF NTD = $DSF
+	
+	DFREF saveDF = GetDataFolderDFR()
+
+	//Make the ROI analysis folder if it doesn't already exist
+	If(!DataFolderExists("root:Analysis"))
+		NewDataFolder root:Analysis
+	EndIf
+	SetDataFolder root:Analysis	
+	
+	//Make the output wave reference wave for passing the result onto another function
+	Make/FREE/WAVE/N=0 outputWaveRefs
+	Make/O/WAVE/N=(img.scan.num * img.roi.num) NTSI:roiRefs/Wave=roiRefs
+	
+	Variable i,j,k,totalWaveCount = 0
+
+	//SCAN LOOP
+	For(i=0;i<img.scan.num;i+=1)
+		Variable ref = StartMSTimer
+		
+		strswitch(menu_Channel)
+			case "1": //channel 1 only
+				Wave theScan = img.scan.ch1[i] //signal fluorescence
+				Wave theBgnd = img.scan.ch1[i] //background fluorescence
+				break
+			case "2": //channel 2 only
+				Wave theScan = img.scan.ch2[i]
+				Wave theBgnd = img.scan.ch2[i]
+				break
+			case "1/2": // ch1 / ch2
+				Wave theScan = img.scan.ch1[i]
+				Wave theBgnd = img.scan.ch2[i]
+				break
+			case "2/1": // ch2 / ch1
+				Wave theScan = img.scan.ch2[i]
+				Wave theBgnd = img.scan.ch1[i] 
+				break
+		endswitch
+
+		//Get dendritic mask
+		Wave mask = GetDendriticmask(theBgnd)
+		Redimension/B/U mask
+		
+		//Get dark value
+		ImageStats/R=mask theBgnd
+		Variable darkVal = 0.9*V_avg
+		
+		//Cleanup
+		KillWaves/Z mask,root:Analysis:maxProj
+		
+		//ROI LOOP
+		For(j=0;j<img.roi.num;j+=1)
+			String theROI = img.rois[j][0][0]
+			String roiGroup = img.rois[j][0][1]
+			
+			//Make the ROI Group Analysis folder
+			If(!DataFolderExists("root:Analysis:" + roiGroup))
+				NewDataFolder $("root:Analysis:" + roiGroup)
+			EndIf
+			
+			//Make the ROI analysis subfolder
+			String ROIFolder = "root:Analysis:" + roiGroup + ":" + theROI
+			
+			If(!DataFolderExists(ROIFolder))
+				NewDataFolder $ROIFolder
+			EndIf
+			
+			//X and Y waves that define the ROI area
+			Wave roiX = img.roi.x[j]
+			Wave roiY  = img.roi.y[j]
+			
+			If(DimSize(roiX,1) > 0)
+				Variable isSoma = 1
+			Else
+				isSoma = 0
+			EndIf
+			
+			//Use somatic ROI map instead of the traditional boundary ROIs
+			If(isSoma)
+				SetDataFolder $ROIFolder
+//				NT_GetROI_Soma(roiX,theScan,theBgnd,img)
+				SetDataFolder saveDF
+				continue
+			EndIf
+			
+			//Seed values for filling out the ROI mask
+			Variable maskMax,maskMin,xSeed,ySeed
+			WaveStats/Q theBgnd
+			
+			maskMin = WaveMin(roiX)
+			maskMax = WaveMax(roiX)
+			
+			xSeed = maskMax + DimDelta(theBgnd,0)
+			If(xSeed > IndexToScale(theBgnd,DimSize(theBgnd,0)-1,0))
+				xSeed = IndexToScale(theBgnd,0,0)
+			EndIf
+			
+			maskMin = WaveMin(roiY)
+			maskMax = WaveMax(roiY)
+			
+			ySeed = maskMax + DimDelta(theBgnd,1)
+			If(ySeed > IndexToScale(theBgnd,DimSize(theBgnd,1)-1,1))
+				ySeed = IndexToScale(theBgnd,0,1)
+			EndIf
+			
+			//ROI mask wave	
+			SetDataFolder $ROIFolder			
+			ImageBoundaryToMask ywave=roiY,xwave=roiX,width=(DimSize(theBgnd,0)),height=(DimSize(theBgnd,1)),scalingwave=theBgnd,seedx=xSeed,seedy=ySeed			
+		
+			Wave ROIMask = $(ROIFolder + ":M_ROIMask")	
+			
+			//Did the ROI mask actually get created?
+			If(!WaveExists(ROIMask))
+				DoAlert 0, "Couldn't find the ROI mask wave for: " + NameOfWave(theScan)
+				continue
+			EndIf
+			
+			//Make the raw ROI waves for signal and background
+			Variable numFrames = DimSize(theScan,2)
+			Make/O/FREE/N=(numFrames) ROI_Signal,ROI_Bgnd
+			
+			//Set all the scales of the ROI waves
+			SetScale/P x,DimOffset(theScan,2),DimDelta(theScan,2),ROI_Signal,ROI_Bgnd
+			
+			//Average values over the ROI region
+			For(k=0;k<numFrames;k+=1)
+				ImageStats/M=1/P=(k)/R=ROImask theScan
+				ROI_Signal[k] = V_avg
+				
+				ImageStats/M=1/P=(k)/R=ROImask theBgnd
+				ROI_Bgnd[k] = V_avg
+			EndFor		
+			
+			//Temporal smoothing options
+			If(Filter)
+				strswitch(menu_FilterType)
+					case "None":
+						break
+					case "S-G 2nd":
+						If(Filter < 5)
+							print "2nd Order Savitsky-Golay filter requires odd values >= 5. Setting to 5."
+							Filter = 5
+						EndIf
+						Smooth/S=2 (Filter), ROI_Signal,ROI_Bgnd
+						break
+					case "S-G 4th":
+						If(Filter < 7)
+							print "4th Order Savitsky-Golay filter requires odd values >= 7. Setting to 7."
+							Filter = 7
+						EndIf
+						Smooth/S=4 (Filter), ROI_Signal,ROI_Bgnd
+						break
+					case "Boxcar":
+						Smooth/B (Filter), ROI_Signal,ROI_Bgnd
+						break
+					case "Gaussian":
+						Smooth (Filter), ROI_Signal,ROI_Bgnd
+						break
+				endswitch
+			EndIf
+					
+			//Use median for the baseline, so it doesn't get pulled up or down from noisy values
+			Variable	bsln = median(ROI_Bgnd,BaselineStart,BaselineEnd)
+			
+			//Absolute fluorescence or delta fluorescence?
+			strswitch(menu_Measure)
+				case "∆F/F":
+					//∆F/F
+					String outName = NameOfWave(theScan) + "_" + theROI + "_dF"
+					break
+				case "SDEV":
+					//Standard Deviation
+			 		outName = NameOfWave(theScan) + "_" + theROI + "_sd"
+					break
+				case "ABS":
+					//Abs
+					outName = NameOfWave(theScan) + "_" + theROI + "_abs"
+					break
+			endswitch
+		
+			//Make the dF or dG wave
+			Make/O/N=(numFrames) $outName
+			Wave dF = $outName
+			
+			//Set all the scales of the ROI waves
+			SetScale/P x,DimOffset(theScan,2),DimDelta(theScan,2),dF
+			
+			//Calculate the ∆F/F or Absolute fluoresence ratios
+			
+			darkVal = 0
+			
+			strswitch(menu_Measure)
+				case "∆F/F":
+					//∆F/F
+					dF = (ROI_Signal - bsln) / (bsln - darkVal)
+					break
+				case "SDEV":
+					//Standard Deviation
+			 		
+			 		//baseline subtracted and dark subtracted signal
+					dF = ROI_Signal - bsln - darkVal
+					
+					//get standard deviation of the baseline region
+					WaveStats/Q/R=(BaselineStart,BaselineEnd) dF 
+					
+					//standard deviations above the median baseline value
+					dF /= V_sdev
+					break
+				case "ABS":
+					//Abs
+					dF = ROI_Signal
+					break
+			endswitch
+			
+			//Set the wave note with the original scan name
+			Note dF,"Scan: " + GetWavesDataFolder(theScan,2)
+			Note dF,"TYPE: " + menu_Measure
+			Note dF,"FILTER TYPE: " + menu_FilterType
+			Note dF,"FILTER SIZE: " + num2str(Filter)
+			Note dF,"BASELINE START: " + num2str(BaselineStart)
+			Note dF,"BASELINE END: " + num2str(BaselineEnd)
+			
+			//These are all the output ROI waves
+			Redimension/N=(totalWaveCount + 1) outputWaveRefs
+			outputWaveRefs[totalWaveCount] = dF
+			roiRefs[totalWaveCount] = dF
+			
+			totalWaveCount += 1
+		EndFor
+
+		print "Get ROI (" +  roiGroup + "):",NameOfWave(theScan) + ",",StopMSTimer(ref) / (1e6),"s"
+	EndFor
+	
+	SetDataFolder saveDF
+		
+	//pass the output wave on
+	return outputWaveRefs
+End
+
 //Uses a 2 or 3D ROI map instead of traditional boundary ROIs
-Function NT_GetROI_Soma(roi,theScan,theBgnd,img)
+//Function NT_GetROI_Soma(roi,theScan,theBgnd,img)
 	Wave roi,theScan,theBgnd
 	STRUCT IMAGING &img
 	
@@ -4880,14 +5766,38 @@ End
 //dF Map --------------------------------
 //---------------------------------------
 //Generates a pixel map of the peak ∆F/F or variant thereof
-Function/WAVE NT_dFMap(ds)
-	STRUCT ds &ds
+Function/WAVE NT_dFMap(menu_Type,menu_Measure,menu_Channel,Baseline_Start,Baseline_End,Peak_Start,Peak_End,TimeFilter,PreFilter,PostFilter)
+	//SUBMENU=Imaging
+	//TITLE=∆F Map
+	String menu_Type,menu_Measure,menu_Channel
+	Variable Baseline_Start,Baseline_End,Peak_Start,Peak_End,TimeFilter,PreFilter,PostFilter
+	
+	String Peak_Start_Assign = "root:Packages:NeuroToolsPlus:ControlWaves:rangeLeft"
+	String Baseline_Start_Assign = "root:Packages:NeuroToolsPlus:ControlWaves:rangeLeft"
+	String Peak_End_Assign = "root:Packages:NeuroToolsPlus:ControlWaves:rangeRight"
+	String Baseline_End_Assign = "root:Packages:NeuroToolsPlus:ControlWaves:rangeRight"
+	
+	String menu_Type_List = "∆F/F;SDev;Abs;"
+	String menu_Measure_List = "Peak;Peak Location;Area;Area/Peak;Peak/Area;"
+	String menu_Channel_List = "1;2;1/2;2/1;"
+	
+//	Note={
+//	Generates a 2D image of the selected measurement from a scan.
+//	Use Image Browser to select the scans.
+//	
+//	\f01Filter\f00 : Temporal filter, Savitksy-Golay, odd numbers only
+//	\f01Pre-filter\f00 : Median spatial filter applied before taking measurement
+//	\f01Post-filter\f00 : Median spatial filter Íapplied to the measurement image
+//	}
+	
+	STRUCT ds ds
+	GetStruct(ds)
+	
 	STRUCT IMAGING img //Imaging package data structure
-	
-	
+		
 	DFREF NTF = root:Packages:NT
 	DFREF NTD = root:Packages:NT:DataSets
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	
 	//Initializes the structure that holds scan and ROI selection information
 	initParam(img,ds)
@@ -4904,40 +5814,40 @@ Function/WAVE NT_dFMap(ds)
 		Variable ref = StartMSTimer
 		
 		//Get the scan and background channels
-		switch(img.channel)
-			case 1: //channel 1 only
+		strswitch(menu_Channel)
+			case "1": //channel 1 only
 				Wave theScan = img.scan.ch1[i] //signal fluorescence
 				Wave theBgnd = img.scan.ch1[i] //background fluorescence
 				
-				switch(img.mode)
-					case 1:
+				strswitch(menu_Type)
+					case "∆F/F":
 						String suffix = "_dF"
 						String type = "∆F/F" //for the wave note at the end
 						break
-					case 2:
+					case "SDev":
 						suffix = "_sd"
 						type = "Std. Dev."
 						break
-					case 3:
+					case "Abs":
 						suffix = "_abs"
 						type = "Absolute"
 						break
 				endswitch
 
 				break
-			case 2: //channel 2 only
+			case "2": //channel 2 only
 				Wave theScan = img.scan.ch2[i]
 				Wave theBgnd = img.scan.ch2[i]
 				suffix = "_dG"
 				type = "∆F/F"
 				break
-			case 3: // ch1 / ch2
+			case "1/2": // ch1 / ch2
 				Wave theScan = img.scan.ch1[i]
 				Wave theBgnd = img.scan.ch2[i]
 				suffix = "_dGR"
 				type = "∆G/R"
 				break
-			case 4: // ch2 / ch1
+			case "2/1": // ch2 / ch1
 				Wave theScan = img.scan.ch2[i]
 				Wave theBgnd = img.scan.ch1[i] 
 				suffix = "_dRG"
@@ -4945,7 +5855,7 @@ Function/WAVE NT_dFMap(ds)
 				break
 		endswitch
 		
-		strswitch(img.measure)
+		strswitch(menu_Measure)
 			case "Peak":
 				String param = "_pk"
 				break
@@ -4961,15 +5871,7 @@ Function/WAVE NT_dFMap(ds)
 			case "Peak/Area":
 				param = "_pkArea"
 				break
-			default:
-				img.measure = "Peak"
-				param = "_pk"
 		endswitch
-		
-		
-		//Manually set pre and post spatial filters
-		img.preFilter = 3
-		img.postFilter = 3
 		
 		//Wave dimensions
 		rows = DimSize(theScan,0)
@@ -4978,10 +5880,10 @@ Function/WAVE NT_dFMap(ds)
 		
 		//Get the frame range for finding the peak dF
 		Variable startLayer,endLayer,startBgndLayer,endBgndLayer
-		startLayer = ScaleToIndex(theScan,img.pkSt,2)
-		endLayer = ScaleToIndex(theScan,img.pkEnd,2)
-		startBgndLayer = ScaleToIndex(theScan,img.bsSt,2)
-		endBgndLayer = ScaleToIndex(theScan,img.bsEnd,2)
+		startLayer = ScaleToIndex(theScan,Peak_Start,2)
+		endLayer = ScaleToIndex(theScan,Peak_End,2)
+		startBgndLayer = ScaleToIndex(theScan,Baseline_Start,2)
+		endBgndLayer = ScaleToIndex(theScan,Baseline_End,2)
 		
 		
 		//Make time-varying dF Map Wave
@@ -5017,11 +5919,11 @@ Function/WAVE NT_dFMap(ds)
 		//Spatial filter for each layer of the scan and bgnd channels.
 		For(k=0;k<frames;k+=1)
 			MatrixOP/O/FREE theLayer = layer(theScanTemp,k)
-			MatrixFilter/N=(img.preFilter) gauss theLayer
+			MatrixFilter/N=(PreFilter) gauss theLayer
 			Multithread theScanTemp[][][k] = theLayer[p][q][0]
 			
 			MatrixOP/O/FREE theLayer = layer(theBgndTemp,k)
-			MatrixFilter/N=(img.preFilter) gauss theLayer
+			MatrixFilter/N=(PreFilter) gauss theLayer
 			Multithread theBgndTemp[][][k] = theLayer[p][q][0]
 		EndFor
 		
@@ -5042,15 +5944,18 @@ Function/WAVE NT_dFMap(ds)
 		extractBsln = theBgndTemp[p][q][startBgndLayer+r]
 		MatrixOP/O/FREE bgndBaseline = sumBeams(extractBsln)
 		Multithread bgndBaseline /= (endBgndLayer - startBgndLayer)
-	
+		
 		Redimension/S bgndBaseline,scanBaseline
+		
+		//remove zero background data from the dendritic mask to prevent infinite dF/F values
+		mask = (bgndBaseline == 0) ? 0 : mask
 		
 		//photon counting is so sparse, set to zero 
 //		Multithread bgndBaseline = 0
 		
 		//Calculate the ∆F map
-		switch(img.mode)
-			case 1:
+		strswitch(menu_Type)
+			case "∆F/F":
 				//dF/F
 				
 				//Eliminates the possibility of zero values in the dataset for dendrites in the mask, which all get converted to NaN at the end.
@@ -5059,11 +5964,11 @@ Function/WAVE NT_dFMap(ds)
 				//Calculates the dF/F
 				MultiThread dF = (theScanTemp[p][q][r] - scanBaseline[p][q][0]) / (bgndBaseline[p][q][0])
 				break
-			case 2:
+			case "SDev":
 				//Std. Dev.
 //				 
 				break
-			case 3:
+			case "Abs":
 				//Abs (background subtracted still). This only operates on the scan data channel, not the background channel if there is green and red imaging.
 				MultiThread dF = theScanTemp[p][q][r] - scanBaseline[p][q][0]
 				break
@@ -5106,22 +6011,23 @@ Function/WAVE NT_dFMap(ds)
 				//Smooths the beam as an integer and single float.
 				//The integer version will result in zero if the photon events were sparse in time
 				//Convert the integer smoothing to a binary mask, and apply to the single float smooth version
-				Duplicate/FREE theBeam,theBeamW
-				Redimension/W theBeamW
+//				Duplicate/FREE theBeam,theBeamW
+//				Redimension/W theBeamW
 				
-				If(img.filter != 0)
-					Smooth/S=2/DIM=0 img.filter,theBeam
+				If(TimeFilter != 0)
+//					Smooth/S=2/DIM=0 TimeFilter,theBeam
+					Smooth/E=2/DIM=0 TimeFilter,theBeam //binomial (gaussian smoothing); avoids artifact negative values better than S-G filters
 				EndIf
 				
-//				Smooth/S=2/DIM=0 img.filter,theBeamW
+//				Smooth/S=2/DIM=0 TimeFilter,theBeamW
 //				theBeamW = (theBeamW) ? 1 : 0
 //				
 //				theBeam *= theBeamW
 	
 				Multithread dF[j][k][] = theBeam[r]
-				WaveStats/Q/R=(img.pkSt,img.pkEnd) theBeam
+				WaveStats/Q/R=(Peak_Start,Peak_End) theBeam
 				
-				strswitch(img.measure)
+				strswitch(menu_Measure)
 					case "Peak":
 						Multithread dFMeasure[j][k] = V_max
 						break
@@ -5132,16 +6038,16 @@ Function/WAVE NT_dFMap(ds)
 						Multithread dFMeasure[j][k] = V_avg
 						break
 					case "Median":
-						Multithread dFMeasure[j][k] = median(theBeam,img.pkSt,img.pkEnd)
+						Multithread dFMeasure[j][k] = median(theBeam,Peak_Start,Peak_End)
 						break
 					case "Area":
-						Multithread dFMeasure[j][k] = area(theBeam,img.pkSt,img.pkEnd)
+						Multithread dFMeasure[j][k] = area(theBeam,Peak_Start,Peak_End)
 						break
 					case "Area/Peak":
-						Multithread dFMeasure[j][k] = area(theBeam,img.pkSt,img.pkEnd) / V_max
+						Multithread dFMeasure[j][k] = area(theBeam,Peak_Start,Peak_End) / V_max
 						break
 					case "Peak/Area":
-						Multithread dFMeasure[j][k] = V_max / area(theBeam,img.pkSt,img.pkEnd)
+						Multithread dFMeasure[j][k] = V_max / area(theBeam,Peak_Start,Peak_End)
 						break
 				endswitch		
 			EndFor
@@ -5150,52 +6056,84 @@ Function/WAVE NT_dFMap(ds)
 		CopyScales/P theScan,dFMeasure
 		
 		//Masking and final filtering
-		MatrixFilter/N=(3)/R=mask median dF
+//		MatrixFilter/N=(PostFilter)/R=mask median dF
 		
-		MatrixFilter/N=(3)/R=mask median dFMeasure
+		MatrixFilter/N=(PostFilter)/R=mask median dFMeasure
 		
 		If(!skip)
 			Multithread dFMeasure *= mask[p][q]
 		EndIf
 		
 		Multithread dFMeasure = (mask) ? dFMeasure : nan
+//		Multithread dF = (mask[p][q][0]) ? dF : nan
 		
 		Variable m
 		For(m=0;m<1;m+=1)
 			If(m)
+				break
 				Wave notedWave = dF
 			Else
 				Wave notedWave = dFMeasure
 			EndIf
 			
-			Note/K notedWave,"TYPE:" + type
-			Note notedWave,"MEASURE:" + img.measure
-			Note notedWave,"BSL_START:" + num2str(img.bsSt)
-			Note notedWave,"BSL_END:" + num2str(img.bsEnd)
-			Note notedWave,"PK_START:" + num2str(img.pkSt)
-			Note notedWave,"PK_END:" + num2str(img.pkEnd)
-			Note notedWave,"SMOOTH:" + num2str(img.filter)
-			Note notedWave,"PRE-SPATIAL:" + num2str(img.preFilter)
-			Note notedWave,"POST-SPATIAL:" + num2str(img.postFilter)
+			Note/K notedWave,"TYPE:" + menu_Type
+			Note notedWave,"MEASURE:" + menu_Measure
+			Note notedWave,"BSL_START:" + num2str(Baseline_Start)
+			Note notedWave,"BSL_END:" + num2str(Baseline_End)
+			Note notedWave,"PK_START:" + num2str(Peak_Start)
+			Note notedWave,"PK_END:" + num2str(Peak_End)
+			Note notedWave,"SMOOTH:" + num2str(TimeFilter)
+			Note notedWave,"PRE-SPATIAL:" + num2str(PreFilter)
+			Note notedWave,"POST-SPATIAL:" + num2str(PostFilter)
 			Note notedWave,"MASK:" + GetWavesDataFolder(mask,2)
 		EndFor
 		
-		
-		updateProgress(ds)
-		
-		print "∆F Map (" + img.measure + "):",NameofWave(theScan) + " in",StopMSTimer(ref) / (1e6),"s"
+		print "∆F Map (" + menu_Measure + "):",NameofWave(theScan) + " in",StopMSTimer(ref) / (1e6),"s"
 	EndFor
 	
 End
 
 //Uses a series of 2D image waves (e.g. peak ∆F/F maps) to compute the vector sum...
 //...angle, DSI, and resultant maps.
-Function NT_VectorSumMap(ds,angles)
-	STRUCT ds &ds
-	String angles
+Function NT_VectorSumMap(DS_dFMaps,menu_Angles,AnglesInput,menu_FilterMap,cb_MaskWave)
+	//SUBMENU=Imaging
+	//TITLE=Vector Sum Map
 	
+	//	Note={
+//	Generates a 2D image of the vector sum of the images in each wave set.
+//	
+//	\f01dFMaps\f00 : The images to be included in the vector sum, each wave set is 
+//processed separately.
+//	\f01Angles\f00 : Angle associated with each image (e.g. direction of motion, orientation of 
+//edge). There must be the same number of angles and images in each wave set.
+//	\f01AnglesInput\f00 : User can manually input a comma-separated list of angles instead of 
+//using the menu.
+//	}
+
+	String DS_dFMaps,menu_Angles,AnglesInput,menu_FilterMap
+	Variable cb_MaskWave
+	
+	String menu_Angles_List = " ----- ;0,45,90,135,180,225,270,315;0,180,45,225,90,270,135,315;"
+	String menu_FilterMap_List = "None;3x3 Median;5x5 Median;7x7 Median;"
+	
+	STRUCT ds ds
+	GetStruct(ds)
+	
+	If(strlen(AnglesInput))
+		String angles = AnglesInput
+	ElseIf(!cmpstr(menu_Angles," ----- "))
+		angles = AnglesInput
+	Else
+		angles = menu_Angles
+	EndIf
+		
 	DFREF saveDF = GetDataFolderDFR()
 	
+	If(ds.numWaves[0] != ItemsInList(angles,","))
+		Abort "Each waveset must have the same number of images as the number of angles"
+	EndIf
+	
+	//Get the first wave in the wave set
 	Wave theWave = ds.waves[0]
 	
 	Variable rows,cols,theAngle
@@ -5243,11 +6181,9 @@ Function NT_VectorSumMap(ds,angles)
 		vSumX += theWave * cos(theAngle * pi/180)
 		vSumY += theWave * sin(theAngle * pi/180)
 		totalSignal += theWave
-		
-		updateProgress(ds)
-		
+				
 		ds.wsi += 1
-	While(ds.wsi < ds.numWaves)
+	While(ds.wsi < ds.numWaves[0])
 	
 	Multithread vAngle = atan2(vSumY,vSumX) * 180/pi
 	Multithread vAngle = (vAngle[p][q] < 0) ? vAngle[p][q] + 360 : vAngle[p][q]
@@ -5255,36 +6191,55 @@ Function NT_VectorSumMap(ds,angles)
 	//change zeros, so the mask can be applied
 	Multithread vAngle = (theWave == 0) ? nan : vAngle
 	
-	//Mask the output wave
-////	Wave mask = GetDendriticMask(vAngle)
-////	
-////	Multithread vAngle *= mask
-////	Multithread vAngle = (vAngle == 0) ? nan : vAngle
-//	
-//	//put the zeros back after applying mask
-//	Multithread vAngle = (vAngle == -1) ? 0 : vAngle
-	
-	//Make a histogram of the image values
-	Histogram/C/B={0,15,24} vAngle,vHist
-	
 	Make/N=(rows,cols)/FREE vRadius
 	Multithread vRadius = sqrt(vSumX^2 + vSumY^2)
 	Multithread vDSI = vRadius / totalSignal
 	Multithread vTotal = totalSignal
 	
-//	Duplicate/O vDSI,vDSI_noFilter
+	//Filter the output images
+	strswitch(menu_FilterMap)
+		case "3x3 Median":
+			Variable filterVal = 3
+			break
+		case "5x5 Median":
+			filterVal = 5
+			break
+		case "7x7 Median":
+			filterVal = 7
+			break
+		case "None":
+			filterVal = -1
+			break
+	endswitch
 	
-//	MatrixFilter/N=(3) median vAngle
-//	MatrixFilter/N=(3) median vDSI
-//	MatrixFilter/N=(5) median vTotal
+	If(filterVal != -1)
+		MatrixFilter/N=(filterVal) median vAngle
+		MatrixFilter/N=(filterVal) median vDSI
+		MatrixFilter/N=(filterVal) median vTotal
+	EndIf
+
+	//Mask the output wave
+	If(cb_MaskWave)		
+		Wave mask = GetDendriticMask(vAngle)
+		
+		Multithread vAngle *= mask
+		Multithread vAngle = (vAngle == 0) ? nan : vAngle
+		
+		//put the zeros back after applying mask
+		Multithread vAngle = (vAngle == -1) ? 0 : vAngle
+		
+		Multithread vDSI *= mask
+		Multithread vTotal *= mask
+	EndIf
 	
-//	vDSI *= vDSI
+	//Make a histogram of the image values
+	Histogram/C/B={0,15,24} vAngle,vHist
 	
 	SetDataFolder saveDF
 End
 
 //Input is peak dF maps, angle list
-Function NT_FindDSCells(ds,angles)
+//Function NT_FindDSCells(ds,angles)
 	STRUCT ds &ds
 	String angles
 	
@@ -5299,7 +6254,7 @@ Function NT_FindDSCells(ds,angles)
 	cols = DimSize(theWave,1)
 	
 	//Put all the data into a single 3D wave
-	Make/O/N=(rows,cols,ds.numWaves) data
+	Make/O/N=(rows,cols,ds.numWaves[0]) data
 	
 	
 	//Sort the images into the linear order according to their angle
@@ -5314,7 +6269,7 @@ Function NT_FindDSCells(ds,angles)
 	Sort angleWave,order
 	ds.wsi = 0
 	
-	For(i=0;i<ds.numWaves;i+=1)
+	For(i=0;i<ds.numWaves[0];i+=1)
 		Wave image = ds.waves[order[i]]
 		data[][][i] = image[p][q][0]
 	EndFor
@@ -5365,286 +6320,106 @@ End
 		
 		CopyScales/P theWave,maxproj
 		ds.wsi += 1
-	While(ds.wsi < ds.numWaves)
+	While(ds.wsi < ds.numWaves[0])
 	
 	SetDataFolder saveDF
 End
 
-//Registers the images to the indicated reference image
-Function NT_AlignImages(ds)
-	STRUCT ds &ds
-	
-	DFREF saveDF = GetDataFolderDFR()
-	
-	//Reference image
-	ControlInfo/W=NT SR_referenceImage
-	Wave ref = $S_value
-	
-	If(!WaveExists(ref))
-		Abort "Reference image does not exist, must enter full path to a reference image"
-	EndIf
-	
-	//Max projection if 3D
-	If(WaveDims(ref) == 3)
-		Wave refWave = NT_MaxProject(ref)
-	Else
-		Wave refWave = ref
-	EndIf
-	
-	//reset wsi
-	ds.wsi = 0
-	Do
-		Wave theWave = ds.waves[ds.wsi]
-		SetDataFolder $GetWavesDataFolder(theWave,1)
-		
-		If(WaveDims(theWave) == 3)
-			Wave testWave = NT_MaxProject(theWave)
-		Else
-			Wave testWave = theWave
-		EndIf
-		
-		ImageRegistration/Q/TRNS={1,1,0}/ROT={0,0,0}/REFM=0/TSTM=0  testWave=testWave,refWave=refWave
-		
-		Wave params = W_RegParams
-		
-		//Only make adjustments if the registration correction is > 1 pixel
-		Variable xOff = 0
-		Variable yOff = 0
-		
-		If(abs(params[0]) > 1)
-			xOff = DimOffset(testWave,0) + IndexToScale(testWave,params[0],0)
-		Else
-			xOff = DimOffset(testWave,0)
-		EndIf
-		
-		If(abs(params[1]) > 1)
-			yOff = DimOffset(testWave,1) + IndexToScale(testWave,params[1],1)
-		Else
-			yOff = DimOffset(testWave,1)
-		EndIf
-		
-		SetScale/P x,xOff,DimDelta(testWave,0),theWave
-		SetScale/P y,yOff,DimDelta(testWave,1),theWave
-		
-	
-//		KillWaves/Z params,W_RegOut,W_RegMaskOut,theWave
-		
-		ds.wsi += 1
-	While(ds.wsi < ds.numWaves)
-	
-	SetDataFolder saveDF
-End
 
-//Load ROI data from suite 2P HDF5 files.
-Function NT_LoadSuite2P()
-	
-	DFREF saveDF = GetDataFolderDFR()
-	
-	//Open the HDF5 files
-	Variable refnum
-	Open/D/R/MULT=1/F="All Files:.*;"/M="Select one or more .h5 files" refnum
-	String fileList = S_fileName
-	
-	If(!strlen(fileList))
-		return 0
-	EndIf
-	
-	Variable numFiles = ItemsInList(fileList,"\r")
-	
-	fileList = ReplaceString("\r",fileList,";")
-	
-	//Make sure correct data folders are there
-	If(!DataFolderExists("root:Analysis"))
-		NewDataFolder root:Analysis
-	EndIf
-	
-	If(!DataFolderExists("root:Analysis:Suite2P"))
-		NewDataFolder root:Analysis:Suite2P
-	EndIf
-	
-	SetDataFolder root:Analysis:Suite2P
-	
-	//Input parameters for which data to load
-	ControlInfo/W=NT loadROITraces
-	Variable loadROITraces = V_Value
-	
-	ControlInfo/W=NT loadROIMasks
-	Variable loadROIMasks = V_Value
-	
-	ControlInfo/W=NT loadROICoords
-	Variable loadROICoords = V_Value
-	
-	ControlInfo/W=NT loadBackgroundTraces
-	Variable loadBackgroundTraces = V_Value
-	
-	ControlInfo/W=NT loadDenoisedMovie
-	Variable loadDenoisedMovie = V_Value
-	
-	Variable i,j,k
-	For(i=0;i<numFiles;i+=1)
-		String theFile = StringFromList(i,fileList,";")
-		
-		//Make sure it's hdf5 type
-		If(!stringmatch(theFile,"*.h5"))
-			continue
-		EndIf
-		
-		Variable fileID					
-		HDF5OpenFile/R fileID as theFile
 
-		If(V_flag == -1) //cancelled
-			break
-		EndIf
-		
-		//ROI TRACES (Fcell)
-		If(loadROITraces)
-			HDF5LoadData/Z/O/N=Fcell/Q fileID,"/Fcell"
-			If(V_flag)
-				continue
-			EndIf
-			
-			Wave Fcell
-			
-			//Load the ROI traces for each ROI
-			Variable numROIs = DimSize(Fcell,0)
-			Variable roiLength = DimSize(Fcell,1)
-			
-			For(j=0;j<numROIs;j+=1)
-				String ROIname = "ROI_" + num2str(j)
-				MatrixOP/O $ROIname = row(Fcell,j)^t
-			EndFor
-		EndIf
-		
-		//BACKGROUND TRACES (Fneu)
-		If(loadBackgroundTraces)
-			HDF5LoadData/O/N=Fneu/Q fileID,"/Fneu"
-			Wave Fneu
-			
-			//Load the ROI traces for each ROI
-			numROIs = DimSize(Fneu,0)
-			roiLength = DimSize(Fneu,1)
-			
-			For(j=0;j<numROIs;j+=1)
-				ROIname = "ROI_" + num2str(j) + "_Bgnd"
-				MatrixOP/O $ROIname = row(Fneu,j)^t
-			EndFor
-		EndIf
-		
-		If(loadROICoords)
-			//Make sure the ROI folder exists, it should upon loading the scanimage package
-			If(!DataFolderExists("root:Packages:NT:ScanImage:ROIs"))
-				NewDataFolder root:Packages:NT:ScanImage:ROIs
-			EndIf
-			
-			SetDataFolder root:Packages:NT:ScanImage:ROIs
-			String folderName = UniqueName("Group",11,0)
-			
-			If(!DataFolderExists("root:Packages:NT:ScanImage:ROIs:" + folderName))
-				NewDataFolder $("root:Packages:NT:ScanImage:ROIs:" + folderName)
-			EndIf
-			
-			SetDataFolder $("root:Packages:NT:ScanImage:ROIs:" + folderName)
-			
-			HDF5ListGroup/Z/Q/TYPE=1 fileID,"/pixels"
-			String groupList = S_HDF5ListGroup
-			
-			numROIs = ItemsInList(groupList,";")
-			
-			//Load the X and Y positions and weights for the ROIs
-			String locationList = "x;y;weights;"
-			For(j=0;j<numROIs;j+=1)
-				For(k=0;k<ItemsInList(locationList,";");k+=1)
-					String item = StringFromList(k,locationList,";")
-					String location = "/pixels/" + num2str(j) + "/" + item
-					
-					roiName = "ROI_" + num2str(j) + "_" + item
-					HDF5LoadData/Z/O/N=$roiName/Q fileID,location
-					Wave itemWave = $roiName
-					
-					If(!cmpstr(item,"weights"))
-						Redimension/S itemWave //32 bit float
-					Else
-						Redimension/W/U itemWave //unsigned 16 bit
-					EndIf
-				EndFor
-			EndFor
-			
-			updateImageBrowserLists()
-		EndIf
-		
-		//ROI MASKS
-		If(loadROIMasks)
-			SetDataFolder root:Analysis:Suite2P
-			HDF5LoadData/O/N=masks/Q fileID,"/masks"
-			Wave masks
-			//Make 64 bit float waves 32 to save space
-			Redimension/S masks
-		EndIf
-		
-		//DENOISED MOVIE
-		If(loadDenoisedMovie)
-			SetDataFolder root:Analysis:Suite2P
-			HDF5LoadData/O/N=denoised/Q fileID,"/denoised"
-			Wave denoised
-			//Make 64 bit float waves 32 to save space
-			Redimension/S denoised
-		EndIf	
 
-//		Make/FREE/N=(DimSize(masks,0),DimSize(masks,1))/B/U maskLayer
-		
-		HDF5CloseFile fileID
-		
-		KillWaves/Z Fcell,Fneu
-	EndFor
-	
-	SetDataFolder saveDF
-End
 
-//Calculates the Max Projection of the 3D input wave
-Function/WAVE NT_MaxProject(w)
+//Returns the image variance along the z axis
+//Igor 9 can does this with matrix op now
+Function/WAVE ImageVariance(w,[free])
 	Wave w
-		
+	Variable free
+	
+	free = ParamIsDefault(free) ? 0 : 1
+	
 	DFREF saveDF = GetDataFolderDFR()
 	SetDataFolder $GetWavesDataFolder(w,1)
 		
-	String outName = NameOfWave(w) + "_max"
-	Make/O/N=(DimSize(w,0),DimSize(w,1)) $outName /Wave=maxproj
+	String outName = NameOfWave(w) + "_var"
+	If(free)
+		Make/FREE/N=(DimSize(w,0),DimSize(w,1)) var
+	Else
+		Make/O/N=(DimSize(w,0),DimSize(w,1)) $outName /Wave=var
+	EndIf
 	
-	MatrixOP/O maxproj = sumbeams(w)
-	Redimension/S maxproj
-	maxproj /= DimSize(w,2)
+	var = 0
 	
-	CopyScales/P w,maxproj
+	Variable i
+	
+	ImageTransform averageImage w
+	
+	Wave var = M_StdvImage
+	
+	CopyScales/P w,var
 	
 	SetDataFolder saveDF
 	
 	//return the output wave
-	return maxProj
+	return var
 End
 
-//Wrapper function to setup the max projection parameters
-Function WRAPPER_MaxProject(ds)
-	STRUCT ds &ds
-	
-	DFREF saveDF = GetDataFolderDFR()
-	
-	//reset wsi
-	ds.wsi = 0
-	Do
-		Wave theWave = ds.waves[ds.wsi]
-		SetDataFolder $GetWavesDataFolder(theWave,1)
-		
-		NT_MaxProject(theWave)
-		
-		ds.wsi += 1
-	While(ds.wsi < ds.numWaves)
-	
-	SetDataFolder saveDF
+
+
+
+
+
+Function UndoRegistrationProc(ba) : ButtonControl
+	STRUCT WMButtonAction &ba
+
+	switch( ba.eventCode )
+		case 2: // mouse up
+			// click code here
+			STRUCT ds ds
+			GetStruct(ds)
+			
+			ds.wsi = 0
+			Do
+				//undo the registration
+				Wave image = ds.waves[ds.wsi][1]
+				
+				DFREF f = GetWavesDataFolderDFR(image)
+				SVAR scaling = f:originalScale
+				
+				If(!SVAR_Exists(scaling))
+					ds.wsi += 1
+					continue
+				EndIf	
+				
+				Variable xOffset = NumberByKey("XOffset",scaling,"=",";")
+				Variable xDelta = NumberByKey("XDelta",scaling,"=",";")
+				Variable yOffset = NumberByKey("YOffset",scaling,"=",";")
+				Variable yDelta = NumberByKey("YDelta",scaling,"=",";")
+				
+				SetScale/P x,xOffset,xDelta,image
+				SetScale/P y,yOffset,yDelta,image
+				
+				//check if there's a max projection wave for it as well
+				Wave proj = f:$(NameOfWave(image) + "_max")
+				
+				If(WaveExists(proj))
+					SetScale/P x,xOffset,xDelta,proj
+					SetScale/P y,yOffset,yDelta,proj
+				EndIf
+				
+				ds.wsi += 1
+			While(ds.wsi < ds.numWaves[1])
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
 End
+
 
 
 //Calculates the response quality index for the input images
-Function NT_ResponseQuality(ds)
+//Function NT_ResponseQuality(ds)
 	STRUCT ds &ds
 	DFREF saveDF = GetDataFolderDFR()
 	
@@ -5670,7 +6445,7 @@ Function NT_ResponseQuality(ds)
 		//Calculate mean and standard deviation across frames
 		Variable startLayer,endLayer,numLayers
 		startLayer = ScaleToIndex(w,img.bsSt,2)
-		endLayer = ScaleToIndex(w,img.bsEnd,2)
+		endLayer = ScaleToIndex(w,Baseline_End,2)
 		numLayers = endLayer - startLayer + 1
 		
 		Make/FREE/N=(rows,cols,numLayers) baseline
@@ -5697,7 +6472,7 @@ Function NT_ResponseQuality(ds)
 		
 		CopyScales/P w,RQI
 		ds.wsi += 1
-	While(ds.wsi < ds.numWaves)
+	While(ds.wsi < ds.numWaves[0])
 	
 	SetDataFolder saveDF
 End
@@ -5739,15 +6514,15 @@ Function CreateDrawnROI(drawROIX,drawROIY,target,group,baseName)
 	Wave drawROIX,drawROIY
 	String target,group,baseName
 	
-	If(!DataFolderExists("root:Packages:NT:ScanImage:ROIs"))
-		NewDataFolder root:Packages:NT:ScanImage:ROIs
+	If(!DataFolderExists("root:Packages:NeuroToolsPlus:ScanImage:ROIs"))
+		NewDataFolder root:Packages:NeuroToolsPlus:ScanImage:ROIs
 	EndIf
 	
 	String software = whichImagingSoftware()
 	
 	strswitch(software)
 		case "ScanImage":
-			String roiFolder = "root:Packages:NT:ScanImage:ROIs:"
+			String roiFolder = "root:Packages:NeuroToolsPlus:ScanImage:ROIs:"
 			break
 		case "2PLSM":
 			roiFolder = "root:twoP_ROIS:"
@@ -5802,7 +6577,7 @@ Function CreateDrawnROI(drawROIX,drawROIY,target,group,baseName)
 	//Set the ROI Group Selector to the current group, in case ***NEW** group was created.
 	//This will allow you to click-create ROIs in a NEW group without having to choose the group that
 	//was just created. 
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	
 	updateImageBrowserLists()
 	refreshROIGroupList()
@@ -5821,7 +6596,7 @@ Function CreateROIGrid(w,h,threshold,target,group,baseName)
 	Variable w,h,threshold
 	String target,group,baseName
 	
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	
 	//Get the image wave (time-varying scan, not max projection)
 	SVAR SIDisplay_ImagePaths = NTSI:SIDisplay_ImagePaths
@@ -5836,7 +6611,7 @@ Function CreateROIGrid(w,h,threshold,target,group,baseName)
 	
 	strswitch(software)
 		case "ScanImage":
-			String roiFolder = "root:Packages:NT:ScanImage:ROIs:"
+			String roiFolder = "root:Packages:NeuroToolsPlus:ScanImage:ROIs:"
 			break
 		case "2PLSM":
 			roiFolder = "root:twoP_ROIS:"
@@ -6061,7 +6836,7 @@ End
 
 //Population Vector Sum
 ////////////////////////////////
-Function NT_PopVectorSum()
+//Function NT_PopVectorSum()
 	
 	//Get the signals data set
 	ControlInfo/W=NT Signals
@@ -6152,9 +6927,9 @@ Function NT_PopVectorSum()
 	
 End
 
-Function NT_OLE()
+//Function NT_OLE()
 
-	DFREF NTSR = root:Packages:NT:ScanImage:ROIs
+	DFREF NTSR = root:Packages:NeuroToolsPlus:ScanImage:ROIs
 	
 	//Get the signals data set
 	ControlInfo/W=NT Signals
@@ -6422,46 +7197,20 @@ Function initParam(img,ds)
 	STRUCT IMAGING &img
 	STRUCT ds &ds
 	
-	DFREF RF = root:Packages:NT:ScanImage:ROIs
+	DFREF RF = root:Packages:NeuroToolsPlus:ScanImage:ROIs
 	DFREF TP = root:Packages:twoP:examine
-	DFREF NTI = root:Packages:NT:Imaging
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTI = root:Packages:NeuroToolsPlus:Imaging
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	
 	//Is this 2PLSM or ScanImage file structures?
 	String software = whichImagingSoftware()
-	
-	ControlInfo/W=NT channelSelect
-	img.channel = V_Value
-	
-	ControlInfo/W=NT dFSelect
-	img.mode = V_Value
-	
-	ControlInfo/W=NT baselineSt
-	img.bsSt = V_Value
-	
-	ControlInfo/W=NT baselineEnd
-	img.bsEnd = V_Value
-	
-	ControlInfo/W=NT peakSt
-	img.pkSt = V_Value
-	
-	ControlInfo/W=NT peakEnd
-	img.pkEnd = V_Value
-	
-	ControlInfo/W=NT filterSize
-	img.filter = V_Value
-	
-	//holds the measurement string
-	ControlInfo/W=NT measurePopUp
-	SVAR img.measure = NTSI:measure 
-	img.measure = S_Value
-	
+
 	//ROI ListBox list and select waves
 	Wave/T ROIListWave = NTSI:ROIListWave
 	Wave ROISelWave =  NTSI:ROISelWave
 	
-	Wave/T ScanListWave = NTSI:ScanListWave
-	Wave ScanSelWave = NTSI:ScanSelWave
+	Wave/T ScanListWave = NTSI:ScanFieldListWave
+	Wave ScanSelWave = NTSI:ScanFieldSelWave
 
 	If(DimSize(ROISelWave,0) > 0)
 		ROISelWave = (ROISelWave >= 1) ? 1 : 0
@@ -6469,7 +7218,13 @@ Function initParam(img,ds)
 	Else
 		img.roi.num = 0
 	EndIf
-	img.scan.num = ds.numWaves
+	
+	If(DimSize(ScanSelWave,0) > 0)
+		ScanSelWave = (ScanSelWave >= 1) ? 1 : 0
+		img.scan.num = sum(ScanSelWave)
+	Else
+		img.scan.num = 0
+	EndIf
 	
 	//active ROIs used for the analsis and their position wave references
 	Make/O/N=(img.roi.num,1,2)/T NTSI:ROI_List_Analysis
@@ -6493,7 +7248,7 @@ Function initParam(img,ds)
 		Do
 			If(ROISelWave[i] > 0)
 				If(!cmpstr(software,"ScanImage"))
-					DFREF RF = root:Packages:NT:ScanImage:ROIs:$ROIListWave[i][0][1]
+					DFREF RF = root:Packages:NeuroToolsPlus:ScanImage:ROIs:$ROIListWave[i][0][1]
 				ElseIf(!cmpstr(software,"2PLSM"))
 					DFREF RF = root:twoP_ROIS:$ROIListWave[i][0][1]
 				EndIf
@@ -6515,14 +7270,25 @@ Function initParam(img,ds)
 		While(i < DimSize(ROISelWave,0))
 	EndIf
 	
-	//Fill out all the scan waves
-//	ds.listWave = RemoveEnding(ParseFilePath(1,ds.listWave[p],"_",1,0),"_")
+	i = 0
+	count = 0
+	Do
+		If(ScanSelWave[i] > 0)
+			//Get scan path and remove channel designation
+			String scanPath = ScanListWave[i][0][1]
+			scanPath = ParseFilePath(1,scanPath,":",1,0)
+			
+			String scanName = ScanListWave[i][0][0]
+			scanName = RemoveEnding(scanName,"_ch1")
+			scanName = RemoveEnding(scanName,"_ch2")
+			
+			img.scan.ch1[count] = $(scanPath + scanName + "_ch1")
+			img.scan.ch2[count] = $(scanPath + scanName + "_ch2")
+			count += 1
+		EndIf
+		i += 1
+	While(i < DimSize(ScanSelWave,0))
 	
-	For(i=0;i<ds.numWaves;i+=1)
-		img.scan.ch1[i] = ds.waves[i]
-		
-		img.scan.ch2[i] = ds.waves[i]
-	EndFor	
 End
 
 //Runs the selected command
@@ -6530,22 +7296,22 @@ Function RunCmd_ScanImagePackage(cmd)
 	String cmd
 	STRUCT ds ds
 	
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	
 	DFREF saveDF = GetDataFolderDFR()
 	
 	strswitch(cmd)
 		case "Get ROI":
-			GetStruct(ds)
-			Wave/WAVE out = NT_GetROI(ds)
+//			GetStruct(ds)
+//			Wave/WAVE out = NT_GetROI(ds)
 			break
 		case "dF Map":
-			GetStruct(ds)
-			Wave/WAVE out = NT_dFMap(ds)
+//			GetStruct(ds)
+//			Wave/WAVE out = NT_dFMap(ds)
 			break
 		case "Population Vector Sum":
 //			NT_PopVectorSum()
-			NT_OLE()
+//			NT_OLE()
 			break
 		case "Load Scans":
 			//Get the folder path
@@ -6569,24 +7335,24 @@ Function RunCmd_ScanImagePackage(cmd)
 			break
 		case "Max Project":
 			GetStruct(ds)
-			WRAPPER_MaxProject(ds)
+//			NT_MaxProject(ds)
 			break
 		case "Vector Sum Map":
 			GetStruct(ds)
-			String angles = GetVectorSumAngles(ds,ds.numWaves)
-			NT_VectorSumMap(ds,angles)
+//			String angles = GetVectorSumAngles(ds,ds.numWaves[0])
+//			NT_VectorSumMap(ds,angles)
 //			NT_FindDSCells(ds,angles)
 			break
 		case "Response Quality":
 			GetStruct(ds)
-			NT_ResponseQuality(ds)
+//			NT_ResponseQuality(ds)
 			break
 		case "Align Images":
 			GetStruct(ds)
 			NT_AlignImages(ds)
 			break
 		case "Load Suite2P":
-			NT_LoadSuite2P()
+//			NT_LoadSuite2P()
 			break
 	endswitch
 	
@@ -6625,7 +7391,21 @@ Function SI_GetCenter([group])
 		return 0
 	EndIf
 	
-	DFREF NTR = root:Packages:NT:ScanImage:ROIs:
+	DFREF NTSI = $SI 
+	SVAR software = NTSI:imagingSoftware
+	
+	strswitch(software)
+		case "2PLSM":
+			DFREF NTR = root:twoP_ROIs:
+			String path = "root:twoP_ROIs:"
+			break
+		case "ScanImage":
+			DFREF NTR = root:Packages:NeuroToolsPlus:ScanImage:ROIs:
+			path = "root:Packages:NeuroToolsPlus:ScanImage:ROIs:"
+			break
+	endswitch
+	
+	
 	
 	If(ParamIsDefault(group))
 		Make/O/N=(ItemsInList(roiList,";")) NTR:ROIx,NTR:ROIy
@@ -6638,7 +7418,7 @@ Function SI_GetCenter([group])
 	EndIf
 
 	For(i=0;i<ItemsInList(roiList,";");i+=1)
-		DFREF NTR = root:Packages:NT:ScanImage:ROIs:$StringFromList(i,roiGroupList,";")
+		DFREF NTR = $(path + StringFromList(i,roiGroupList,";"))
 		
 		String roi = StringFromList(i,roiList,";")
 		Wave yROI = NTR:$(roi + "_y")
@@ -6691,7 +7471,7 @@ Function/WAVE GetMaxProj(imageList[,noReplace])
 		noReplace = 0
 	EndIf
 	
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	NVAR isMaxProj = NTSI:isMaxProj
 	
 	Variable i
@@ -6750,7 +7530,7 @@ End
 Function autoStretch(pct)
 	Variable pct
 
-	DFREF NTSI = root:Packages:NT:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	NVAR numImages = NTSI:numImages
 	NVAR imagePlane = NTSI:imagePlane
 	NVAR isMaxProj = NTSI:isMaxProj
@@ -6851,4 +7631,754 @@ Function autoStretch(pct)
 	EndFor
 //
 	KillWaves hist,cumHist
+End
+
+//Adds all of the images together in each waveset
+Function NT_Sum_Images(DS_Images)
+	String DS_Images
+	//TITLE=Sum Images
+	//SUBMENU=Imaging
+	
+//	Note={
+//	Adds all of the images in each wave set together
+//	}
+	
+	STRUCT ds ds
+	GetStruct(ds)
+
+	ds.wsi = 0
+	
+	SetDataFolder GetWavesDataFolder(ds.waves[0],1)
+	
+	//Make output wave and set to 0
+	String outName = NameOfWave(ds.waves[0]) + "_sum"
+	Duplicate/O ds.waves[0],$outName
+	Wave outWave = $outName
+	
+	Multithread outWave = 0
+	
+	Do
+		Wave theImage = ds.waves[ds.wsi]
+		
+		Multithread outWave += theImage
+		
+		ds.wsi += 1
+	While(ds.wsi < ds.numWaves[0])
+	
+End
+
+//Returns a mask image that only includes pixels with a high enough SNR
+Function NT_SNR_Map(DS_Images,SNR_Threshold,cb_Create_Mask)
+	//TITLE=SNR Map
+	//SUBMENU=Imaging
+	
+	String DS_Images //Data set the holds the image scans
+	Variable SNR_Threshold //Threshold for the signal:noise to use for creating the mask image
+	Variable cb_Create_Mask //Check to create the mask image, uncheck to only create the signal:noise image
+	
+	STRUCT ds ds
+	GetStruct(ds)
+	
+	Variable numWaves = DimSize(ds.waves,0)
+	
+	ds.wsi = 0
+	
+	Do
+		Wave theImage = ds.waves[ds.wsi]
+		
+		If(ds.wsi == 0)
+			SetDataFolder GetWavesDataFolder(theImage,1)
+			Duplicate/FREE theImage,sumImage
+			Multithread sumimage = 0
+		EndIf
+		
+		Multithread sumImage += theImage
+		
+		ds.wsi += 1
+	While(ds.wsi < numWaves)
+	
+	Wave SNR = SNR_Map(sumImage)
+	
+	If(cb_Create_Mask)
+		Wave SNRmask = CreateImageMask(SNR,SNR_Threshold)
+	EndIf
+	
+End
+
+
+Function/WAVE SNR_Map(theImage)
+	Wave theImage
+	
+	//Make a working copy of the image stack
+	Duplicate/FREE theImage,temp
+	
+	//Make into single float so the filtering works
+	Redimension/S temp
+	
+	//Start with a gaussian filter on the image
+	ImageFilter/O/N=3/P=3 gauss3d temp
+	
+	//Get the variance of the image along z axis
+	Wave var = ImageVariance(temp,free=1)
+	
+	//Convert to STDEV
+	Multithread var *= var
+	
+	Multithread temp *= var[p][q][0]
+	
+	//Get maximum value for each pixel
+	Wave maxProj = MaxProjection(temp,free=1)
+	
+	//Calculate the SNR
+	Duplicate/O maxProj,SNR
+	
+	Multithread SNR = maxProj / var
+	
+	KillWaves/Z M_AveImage,M_StdvImage
+	return SNR
+End
+
+Function NT_CreateImageMask(DS_Image,Threshold)
+	//SUBMENU=Imaging
+	//TITLE=Create Image Mask
+	
+	String DS_Image
+	Variable Threshold
+	
+	STRUCT ds ds
+	GetStruct(ds)
+	
+	Variable numWaves = DimSize(ds.waves,0)
+	
+	ds.wsi = 0
+	Do
+		Wave theImage = ds.waves[ds.wsi]
+		SetDataFolder GetWavesDataFolder(theImage,1)
+		Wave signalMask = CreateImageMask(theImage,Threshold)
+		
+		ds.wsi += 1
+	While(ds.wsi < numWaves)
+
+End
+
+//Create a mask image according to the SNR threshold
+Function/WAVE CreateImageMask(theImage,threshold)
+	Wave theImage
+	Variable threshold
+	
+	SetDataFolder GetWavesDataFolder(theImage,1)
+	
+	Duplicate/O theImage,$(NameOfWave(theImage) + "_mask")
+	Wave mask = $(NameOfWave(theImage) + "_mask")
+	Multithread mask = (theImage > threshold) ? 1 : 0
+	
+	return mask
+End	
+
+//Same as LoadScanImage, just repeated the wrapper function so I can have it in multiple submenu categories.
+Function NT_LoadImages(menu_ScanType,bt_Browse,lb_ScanList)
+	//SUBMENU=Load Data
+	//TITLE=Load ScanImage
+	String menu_ScanType,bt_Browse,lb_ScanList
+	
+	String menu_ScanType_List = "Frame;Line;"
+	String bt_Browse_Proc = "LoadScanImageButtonProc"
+	
+	String lb_ScanList_Pos = "15;10;350;350" //left,top,width,height
+	String lb_ScanList_ListWave = "root:Packages:NeuroToolsPlus:ControlWaves:siFileListWave"
+	String lb_ScanList_SelWave = "root:Packages:NeuroToolsPlus:ControlWaves:siFileSelWave"
+	String lb_ScanList_Proc = "LoadScanImageListBoxProc"
+	
+	NT_LoadScanImage(menu_ScanType,bt_Browse,lb_ScanList)
+End
+
+//Loads in scanimage files
+Function NT_LoadScanImage(menu_ScanType,bt_Browse,lb_ScanList)
+	//SUBMENU=Imaging
+	//TITLE=Load ScanImage
+	String menu_ScanType,bt_Browse,lb_ScanList
+	
+	String menu_ScanType_List = "Frame;Line;"
+	String bt_Browse_Proc = "LoadScanImageButtonProc"
+	
+	String lb_ScanList_Pos = "15;10;350;350" //left,top,width,height
+	String lb_ScanList_ListWave = "root:Packages:NeuroToolsPlus:ControlWaves:siFileListWave"
+	String lb_ScanList_SelWave = "root:Packages:NeuroToolsPlus:ControlWaves:siFileSelWave"
+	String lb_ScanList_Proc = "LoadScanImageListBoxProc"
+	
+	//Get the folder path
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
+	SVAR ScanLoadPath = NTSI:ScanLoadPath
+	
+	Wave/T ScanLoadListWave = $lb_ScanList_ListWave
+	Wave ScanLoadSelWave = $lb_ScanList_SelWave
+	
+	//Get the selected file list
+	String fileList = ""
+	
+	Variable i
+	For(i=0;i<DimSize(ScanLoadSelWave,0);i+=1)
+		If(ScanLoadSelWave[i] > 0)
+			fileList += ScanLoadListWave[i][0] + ";" // + ".tif;"
+		EndIf
+	EndFor
+	
+	SI_LoadScans(ScanLoadPath,fileList)
+	updateImageBrowserLists()
+	
+End
+
+//Averages along the 4th dimension (chunks)
+Function NT_StackFilter(DS_Data)
+	String DS_Data
+	//SUBMENU=Imaging
+	//TITLE=Stack Filter
+	
+//	Note={
+//	Applies a Gaussian 3x3 filter to each frame of a Z stack
+//	}
+	
+	//Data set info structure
+	STRUCT ds ds 
+	
+	//Fills the data set structure
+	GetStruct(ds)
+	
+	//Reset wave set index
+	ds.wsi = 0
+	
+	Variable i,j
+		
+	//Function Loop
+	Do
+		//declare each wave in the wave set
+		Wave theWave = ds.waves[ds.wsi]
+		
+		SetDataFolder GetWavesDataFolder(theWave,1)
+		
+		//YOUR CODE GOES HERE....
+		Variable rows = DimSize(theWave,0)
+		Variable cols = DimSize(theWave,1)
+		Variable layers = DimSize(theWave,2)
+		
+		//Must be a 3D wave
+		If(!layers)
+			ds.wsi += 1
+			continue
+		EndIf
+		
+		Make/O/N=(rows,cols,layers)/S $NameOfWave(theWave) + "_filter"/Wave=outWave
+		CopyScales/I theWave,outWave
+		Multithread	outWave = 0
+		
+		For(i=0;i<layers;i+=1)
+			MatrixOP/FREE layer = layer(theWave,i)
+			MatrixFilter/N=3 gauss layer
+			Multithread outWave[][][i] = layer[p][q][0]
+		EndFor
+		
+		ds.wsi += 1
+	While(ds.wsi < ds.numWaves[0])
+	
+End
+
+//Averages along the 4th dimension (chunks)
+Function NT_Average4D(DS_Data)
+	String DS_Data
+	//SUBMENU=Imaging
+	//TITLE=Z Stack Average
+	
+	//Data set info structure
+	STRUCT ds ds 
+	
+	//Fills the data set structure
+	GetStruct(ds)
+	
+	//Reset wave set index
+	ds.wsi = 0
+	
+	Variable i,j
+		
+	//Function Loop
+	Do
+		//declare each wave in the wave set
+		Wave theWave = ds.waves[ds.wsi]
+		
+		SetDataFolder GetWavesDataFolder(theWave,1)
+		
+		//YOUR CODE GOES HERE....
+		Variable rows = DimSize(theWave,0)
+		Variable cols = DimSize(theWave,1)
+		Variable layers = DimSize(theWave,2)
+		Variable chunkSize = DimSize(theWave,3)
+		
+		//Must be a 4D wave
+		If(!chunkSize)
+			ds.wsi += 1
+			continue
+		EndIf
+		
+		Make/O/N=(rows,cols,layers)/S $NameOfWave(theWave) + "_avg"/Wave=outWave
+		CopyScales/I theWave,outWave
+		Multithread	outWave = 0
+		
+		For(i=0;i<layers;i+=1)
+			For(j=0;j<chunkSize;j+=1)
+				Multithread outWave[][][i] += theWave[p][q][i][j]
+			EndFor
+		EndFor
+		
+		Multithread outWave /= chunkSize
+			
+		ds.wsi += 1
+	While(ds.wsi < ds.numWaves[0])
+	
+End
+
+//Registers the images to the indicated reference image
+Function NT_AlignImages(ds)
+	STRUCT ds &ds
+	//SUBMENU=Imaging
+	//TITLE=Align Images
+	
+	DFREF saveDF = GetDataFolderDFR()
+	
+	//Reference image
+	ControlInfo/W=NT SR_referenceImage
+	Wave ref = $S_value
+	
+	If(!WaveExists(ref))
+		Abort "Reference image does not exist, must enter full path to a reference image"
+	EndIf
+	
+	//Max projection if 3D
+	If(WaveDims(ref) == 3)
+		Wave refWave = MeanProjection(ref)
+	Else
+		Wave refWave = ref
+	EndIf
+	
+	//reset wsi
+	ds.wsi = 0
+	Do
+		Wave theWave = ds.waves[ds.wsi]
+		SetDataFolder $GetWavesDataFolder(theWave,1)
+		
+		If(WaveDims(theWave) == 3)
+			Wave testWave = MeanProjection(theWave)
+		Else
+			Wave testWave = theWave
+		EndIf
+		
+		ImageRegistration/Q/TRNS={1,1,0}/ROT={0,0,0}/REFM=0/TSTM=0  testWave=testWave,refWave=refWave
+		
+		Wave params = W_RegParams
+		
+		//Only make adjustments if the registration correction is > 1 pixel
+		Variable xOff = 0
+		Variable yOff = 0
+		
+		If(abs(params[0]) > 1)
+			xOff = DimOffset(testWave,0) + IndexToScale(testWave,params[0],0)
+		Else
+			xOff = DimOffset(testWave,0)
+		EndIf
+		
+		If(abs(params[1]) > 1)
+			yOff = DimOffset(testWave,1) + IndexToScale(testWave,params[1],1)
+		Else
+			yOff = DimOffset(testWave,1)
+		EndIf
+		
+		SetScale/P x,xOff,DimDelta(testWave,0),theWave
+		SetScale/P y,yOff,DimDelta(testWave,1),theWave
+		
+	
+//		KillWaves/Z params,W_RegOut,W_RegMaskOut,theWave
+		
+		ds.wsi += 1
+	While(ds.wsi < ds.numWaves[0])
+	
+	SetDataFolder saveDF
+End
+
+//Load ROI data from suite 2P HDF5 files.
+Function NT_LoadSuite2P(cb_loadROITraces,cb_loadROIMasks,cb_loadROICoords,cb_loadBackgroundTraces,cb_loadDenoisedMovie)
+	Variable cb_loadROITraces,cb_loadROIMasks,cb_loadROICoords,cb_loadBackgroundTraces,cb_loadDenoisedMovie
+	
+	//SUBMENU=IMAGING
+	//TITLE=Load Suite2P
+	
+	DFREF saveDF = GetDataFolderDFR()
+	
+	//Open the HDF5 files
+	Variable refnum
+	Open/D/R/MULT=1/F="All Files:.*;"/M="Select one or more .h5 files" refnum
+	String fileList = S_fileName
+	
+	If(!strlen(fileList))
+		return 0
+	EndIf
+	
+	Variable numFiles = ItemsInList(fileList,"\r")
+	
+	fileList = ReplaceString("\r",fileList,";")
+	
+	//Make sure correct data folders are there
+	If(!DataFolderExists("root:Analysis"))
+		NewDataFolder root:Analysis
+	EndIf
+	
+	If(!DataFolderExists("root:Analysis:Suite2P"))
+		NewDataFolder root:Analysis:Suite2P
+	EndIf
+	
+	SetDataFolder root:Analysis:Suite2P
+	
+	//Input parameters for which data to load
+//	ControlInfo/W=NT loadROITraces
+//	Variable loadROITraces = V_Value
+//	
+//	ControlInfo/W=NT loadROIMasks
+//	Variable loadROIMasks = V_Value
+//	
+//	ControlInfo/W=NT loadROICoords
+//	Variable loadROICoords = V_Value
+//	
+//	ControlInfo/W=NT loadBackgroundTraces
+//	Variable loadBackgroundTraces = V_Value
+//	
+//	ControlInfo/W=NT loadDenoisedMovie
+//	Variable loadDenoisedMovie = V_Value
+	
+	Variable i,j,k
+	For(i=0;i<numFiles;i+=1)
+		String theFile = StringFromList(i,fileList,";")
+		
+		//Make sure it's hdf5 type
+		If(!stringmatch(theFile,"*.h5"))
+			continue
+		EndIf
+		
+		Variable fileID					
+		HDF5OpenFile/R fileID as theFile
+
+		If(V_flag == -1) //cancelled
+			break
+		EndIf
+		
+		String fileName = RemoveEnding(S_filename,".h5")
+		
+		//ROI TRACES (Fcell)
+		If(cb_loadROITraces)
+			HDF5LoadData/Z/O/N=Fcell/Q fileID,"/Fcell"
+			If(V_flag)
+				HDF5LoadData/Z/O/N=Fcell/Q fileID,"/recs"
+				
+				If(V_flag)
+					HDF5LoadData/Z/O/N=Fcell/Q fileID,fileName + "/recs"
+					
+					If(V_flag)
+						continue
+					EndIf
+				EndIf
+			EndIf
+			
+			Wave Fcell
+			
+			//Load the ROI traces for each ROI
+			Variable numROIs = DimSize(Fcell,0)
+			Variable roiLength = DimSize(Fcell,1)
+			
+			For(j=0;j<numROIs;j+=1)
+				String ROIname = "ROI_" + num2str(j)
+				MatrixOP/O $ROIname = row(Fcell,j)^t
+			EndFor
+		EndIf
+		
+		//BACKGROUND TRACES (Fneu)
+		If(cb_loadBackgroundTraces)
+			HDF5LoadData/O/N=Fneu/Q/Z fileID,"/Fneu"
+			
+			If(V_flag)//error
+				//try to use the file name as a HDF5 group to get the dataset loaded
+				HDF5LoadData/O/N=Fneu/Q/Z fileID,fileName + "/Fneu"
+			EndIf
+			
+			Wave Fneu
+			
+			//Load the ROI traces for each ROI
+			numROIs = DimSize(Fneu,0)
+			roiLength = DimSize(Fneu,1)
+			
+			For(j=0;j<numROIs;j+=1)
+				ROIname = "ROI_" + num2str(j) + "_Bgnd"
+				MatrixOP/O $ROIname = row(Fneu,j)^t
+			EndFor
+		EndIf
+		
+		If(cb_loadROICoords)
+			//Make sure the ROI folder exists, it should upon loading the scanimage package
+			If(!DataFolderExists("root:Packages:NeuroTools:ScanImage:ROIs"))
+				NewDataFolder root:Packages:NeuroToolsPlus:ScanImage:ROIs
+			EndIf
+			
+			SetDataFolder root:Packages:NeuroToolsPlus:ScanImage:ROIs
+			String folderName = UniqueName("Group",11,0)
+			
+			If(!DataFolderExists("root:Packages:NeuroToolsPlus:ScanImage:ROIs:" + folderName))
+				NewDataFolder $("root:Packages:NeuroToolsPlus:ScanImage:ROIs:" + folderName)
+			EndIf
+			
+			SetDataFolder $("root:Packages:NeuroToolsPlus:ScanImage:ROIs:" + folderName)
+			
+			HDF5ListGroup/Z/Q/TYPE=1 fileID,"/pixels"
+			String groupList = S_HDF5ListGroup
+			
+			numROIs = ItemsInList(groupList,";")
+			
+			//Load the X and Y positions and weights for the ROIs
+			String locationList = "x;y;weights;"
+			For(j=0;j<numROIs;j+=1)
+				For(k=0;k<ItemsInList(locationList,";");k+=1)
+					String item = StringFromList(k,locationList,";")
+					String location = "/pixels/" + num2str(j) + "/" + item
+					
+					roiName = "ROI_" + num2str(j) + "_" + item
+					HDF5LoadData/Z/O/N=$roiName/Q fileID,location
+					Wave itemWave = $roiName
+					
+					If(!cmpstr(item,"weights"))
+						Redimension/S itemWave //32 bit float
+					Else
+						Redimension/W/U itemWave //unsigned 16 bit
+					EndIf
+				EndFor
+			EndFor
+			
+			updateImageBrowserLists()
+		EndIf
+		
+		//ROI MASKS
+		If(cb_loadROIMasks)
+			SetDataFolder root:Analysis:Suite2P
+			HDF5LoadData/O/N=masks/Q fileID,"/masks"
+			Wave masks
+			//Make 64 bit float waves 32 to save space
+			Redimension/S masks
+		EndIf
+		
+		//DENOISED MOVIE
+		If(cb_loadDenoisedMovie)
+			SetDataFolder root:Analysis:Suite2P
+			HDF5LoadData/O/N=denoised/Q fileID,"/denoised"
+			Wave denoised
+			//Make 64 bit float waves 32 to save space
+			Redimension/S denoised
+		EndIf	
+
+//		Make/FREE/N=(DimSize(masks,0),DimSize(masks,1))/B/U maskLayer
+		
+		HDF5CloseFile fileID
+		
+		KillWaves/Z Fcell,Fneu
+	EndFor
+	
+	SetDataFolder saveDF
+End
+
+//Calculates the Max Projection of the 3D input wave
+Function/WAVE MeanProjection(w)
+	Wave w
+		
+	DFREF saveDF = GetDataFolderDFR()
+	SetDataFolder $GetWavesDataFolder(w,1)
+		
+	String outName = NameOfWave(w) + "_mean"
+	Make/O/N=(DimSize(w,0),DimSize(w,1)) $outName /Wave=maxproj
+	
+	MatrixOP/O maxproj = sumbeams(w)
+	Redimension/S maxproj
+	maxproj /= DimSize(w,2)
+	
+	CopyScales/P w,maxproj
+	
+	SetDataFolder saveDF
+	
+	//return the output wave
+	return maxProj
+End
+
+//Calculates the Max Projection of the 3D input wave
+Function/WAVE MaxProjection(w,[free])
+	Wave w
+	Variable free
+	
+	free = ParamIsDefault(free) ? 0 : 1
+	
+	DFREF saveDF = GetDataFolderDFR()
+	SetDataFolder $GetWavesDataFolder(w,1)
+		
+	String outName = NameOfWave(w) + "_max"
+	If(free)
+		Make/FREE/N=(DimSize(w,0),DimSize(w,1)) maxproj
+	Else
+		Make/O/N=(DimSize(w,0),DimSize(w,1)) $outName /Wave=maxproj
+	EndIf
+	
+	maxproj = 0
+	
+	Variable i
+	
+	For(i=0;i<DimSize(w,2);i+=1)
+		maxproj = (w[p][q][i] > maxproj[p][q][0]) ? w[p][q][i] : maxproj[p][q][0]
+	EndFor
+
+	CopyScales/P w,maxproj
+	
+	SetDataFolder saveDF
+	
+	//return the output wave
+	return maxProj
+End
+
+//Wrapper function to setup the max projection parameters
+Function NT_MeanProject(DS_Wave)
+	String DS_Wave
+	//SUBMENU=Imaging
+	//TITLE=Max Projection
+	
+	STRUCT ds ds
+	GetStruct(ds)
+	
+	DFREF saveDF = GetDataFolderDFR()
+	
+	//reset wsi
+	ds.wsi = 0
+	Do
+		Wave theWave = ds.waves[ds.wsi]
+		SetDataFolder $GetWavesDataFolder(theWave,1)
+		
+		MeanProjection(theWave)
+		
+		ds.wsi += 1
+	While(ds.wsi < ds.numWaves[0])
+	
+	SetDataFolder saveDF
+End
+
+//Image Registration
+Function NT_RegisterImages(DS_ReferenceImage,DS_Images,bt_UndoRegistration)
+	String DS_ReferenceImage,DS_Images
+	String bt_UndoRegistration
+	
+	String bt_UndoRegistration_Pos = "30;150;120;20"
+	String bt_UndoRegistration_Proc = "UndoRegistrationProc"
+	
+	//SUBMENU=Imaging
+	//TITLE=Register Images
+	
+	//Note={
+	//Registers the Images with the Reference Image. 
+	//Define a single reference image per waveset.
+	//
+	//Registered images have adjusted scaling, and aren't physically cropped at all.
+	//The original scaling parameters are saved as a string variable called 'originalScale'
+	//in the same data folder. This can be used to recover the scaling if a bad registration
+	//occurs.
+	//}
+	
+	STRUCT ds ds
+	GetStruct(ds)
+	
+	ds.wsi = 0
+	
+	//Get the reference image
+	Wave refImage = ds.waves[0][0]
+	
+	If(DimSize(refImage,2) > 0)
+		Wave refProj = MeanProjection(refImage)
+	Else
+		Wave refProj = refImage
+	EndIf
+	
+	Redimension/S refProj
+	
+	//Make the reference mask (buffered edges mask by 10%)
+	Make/FREE/S/N=(DimSize(refProj,0),DimSize(refProj,1)) refMask = 0
+	Multithread refMask[round(0.1 * (DimSize(refMask,0)-1)),round(0.9 * (DimSize(refMask,0)-1))][round(0.1 * (DimSize(refMask,1)-1)),round(0.9 * (DimSize(refMask,1)-1))] = 1
+	CopyScales/P refProj,refMask
+	
+	
+	Do
+		//Get the image to align
+		Wave image = ds.waves[ds.wsi][1]
+		
+		//Get the average image
+		Wave imageProj = MeanProjection(image)
+
+		//Make a string variable to hold the original scaling information. 
+		//This allows user to revert to original if a bad registration occurs
+		SetDataFolder GetWavesDataFolder(imageProj,1)
+		SVAR scale = originalScale
+		
+		Variable xOffset = DimOffset(imageProj,0)
+		Variable xDelta = DimDelta(imageProj,0)
+		Variable yOffset = DimOffset(imageProj,1)
+		Variable yDelta = DimDelta(imageProj,1)
+		Variable zOffset = DimOffset(image,2)
+		Variable zDelta = DimDelta(image,2)
+		
+		If(!SVAR_Exists(scale))
+			String/G originalScale
+			SVAR scale = originalScale
+			
+			scale = "XOffset=" + num2str(xOffset) + ";"
+			scale += "XDelta=" + num2str(xDelta) + ";"
+			scale += "YOffset=" + num2str(yOffset) + ";"
+			scale += "YDelta=" + num2str(yDelta) + ";"
+			scale += "ZOffset=" + num2str(zOffset) + ";"
+			scale += "ZDelta=" + num2str(zDelta)
+		Else
+			xOffset = str2num(StringByKey("XOffset",scale,"=",";"))
+			xDelta = str2num(StringByKey("XDelta",scale,"=",";"))
+			yOffset = str2num(StringByKey("YOffset",scale,"=",";"))
+			yDelta = str2num(StringByKey("YDelta",scale,"=",";"))
+			zOffset = str2num(StringByKey("ZOffset",scale,"=",";"))
+			zDelta = str2num(StringByKey("ZDelta",scale,"=",";"))
+		EndIf
+		
+		Redimension/S imageProj
+		
+		//Make the test mask (buffered edges mask by 10%)
+		Make/FREE/S/N=(DimSize(imageProj,0),DimSize(imageProj,1)) testMask = 0
+		Multithread testMask[round(0.1 * (DimSize(testMask,0)-1)),round(0.9 * (DimSize(testMask,0)-1))][round(0.1 * (DimSize(testMask,1)-1)),round(0.9 * (DimSize(testMask,1)-1))] = 1
+		CopyScales/P imageProj,testMask
+
+
+		ImageRegistration/Q/ROT={0,0,0}/TRNS={1,1,0}/CONV=1 testWave=imageProj,refWave=refProj,refMask=refMask,testMask=testMask
+		
+		KillWaves/Z imageProj,M_RegOut,M_RegMaskOut
+		Wave param = W_RegParams
+		
+		Variable dx = param[0] * xDelta
+		Variable dy = param[1] * yDelta
+		
+		SetScale/P x,xOffset + dx,xDelta,image
+		SetScale/P y,yOffset + dy,yDelta,image
+		
+		
+		print NameOfWave(image),": ∆X = " + num2str(dx * 1e6) + " µm; ∆Y = " + num2str(dy * 1e6) + " µm"
+		
+		//check if there's a max projection wave for it as well
+		Wave proj = $(NameOfWave(image) + "_max")
+		If(WaveExists(proj))
+			SetScale/P x,xOffset + dx,xDelta,proj
+			SetScale/P y,yOffset + dy,yDelta,proj
+		EndIf
+		
+		ds.wsi += 1
+	While(ds.wsi < ds.numWaves[1])
+	
+	KillWaves/Z refProj
 End

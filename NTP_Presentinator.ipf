@@ -4,9 +4,9 @@
 Function GetPresentinatorChannels(fileName)
 	String fileName
 	
-	DFREF NTF = root:Packages:NT	
-	SVAR wsFilePath = NTF:wsFilePath
-	SVAR wsFileName = NTF:wsFileName
+	DFREF NPC = $CW	
+	SVAR wsFilePath = NPC:wsFilePath
+	SVAR wsFileName = NPC:wsFileName
 	
 	Variable fileID
 

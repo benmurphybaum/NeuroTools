@@ -237,7 +237,7 @@ Function NT_ScanRegistryButtonProc(ba) : ButtonControl
 						EndFor
 						
 						ds.wsi += 1
-					While(ds.wsi < ds.numWaves)
+					While(ds.wsi < ds.numWaves[0])
 					
 					SetDataFolder saveDF
 					
@@ -385,7 +385,7 @@ Function/WAVE NT_SetupROICapture()
 	EndIf
 	 
 	//Create a max projection of the image wave, display it
-	Wave maxProj = NT_MaxProject(ds.waves[0])	
+	Wave maxProj = MeanProjection(ds.waves[0])	
 				
 	//Open a new image window with the target image
 	KillWindow/Z GalvoDistortion

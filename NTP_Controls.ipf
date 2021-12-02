@@ -15,10 +15,11 @@ Function ntListBoxProc(lba) : ListBoxControl
 	WAVE/Z selWave = lba.selWave
 	Variable errorCode = 0
 	
-	DFREF NTD = root:Packages:NT:DataSets
-	DFREF NTF = root:Packages:NT
+	DFREF NPD = $DSF
+	DFREF NPC = $CW
 	
-	NVAR dragging = NTF:dragging
+	NVAR dragging = NPC:dragging
+	SVAR listFocus = NPC:listFocus
 	
 	Variable hookResult = 0
 	
@@ -48,18 +49,59 @@ Function ntListBoxProc(lba) : ListBoxControl
 //			strswitch(lba.ctrlName)
 //				case "MatchListBox":
 //				case "DataSetWavesListBox":
-//					DrawAction/W=NT getGroup=fullPathText,delete
-//					SetDrawEnv/W=NT fname=$LIGHT,fstyle=2,fsize=10,xcoord=abs,ycoord=abs, textxjust= 0,gname=fullPathText,gstart
-//					DrawText/W=NT 14,464,listWave[row][0][1]
-//					SetDrawEnv/W=NT gstop
+//					DrawAction/W=NTP getGroup=fullPathText,delete
+//					SetDrawEnv/W=NTP fname=$LIGHT,fstyle=2,fsize=10,xcoord=abs,ycoord=abs, textxjust= 0,gname=fullPathText,gstart
+//					DrawText/W=NTP 14,464,listWave[row][0][1]
+//					SetDrawEnv/W=NTP gstop
 //					break
 //			endswitch
-			drawFullPathText()
-			break
-		case 3: // double click
-			If(HandleLBDoubleClick(lba))
-				print "DOUBLE CLICK LIST BOX ERROR"
-			EndIf
+					
+			//change focus for the list box selection
+			strswitch(lba.ctrlName)
+				case "matchListBox": //wave matches
+					
+					AppendToViewer(listWave,selWave)
+					
+					//out of range selection
+					If(row > DimSize(listWave,0) - 1)
+						//change the list box focus still
+						changeFocus("WaveMatch",1)
+						
+						//Delete full path wave text
+						DrawAction/W=NTP getGroup=fullPathText,delete
+						return 0
+					EndIf
+									
+					//change the list box focus
+					If(!cmpstr(listFocus,"DataSet"))
+						changeFocus("WaveMatch",1)
+					EndIf
+							
+					break
+				case "dataSetWavesListBox": //data set waves
+					//out of range selection
+					
+					AppendToViewer(listWave,selWave)
+					
+					If(row > DimSize(listWave,0) - 1)
+						//change the list box focus still
+						changeFocus("DataSet",1)
+					
+						//Delete full path wave text
+						DrawAction/W=NTP getGroup=fullPathText,delete
+						
+						return 0
+					EndIf
+					
+					//change the list box focus
+					If(!cmpstr(listFocus,"WaveMatch"))
+						changeFocus("DataSet",1)
+					EndIf
+
+					drawFullPathText()
+		
+					break
+			endswitch
 			break
 		case 4: // cell selection
 		case 5: // cell selection plus shift key
@@ -70,11 +112,14 @@ Function ntListBoxProc(lba) : ListBoxControl
 			//Only selection updates for keyboard triggered selections
 			If(lba.eventMod == 0)
 				If(!cmpstr(lba.ctrlName,"MatchListBox") || !cmpstr(lba.ctrlName,"DataSetWavesListBox"))
-				DrawAction/W=NT getGroup=fullPathText,delete
-				SetDrawEnv/W=NT fname=$LIGHT,fstyle=2,fsize=10,xcoord=abs,ycoord=abs,textxjust= 0,gname=fullPathText,gstart
-				DrawText/W=NT 14,464,listWave[row][0][1]
-				SetDrawEnv/W=NT gstop
+					DrawAction/W=NTP getGroup=fullPathText,delete
+					SetDrawEnv/W=NTP fname=$LIGHT,fstyle=2,fsize=10,xcoord=abs,ycoord=abs,textxjust= 0,gname=fullPathText,gstart
+					DrawText/W=NTP 14,464,listWave[row][0][1]
+					SetDrawEnv/W=NTP gstop
 				EndIf
+				
+				AppendToViewer(listWave,selWave)
+				
 			EndIf
 			break
 		case 6: // begin edit
@@ -84,9 +129,11 @@ Function ntListBoxProc(lba) : ListBoxControl
 			break
 		case 12: //keyboard
 		
+			If(!cmpstr(lba.ctrlName,"DataSetNamesListBox"))
+				hookResult = 1
+				return hookResult
+			EndIf
 			
-		
-		
 			//Detect ASCII for 'w' or 'q' 
 			//'q' jumps to previous waveset
 			//'w' jumpts to next waveset
@@ -154,7 +201,7 @@ Function ntListBoxProc(lba) : ListBoxControl
 							
 			EndIf
 			
-			ListBox $lba.ctrlName row=i
+			ListBox $lba.ctrlName win=NTP#Data,row=i
 			
 			If(HandleLBSelection(lba.ctrlName,listWave,i,lba.mouseLoc.h,lba.mouseLoc.v,lba.eventMod))
 				print "SELECTION CHANGE ERROR"
@@ -175,15 +222,15 @@ Function HandleLBSelection(ctrlName,listWave,row,mouseHor,mouseVert,eventMod)
 	Variable row,mouseHor,mouseVert,eventMod
 	
 	Variable errorCode = 0
-	DFREF NTF = root:Packages:NT
-	DFREF NTD = root:Packages:NT:DataSets
+	DFREF NPC = $CW
+	DFREF NPD = $DSF
 	
-	SVAR listFocus = NTF:listFocus
+	SVAR listFocus = NPC:listFocus
 	
 	strswitch(ctrlName)
 		case "matchListBox": //wave matches
-			Wave/T MatchLB_ListWave = NTF:MatchLB_ListWave
-			Wave MatchLB_SelWave = NTF:MatchLB_SelWave
+			Wave/T MatchLB_ListWave = NPC:MatchLB_ListWave
+			Wave MatchLB_SelWave = NPC:MatchLB_SelWave
 			
 			//out of range selection
 			If(row > DimSize(listWave,0) - 1)
@@ -191,7 +238,7 @@ Function HandleLBSelection(ctrlName,listWave,row,mouseHor,mouseVert,eventMod)
 				changeFocus("WaveMatch",1)
 				
 				//Delete full path wave text
-				DrawAction/W=NT getGroup=fullPathText,delete
+				DrawAction/W=NTP getGroup=fullPathText,delete
 				return 0
 			EndIf
 			
@@ -208,8 +255,9 @@ Function HandleLBSelection(ctrlName,listWave,row,mouseHor,mouseVert,eventMod)
 				changeFocus("WaveMatch",1)
 			EndIf
 					
-			NVAR viewerOpen = NTF:viewerOpen
-			If(viewerOpen)
+//			NVAR viewerOpen = NPC:viewerOpen
+//			If(viewerOpen)
+			If(eventMod == 0)
 				AppendToViewer(MatchLB_ListWave,MatchLB_SelWave)
 			EndIf
 					
@@ -221,7 +269,7 @@ Function HandleLBSelection(ctrlName,listWave,row,mouseHor,mouseVert,eventMod)
 				changeFocus("DataSet",1)
 			
 				//Delete full path wave text
-				DrawAction/W=NT getGroup=fullPathText,delete
+				DrawAction/W=NTP getGroup=fullPathText,delete
 				
 				return 0
 			EndIf
@@ -240,14 +288,15 @@ Function HandleLBSelection(ctrlName,listWave,row,mouseHor,mouseVert,eventMod)
 			EndIf
 					
 			//display the full path to the wave in a text box
-			Wave/T DataSetLB_ListWave = NTD:DataSetLB_ListWave
-			Wave DataSetLB_SelWave = NTD:DataSetLB_SelWave
+			Wave/T DataSetLB_ListWave = NPD:DataSetLB_ListWave
+			Wave DataSetLB_SelWave = NPD:DataSetLB_SelWave
 			
 			
-			NVAR viewerOpen = NTF:viewerOpen
-			If(viewerOpen)
-				AppendToViewer(DataSetLB_ListWave,DataSetLB_SelWave)
+//			NVAR viewerOpen = NPC:viewerOpen
+			If(eventMod == 0)
+				AppendToViewer(MatchLB_ListWave,MatchLB_SelWave)
 			EndIf
+
 			
 			break
 		case "dataSetNamesListBox": //data set names
@@ -297,8 +346,8 @@ Function HandleLBSelection(ctrlName,listWave,row,mouseHor,mouseVert,eventMod)
 			EndIf
 			break
 		case "waveListBox":	//waves navigation
-			Wave/T WavesLB_ListWave = NTF:WavesLB_ListWave
-			Wave WavesLB_SelWave = NTF:WavesLB_SelWave
+			Wave/T WavesLB_ListWave = NPC:WavesLB_ListWave
+			Wave WavesLB_SelWave = NPC:WavesLB_SelWave
 			
 			//out of range selection
 			If(row > DimSize(listWave,0) - 1)
@@ -313,18 +362,18 @@ Function HandleLBSelection(ctrlName,listWave,row,mouseHor,mouseVert,eventMod)
 				EndIf
 			EndIf
 			
-			NVAR viewerOpen = NTF:viewerOpen
-			If(viewerOpen)
-				AppendToViewer(WavesLB_ListWave,WavesLB_SelWave)
-			EndIf
+//			NVAR viewerOpen = NPC:viewerOpen
+//			If(viewerOpen)
+//				AppendToViewer(WavesLB_ListWave,WavesLB_SelWave)
+//			EndIf
 			
 			break
 		case "fileListBox":
 			//browse files on disk for wavesurfer or pclamp loading
 			Variable fileID
 			
-			SVAR wsFilePath = NTF:wsFilePath
-			SVAR wsFileName = NTF:wsFileName
+			SVAR wsFilePath = NPC:wsFilePath
+			SVAR wsFileName = NPC:wsFileName
 			
 			If(row > DimSize(listWave,0) -1)
 				return 0
@@ -334,7 +383,7 @@ Function HandleLBSelection(ctrlName,listWave,row,mouseHor,mouseVert,eventMod)
 			String fullPath = wsFilePath + wsFileName
 			
 			//What file type are we opening?
-			ControlInfo/W=NT fileType
+			ControlInfo/W=NTP fileType
 			String fileType = S_Value
 			
 			strswitch(fileType)
@@ -365,7 +414,7 @@ Function HandleLBSelection(ctrlName,listWave,row,mouseHor,mouseVert,eventMod)
 //					Variable numSweeps = 0					
 //					FBInRead/B=3/F=3/U refnum,numSweeps
 //					
-//					Wave/T wsSweepListWave = NTF:wsSweepListWave
+//					Wave/T wsSweepListWave = NPC:wsSweepListWave
 //					Redimension/N=(numSweeps) wsSweepListWave
 //					
 //					Variable i
@@ -387,11 +436,11 @@ End
 Function HandleRightClick(controlName,command,[row])
 	String controlName
 	Variable command,row
-	DFREF NTF = root:Packages:NT
-	DFREF NTD = root:Packages:NT:DataSets
+	DFREF NPC = $CW
+	DFREF NPD = $DSF
 	
 	STRUCT filters filters
-	SVAR listFocus = NTF:listFocus
+	SVAR listFocus = NPC:listFocus
 	
 	Variable errorCode = 0
 	strswitch(controlName)
@@ -424,7 +473,7 @@ Function HandleRightClick(controlName,command,[row])
 			//Right click sends the selected data set's filters, groups, and 
 			//original wave match settings to the WaveMatch list
 			
-			Wave/T DSNamesLB_ListWave = NTD:DSNamesLB_ListWave
+			Wave/T DSNamesLB_ListWave = NPD:DSNamesLB_ListWave
 			Variable index = GetDSIndex()
 			
 			If(index != -1)
@@ -452,9 +501,9 @@ Function HandleRightClick(controlName,command,[row])
 			
 			break
 		case "folderListBox":  //folder navigation
-			Wave/T FolderLB_ListWave = NTF:FolderLB_ListWave
-			Wave/T FolderLB_SelWave = NTF:FolderLB_SelWave
-			SVAR cdf = NTF:currentDataFolder
+			Wave/T FolderLB_ListWave = NPC:FolderLB_ListWave
+			Wave/T FolderLB_SelWave = NPC:FolderLB_SelWave
+			SVAR cdf = NPC:cdf
 			
 			//Get the first wave in the data folder
 			SetDataFolder $(cdf + FolderLB_ListWave[row])
@@ -471,7 +520,7 @@ Function HandleRightClick(controlName,command,[row])
 			
 			//Get a list of the selected waves
 			If(!cmpstr(controlName,"matchListBox"))	
-				Wave/T listWave = NTF:MatchLB_ListWave
+				Wave/T listWave = NPC:MatchLB_ListWave
 				If(row > DimSize(listWave,0)-1)
 					return 0
 				EndIf
@@ -487,7 +536,7 @@ Function HandleRightClick(controlName,command,[row])
 				EndIf
 			
 			ElseIf(!cmpstr(controlName,"waveListBox"))
-				Wave/T listWave = NTF:WavesLB_ListWave
+				Wave/T listWave = NPC:WavesLB_ListWave
 				If(row > DimSize(listWave,0)-1)
 					return 0
 				EndIf
@@ -519,15 +568,19 @@ Function doRightClickAction(command,list)
 			ModifyBrowser clearSelection,selectList=list //selects waves
 			break
 		case 2: //Edit
-			GetWindow NT wsize
+			GetWindow NTP#Data wsize
 			Wave theWave = $StringFromList(0,list,";")
 			
 			If(!WaveExists(theWave))
 				return 0
 			EndIf
 			
+			If(!strlen(GetDimLabel(theWave,0,0)))
+				Edit/K=1/W=(V_right,V_top,V_right + 200,V_top + 200) theWave
+			Else
+				Edit/K=1/W=(V_right,V_top,V_right + 200,V_top + 200) theWave.ld
+			EndIf
 			
-			Edit/W=(V_right,V_top,V_right + 200,V_top + 200) theWave
 			
 			break
 		case 3: //Delete
@@ -545,7 +598,7 @@ Function doRightClickAction(command,list)
 			
 			break
 		case 4: //Display
-			GetWindow NT wsize
+			GetWindow NTP#Data wsize
 			
 			Wave theWave = $StringFromList(0,list,";")
 			
@@ -553,7 +606,9 @@ Function doRightClickAction(command,list)
 				return 0
 			EndIf
 			
-			If(WaveDims(theWave) == 1) //1D
+			If(WaveType(theWave,1) != 1)
+				break
+			ElseIf(WaveDims(theWave) == 1) //1D
 				Display/W=(V_right,V_top,V_right + 390,V_top + 205)
 				For(i=0;i<ItemsInList(list,";");i+=1)
 					AppendToGraph $StringFromList(i,list,";")
@@ -572,7 +627,7 @@ End
 Function HandleLBDoubleClick(lba)
 	STRUCT WMListboxAction &lba
 	Variable errorCode = 0
-	DFREF NTF = root:Packages:NT
+	DFREF NPC = $CW
 	
 	strswitch(lba.ctrlName)
 		case "matchListBox": //wave matches
@@ -582,7 +637,7 @@ Function HandleLBDoubleClick(lba)
 		case "dataSetNamesListBox": //data set names
 			break
 		case "folderListBox":  //folder navigation
-			Wave/T FolderLB_ListWave = NTF:FolderLB_ListWave
+			Wave/T FolderLB_ListWave = NPC:FolderLB_ListWave
 			If(lba.row < DimSize(FolderLB_ListWave,0))
 				switchFolders(FolderLB_ListWave[lba.row])
 			EndIf
@@ -597,7 +652,6 @@ End
 Function ntButtonProc(ba) : ButtonControl
 	STRUCT WMButtonAction &ba
 	
-	
 	switch( ba.eventCode )
 		case 2: // mouse up
 			// click code here
@@ -611,7 +665,7 @@ Function ntButtonProc(ba) : ButtonControl
 			If(HandleButtonClick(ba))
 				print "BUTTON ERROR"
 			EndIf
-			break
+			break	
 		case -1: // control being killed
 			break
 	endswitch
@@ -622,42 +676,17 @@ End
 //Handles button clicks
 Function HandleButtonClick(ba)
 	STRUCT WMButtonAction &ba
-	DFREF NTF = root:Packages:NT
-	DFREF NTD = root:Packages:NT:DataSets
+	DFREF NPC = $CW
+	DFREF NPD = $DSF
 	
-	SVAR selectedCmd = NTF:selectedCmd
+	SVAR selectedCmd = NPC:selectedCmd
+	Wave/T param = NPC:ExtFunc_Parameters
 	
 	Variable errorCode = 0
 	strswitch(ba.ctrlName)
-		case "CommandMenu":
-			
-			SVAR selectedCmd = NTF:selectedCmd
-			PopUpContextualMenu/C=(456,59)/N "CommandMenu"
-			
-			String popStr = S_Selection
-			Variable popNum = V_flag
-			
-			If(V_flag == 0 || V_flag == -1)
-				break
-			EndIf
-			
-			//If the selection was a break line in the menu
-			If(cmpstr(popStr[0],"-") == 0)
-				return 0
-			EndIf
-			
-			//Switches the Command Menu label
-			switchCommandMenu(popStr)
-			
-			//Switches the parameters according to the selected command
-			switchControls(popStr,selectedCmd)
-			
-			//Switch the help message
-			switchHelpMessage(popStr)
-			
-			break
+		
 		case "WaveListSelector":
-			NVAR foldStatus = NTF:foldStatus
+			NVAR foldStatus = NPC:foldStatus
 			//Prevents weird bug where the Wave Selector menu opens even though parameter panel is closed
 			If(!foldStatus)
 				break
@@ -665,8 +694,8 @@ Function HandleButtonClick(ba)
 			
 			PopUpContextualMenu/C=(507,95)/N "WaveListSelectorMenu"
 			
-			popStr = S_Selection
-			popNum = V_flag
+			String popStr = S_Selection
+			Variable popNum = V_flag
 			
 			If(V_flag == 0 || V_flag == -1)
 				break
@@ -682,15 +711,20 @@ Function HandleButtonClick(ba)
 				case "Image Browser":
 					break
 				default:
-					Wave/T DSNamesLB_ListWave = NTD:DSNamesLB_ListWave
-					ListBox DataSetNamesListBox win=NT,selRow=tableMatch(popStr,DSNamesLB_ListWave)
+					Wave/T DSNamesLB_ListWave = NPD:DSNamesLB_ListWave
+					ListBox DataSetNamesListBox win=NTP#Data,selRow=tableMatch(popStr,DSNamesLB_ListWave)
 					changeDataSet(popStr)
 			endswitch
 			break
-		case "extFuncPopUp":
+		case "functionPopUp":
 			//external functions drop down menu selection
-			SVAR selectedCmd = NTF:selectedCmd
-			PopUpContextualMenu/C=(460,95)/N "ExternalFuncMenu"
+			Wave/T param = NPC:ExtFunc_Parameters
+			GetExternalFunctionData(param)
+			
+			BuildMenu "FunctionMenu"
+			
+			SVAR selectedCmd = NPC:selectedCmd
+			PopUpContextualMenu/C=(20,62)/W=NTP#Func/N "FunctionMenu"
 			
 			popStr = S_Selection
 			popNum = V_flag
@@ -700,11 +734,21 @@ Function HandleButtonClick(ba)
 			EndIf
 			
 			SwitchExternalFunction(popStr)
+			String func = GetFunctionFromTitle(popStr)
+			selectedCmd = func
 			
+			SVAR currentFunc = NPC:currentFunc
+			currentFunc = selectedCmd
 			break
-		case "goToProcButton": //opens the procedure window of the current external function
-			String func = "NT_" + CurrentExtFunc()
-			DisplayProcedure/W=NT_ExternalFunctions func
+		case "gotoFunc": //opens the procedure window of the current external function
+			func = CurrentExtFunc()
+			DisplayProcedure/W=NTP_ExternalFunctions func
+			break
+		case "funcNotes":
+			func = CurrentExtFunc()
+			String functionStr = ProcedureText(func,0)
+			String funcNote = GetFunctionNote(functionStr)
+			DisplayFunctionNote(func,funcNote)
 			break
 		case "measureType": //pop up menu for the Measure function 
 			PopUpContextualMenu/C=(487,125)/N "MeasureTypeMenu"
@@ -732,20 +776,20 @@ Function HandleButtonClick(ba)
 			setupMeasureControls(popStr)
 			
 			break
-		case "RunCmd":
+		case "runFunc":
 			RunCmd(selectedCmd)
 			break
 		case "scaleFactorUpdate":
 			NVAR scaleFactor = root:Packages:NT:Settings:scaleFactor
-			DoWindow/F/W=NT NT
+			DoWindow/F/W=NTP NT
 			Variable dpi = ScreenResolution
 			dpi = round(dpi * scaleFactor)
 			String cmdStr = "SetIgorOption PanelResolution = 72"
 			Execute cmdStr
 		case "Reload":
-			GetWindow NT wsize
-			KillWindow/Z NT
-			LoadNT(left=V_left,top=V_top)
+			GetWindow NTP wsize
+			KillWindow/Z NTP
+			LoadNeuroPlus()
 			
 			DoWindow SI
 			If(V_flag)
@@ -754,14 +798,14 @@ Function HandleButtonClick(ba)
 			EndIf
 			break
 		case "Back":
-			navigateBack()
+			folderBack()
 			break
 		case "NT_Settings":
-			openSettingsPanel()
+//			openSettingsPanel()
 			break
 		case "addDataSet":
 			//adds a new data set with the contents of the WaveMatch list box
-			SVAR dsNameInput = NTD:dsNameInput
+			SVAR dsNameInput = NPD:dsNameInput
 			dsNameInput = ""
 			
 			//Hide the update and delete data set controls
@@ -787,7 +831,7 @@ Function HandleButtonClick(ba)
 			break
 		case "delDataSet":
 			//Deletes a data set
-			Wave/T DSNamesLB_ListWave = NTD:DSNamesLB_ListWave
+			Wave/T DSNamesLB_ListWave = NPD:DSNamesLB_ListWave
 			
 			//No data sets exist to be deleted
 			If(DimSize(DSNamesLB_ListWave,0) == 0)
@@ -803,7 +847,7 @@ Function HandleButtonClick(ba)
 			break
 		case "updateDataSet":
 			//Updates the selected data set with the contents of the WaveMatch list box
-			Wave/T DSNamesLB_ListWave = NTD:DSNamesLB_ListWave
+			Wave/T DSNamesLB_ListWave = NPD:DSNamesLB_ListWave
 			
 			//No data sets exist to be deleted
 			If(DimSize(DSNamesLB_ListWave,0) == 0)
@@ -834,7 +878,7 @@ Function HandleButtonClick(ba)
 			
 //			break
 		case "ntViewerAutoScaleButton":
-			SetAxis/W=NT#ntViewerGraph/A
+			SetAxis/W=NTP#Nav#Viewer/A
 			break
 //		case "ntViewerSeparateVertButton":
 //			SeparateTraces("vert")
@@ -843,11 +887,11 @@ Function HandleButtonClick(ba)
 //			SeparateTraces("horiz")
 //			break
 		case "ntViewerDisplayTracesButton":
-			String theTraces = TraceNameList("NT#ntViewerGraph",";",1)
+			String theTraces = TraceNameList("NTP#Nav#Viewer",";",1)
 	
 			GetWindow/Z NT wsize
 			//Duplicates the Viewer graph outside of the viewer
-			String winRec = WinRecreation("NT#ntViewerGraph",0)
+			String winRec = WinRecreation("NTP#Nav#Viewer",0)
 			
 			Variable pos1 = strsearch(winRec,"/W",0)
 			Variable pos2 = strsearch(winRec,"/FG",0) - 1
@@ -859,8 +903,8 @@ Function HandleButtonClick(ba)
 			break
 		case "ntViewerClearTracesButton":
 			clearTraces()
-			NVAR areHorizSeparated = NTF:areHorizSeparated
-			NVAR areVertSeparated = NTF:areVertSeparated
+			NVAR areHorizSeparated = NPC:areHorizSeparated
+			NVAR areVertSeparated = NPC:areVertSeparated
 			areHorizSeparated = 0
 			areVertSeparated = 0
 			break
@@ -868,11 +912,11 @@ Function HandleButtonClick(ba)
 			//browse files on disk for wavesurfer loading
 			Variable fileID
 			
-			SVAR wsFilePath = NTF:wsFilePath
-			SVAR wsFileName = NTF:wsFileName
+			SVAR wsFilePath = NPC:wsFilePath
+			SVAR wsFileName = NPC:wsFileName
 			
 			//What file type are we opening?
-			ControlInfo/W=NT fileType
+			ControlInfo/W=NTP fileType
 			String fileType = S_Value
 			
 			BrowseEphys(fileType)
@@ -910,8 +954,8 @@ Function HandleButtonClick(ba)
 //					
 //					fileList = ReplaceString(".abf",fileList,"")
 //					
-//					Wave/T wsFileListWave = NTF:wsFileListWave
-//					Wave wsFileSelWave = NTF:wsFileSelWave
+//					Wave/T wsFileListWave = NPC:wsFileListWave
+//					Wave wsFileSelWave = NPC:wsFileSelWave
 //					
 //					Wave/T textWave = StringListToTextWave(fileList,";")
 //					Redimension/N=(DimSize(textWave,0) - 1) wsFileListWave,wsFileSelWave
@@ -937,8 +981,8 @@ Function HandleButtonClick(ba)
 			
 			break
 		case "copyToClipboard":
-			Wave/T savedNameTable = NTF:savedNameTable
-			ControlInfo/W=NT savedNames
+			Wave/T savedNameTable = NPC:savedNameTable
+			ControlInfo/W=NTP savedNames
 			
 			Variable index = tablematch(S_Value,savedNameTable)
 			
@@ -952,9 +996,9 @@ Function HandleButtonClick(ba)
 			PutScrapText str
 			break
 		case "editSaveNames":
-			Wave/T savedNameTable = NTF:savedNameTable
+			Wave/T savedNameTable = NPC:savedNameTable
 			If(!WaveExists(savedNameTable))
-				Make/N=(0,2)/T/O NTF:savedNameTable /Wave = savedNameTable
+				Make/N=(0,2)/T/O NPC:savedNameTable /Wave = savedNameTable
 			EndIf
 			
 			Edit savedNameTable
@@ -972,9 +1016,9 @@ Function ntSetVarProc(sva) : SetVariableControl
 	STRUCT WMSetVariableAction &sva
 	STRUCT filters filters
 	
-	DFREF NTF = root:Packages:NT
-	DFREF NTD = root:Packages:NT:DataSets
-	SVAR listFocus = NTF:listFocus
+	DFREF NPC = $CW
+	DFREF NPD = $DSF
+	SVAR listFocus = NPC:listFocus
 	
 	switch( sva.eventCode )
 		case 1: // mouse up
@@ -999,7 +1043,9 @@ Function ntSetVarProc(sva) : SetVariableControl
 				case "groupGroup":
 				case "seriesGroup":
 				case "sweepGroup":
-				case "traceGroup":					
+				case "traceGroup":	
+				case "pos6Group":
+				case "pos7Group":				
 					//Builds the match list according to all search terms, groupings, and filters
 					getWaveMatchList()
 					
@@ -1008,12 +1054,12 @@ Function ntSetVarProc(sva) : SetVariableControl
 					
 					break
 				case "dsNameInput":
-					SVAR dsNameInput = NTD:dsNameInput
+					SVAR dsNameInput = NPD:dsNameInput
 					dsNameInput = sval
 					break
 				case "cmdLineStr":
-					SVAR masterCmdLineStr = NTF:masterCmdLineStr
-					NVAR editingMasterCmdLineStr = NTF:editingMasterCmdLineStr
+					SVAR masterCmdLineStr = NPC:masterCmdLineStr
+					NVAR editingMasterCmdLineStr = NPC:editingMasterCmdLineStr
 					
 					//break if not in editing mode
 					If(editingMasterCmdLineStr == -1)
@@ -1039,6 +1085,15 @@ Function ntSetVarProc(sva) : SetVariableControl
 			break
 		case -1: // control being killed
 			break
+		case -3: //received keyboard focus (Igor 8 and above only)
+			strswitch(sva.ctrlName)
+				case "waveMatch":
+				case "waveNotMatch":
+				case "relativeFolderMatch":
+					changeFocus("WaveMatch",1)
+					break
+			endswitch
+			break
 	endswitch
 
 	return 0
@@ -1049,10 +1104,10 @@ End
 //Handles variable, string, and wave inputs to external function parameter inputs
 Function ntExtParamProc(sva) : SetVariableControl
 	STRUCT WMSetVariableAction &sva
-	DFREF NTF = root:Packages:NT
+	DFREF NPC = $CW
 	
 	//holds the parameters of the external functions
-	Wave/T param = NTF:ExtFunc_Parameters
+	Wave/T param = NPC:ExtFunc_Parameters
 	
 	switch( sva.eventCode )
 		case 1: // mouse up
@@ -1078,7 +1133,7 @@ Function ntExtParamProc(sva) : SetVariableControl
 					setParam("PARAM_" + num2str(paramIndex) + "_VALUE",func,sval)
 					//confirm validity of the wave reference
 					validWaveText("",0,deleteText=1)
-					ControlInfo/W=NT $sva.ctrlName
+					ControlInfo/W=NTP $sva.ctrlName
 					validWaveText(sval,V_top+13)
 					break
 			endswitch
@@ -1144,8 +1199,8 @@ Function ntExtParamPopProc(pa) : PopupMenuControl
 			String popStr = pa.popStr
 			
 			//Set the value of the external function parameter
-			DFREF NTF = root:Packages:NT
-			Wave/T param = NTF:ExtFunc_Parameters
+			DFREF NPC = $CW
+			Wave/T param = NPC:ExtFunc_Parameters
 			
 			String func = CurrentExtFunc()
 			Variable index = ExtFuncParamIndex(pa.ctrlName)
@@ -1165,10 +1220,10 @@ End
 Function ntCheckProc(ca) : CheckBoxControl
 	STRUCT WMCheckBoxAction &ca
 	
-	DFREF NTF = root:Packages:NT
+	DFREF NPC = $CW
 	
-	NVAR areHorizSeparated = NTF:areHorizSeparated
-	NVAR areVertSeparated = NTF:areVertSeparated
+	NVAR areHorizSeparated = NPC:areHorizSeparated
+	NVAR areVertSeparated = NPC:areVertSeparated
 	
 	switch( ca.eventCode )
 		case 2: // mouse up
@@ -1228,9 +1283,9 @@ End
 //Triggers the hook if the mouse is clicked on the vertical thick divider in the GUI
 Function MouseClickHooks(s)
 	STRUCT WMWinHookStruct &s
-	DFREF NTF = root:Packages:NT
+	DFREF NPC = $CW
 	DFREF NTS = root:Packages:NT:Settings
-	NVAR foldStatus = NTF:foldStatus
+	NVAR foldStatus = NPC:foldStatus
 	
 	NVAR hf = NTS:hf
 	
@@ -1248,108 +1303,111 @@ Function MouseClickHooks(s)
 			//handle mouse down
 			
 			//List box resizes and WaveMatch/DataSet List box positions
-			NVAR WM_Position = NTF:WM_Position
-			NVAR DSW_Position = NTF:DSW_Position
+//			NVAR WM_Position = NPC:WM_Position
+//			NVAR DSW_Position = NPC:DSW_Position
 			
 			
 			//Extract the current size of the parameter panel from here
 			//We'll need to shift the right-side mouse click area according to the selected command
-			Wave/T controlAssignments = NTF:controlAssignments
-			SVAR selectedCmd = NTF:selectedCmd
-			Variable index = tableMatch(selectedCmd,controlAssignments)
-			
-			If(index != -1) 
-				Variable rightEdge = str2num(controlAssignments[index][2])
-			Else
-				rightEdge = 210
-			EndIf
+//			Wave/T controlAssignments = NPC:controlAssignments
+//			SVAR selectedCmd = NPC:selectedCmd
+//			Variable index = tableMatch(selectedCmd,controlAssignments)
+//			
+//			If(index != -1) 
+//				Variable rightEdge = str2num(controlAssignments[index][2])
+//			Else
+//				rightEdge = 210
+//			EndIf
 			
 			//Check mouse position
-			GetMouse/W=NT
-			If(V_left > 442 && V_left < 454 && V_top <= 510*hf)
-				If(foldStatus)
-					closeParameterFold()
-					foldStatus = 0
-				Else
-					openParameterFold(size=rightEdge)
-					foldStatus = 1
-				EndIf
-				
-			//checks right boundary as well for when the panel is open
-			ElseIf(V_left > (448 + rightEdge-6) && V_left < (448 + rightEdge+6) && V_top <= 510*hf && foldStatus) 
-				closeParameterFold()
-				foldStatus = 0
-				
-			//mouse hook for toggling the listbox focus	
-			ElseIf(V_left > 0 && V_left < WM_Position && V_top > 99*hf && V_top < 123*hf) //Wave Match Click
-				changeFocus("WaveMatch",1)
-			ElseIf(V_left > WM_Position && V_left < DSW_Position + 83 && V_top > 99*hf && V_top < 123*hf) //Data Set Click
-				changeFocus("DataSet",1)
-			ElseIf(V_left < 58 && V_top > 469*hf && V_top < 486*hf)//Grouping Click
-				PopUpContextualMenu/C=(10,486*hf)/N "GroupingMenu"
-				
-				String popStr = S_Selection
-				Variable popNum = V_flag
-				
-				If(V_flag == 0 || V_flag == -1)
-					break
-				EndIf
-				
-				popStr = TrimString(StringFromList(0,popStr,"("))
-				
-				appendGroupSelection(popStr)
-			ElseIf(V_left < 446 && V_top > 505*hf && V_top < 515*hf)
-				NVAR viewerOpen = NTF:viewerOpen
 			
-				If(!viewerOpen) 
-					openViewer()
-					viewerOpen = 1
-					
-					//Set the Viewer hook
-					SetWindow NT, hook(viewerHook)=viewerHook
-				Else
-					closeViewer()
-					viewerOpen = 0
-					//Set the Viewer hook
-					SetWindow NT, hook(viewerHook)=$""
-				EndIf		
+//			If(V_left > 442 && V_left < 454 && V_top <= 510*hf)
+//				If(foldStatus)
+//					closeParameterFold()
+//					foldStatus = 0
+//				Else
+//					openParameterFold(size=rightEdge)
+//					foldStatus = 1
+//				EndIf
+//				
+//			//checks right boundary as well for when the panel is open
+//			ElseIf(V_left > (448 + rightEdge-6) && V_left < (448 + rightEdge+6) && V_top <= 510*hf && foldStatus) 
+//				closeParameterFold()
+//				foldStatus = 0
+//			
+
+			GetMouse/W=NTP#Data
+			
+			//mouse hook for toggling the listbox focus	
+			If(V_left > 10 && V_left < 235 && V_top > 130 && V_top < 160) //Wave Match Click
+				changeFocus("WaveMatch",1)
+			ElseIf(V_left > 245 && V_left < 470 && V_top > 130 && V_top < 160) //Data Set Click
+				changeFocus("DataSet",1)
+			ElseIf(V_left < 58 && V_top > 469 && V_top < 486)//Grouping Click
+//				PopUpContextualMenu/C=(10,486)/N "GroupingMenu"
+//				
+//				String popStr = S_Selection
+//				Variable popNum = V_flag
+//				
+//				If(V_flag == 0 || V_flag == -1)
+//					break
+//				EndIf
+//				
+//				popStr = TrimString(StringFromList(0,popStr,"("))
+//				
+//				appendGroupSelection(popStr)
+			ElseIf(V_left < 446 && V_top > 505 && V_top < 515)
+//				NVAR viewerOpen = NPC:viewerOpen
+//			
+//				If(!viewerOpen) 
+//					openViewer()
+//					viewerOpen = 1
+//					
+//					//Set the Viewer hook
+//					SetWindow NT, hook(viewerHook)=viewerHook
+//				Else
+//					closeViewer()
+//					viewerOpen = 0
+//					//Set the Viewer hook
+//					SetWindow NT, hook(viewerHook)=$""
+//				EndIf		
 			EndIf
 			
 			
 			//Resizing list boxes
-			NVAR WM_Resize = NTF:WM_Resize
-			NVAR DS_Resize = NTF:DS_Resize
-			NVAR Folders_Resize = NTF:Folders_Resize
-			NVAR Folders_Position = NTF:Folders_Position
-			
-			//Wave Match click
-			If(s.mouseLoc.h < WM_Position + 5 && s.mouseLoc.h > WM_Position - 5 && s.mouseLoc.v > 123 && s.mouseLoc.v <  452)
-				//Change the cursor to the left right drag icon
-				s.doSetCursor = 1
-				s.cursorCode = 5
-				
-				WM_Resize = (WM_Resize) ? 0:1	
-				hookResult = 1
-			EndIf
-			
-			//Folders list box hover
-			If(V_left > Folders_Position - 5 && V_left < Folders_Position + 5 && s.mouseLoc.v > 72)	
-				Folders_Resize = 1
-			Else
-				Folders_Resize = 0
-			EndIf
-	
-			break
+//			NVAR WM_Resize = NPC:WM_Resize
+//			NVAR DS_Resize = NPC:DS_Resize
+//			NVAR Folders_Resize = NPC:Folders_Resize
+//			NVAR Folders_Position = NPC:Folders_Position
+//			
+//			//Wave Match click
+//			If(s.mouseLoc.h < WM_Position + 5 && s.mouseLoc.h > WM_Position - 5 && s.mouseLoc.v > 123 && s.mouseLoc.v <  452)
+//				//Change the cursor to the left right drag icon
+//				s.doSetCursor = 1
+//				s.cursorCode = 5
+//				
+//				WM_Resize = (WM_Resize) ? 0:1	
+//				hookResult = 1
+//			EndIf
+//			
+//			//Folders list box hover
+//			If(V_left > Folders_Position - 5 && V_left < Folders_Position + 5 && s.mouseLoc.v > 72)	
+//				Folders_Resize = 1
+//			Else
+//				Folders_Resize = 0
+//			EndIf
+//	
+//			break
 			
 		case 4:
 			//mouse moved
-			NVAR WM_Position = NTF:WM_Position
-			NVAR DSW_Position = NTF:DSW_Position
-			NVAR WM_Resize = NTF:WM_Resize
-			NVAR DS_Resize = NTF:DS_Resize
-			NVAR Waves_Resize = NTF:Waves_Resize
-			NVAR Folders_Resize = NTF:Folders_Resize
-			NVAR Folders_Position = NTF:Folders_Position
+			NVAR WM_Position = NPC:WM_Position
+			NVAR DSW_Position = NPC:DSW_Position
+			NVAR WM_Resize = NPC:WM_Resize
+			NVAR DS_Resize = NPC:DS_Resize
+			NVAR Waves_Resize = NPC:Waves_Resize
+			NVAR Folders_Resize = NPC:Folders_Resize
+			NVAR Folders_Position = NPC:Folders_Position
 			NVAR hf =  NTS:hf
 			
 			//Wave Match Hover
@@ -1372,21 +1430,21 @@ Function MouseClickHooks(s)
 				
 				If(s.mouseLoc.h < 80 || s.mouseLoc.h > 260)
 					
-					ControlInfo/W=NT MatchListBox
+					ControlInfo/W=NTP MatchListBox
 					WM_Position = V_width + 6
 					break
 				EndIf
 				
-				ControlInfo/W=NT MatchListBox
+				ControlInfo/W=NTP MatchListBox
 				ListBox MatchListBox win=NT,size={s.mouseLoc.h - 6,V_height}
 				
-				ControlInfo/W=NT DataSetWavesListBox
+				ControlInfo/W=NTP DataSetWavesListBox
 				ListBox DataSetWavesListBox win=NT,pos={s.mouseLoc.h + 5,V_top},size={V_right - s.mouseLoc.h - 5,V_height}
 				
 				WM_Position = s.mouseLoc.h
 				
 				//move the focus box with it
-				SVAR listFocus = NTF:listFocus
+				SVAR listFocus = NPC:listFocus
 				strswitch(listFocus)
 					case "WaveMatch":
 						listFocus = "DataSet"
@@ -1403,10 +1461,10 @@ Function MouseClickHooks(s)
 				s.cursorCode = 5
 				
 				//Mouse position in navigator panel coordinates
-				GetMouse/W=NT#navigatorPanel
+				GetMouse/W=NTP#navigatorPanel
 				Variable mouseHor = V_left
 				
-				ControlInfo/W=NT#navigatorPanel folderListBox
+				ControlInfo/W=NTP#navigatorPanel folderListBox
 				Variable xExpand = mouseHor - V_right
 				
 				If(mouseHor < 60 || mouseHor > 220)
@@ -1417,7 +1475,7 @@ Function MouseClickHooks(s)
 				
 				Folders_Position += xExpand
 				 
-				ControlInfo/W=NT#navigatorPanel waveListBox
+				ControlInfo/W=NTP#navigatorPanel waveListBox
 				ListBox waveListBox win=NT#navigatorPanel,pos={V_left + xExpand,V_top},size={V_width - xExpand,V_height}	
 				
 			EndIf
@@ -1426,11 +1484,11 @@ Function MouseClickHooks(s)
 		case 5:
 			//mouse up
 			
-			NVAR WM_Position = NTF:WM_Position
-			NVAR DSW_Position = NTF:DSW_Position
-			NVAR WM_Resize = NTF:WM_Resize
-			NVAR DS_Resize = NTF:DS_Resize
-			NVAR Folders_Resize = NTF:Folders_Resize
+			NVAR WM_Position = NPC:WM_Position
+			NVAR DSW_Position = NPC:DSW_Position
+			NVAR WM_Resize = NPC:WM_Resize
+			NVAR DS_Resize = NPC:DS_Resize
+			NVAR Folders_Resize = NPC:Folders_Resize
 			
 			//Change the cursor to the left right drag icon
 			s.doSetCursor = 1
@@ -1443,7 +1501,7 @@ Function MouseClickHooks(s)
 				s.doSetCursor = 1
 				s.cursorCode = 0
 				
-				ControlInfo/W=NT MatchListBox
+				ControlInfo/W=NTP MatchListBox
 				WM_Position = V_width + 6
 				
 				WM_Resize = 0
@@ -1459,148 +1517,148 @@ End
 
 //Window hook for the Viewer
 //Handles trace selections and horizontal shifting
-Function viewerHook(s)
-	STRUCT WMWinHookStruct &s
-	DFREF NTF = root:Packages:NT
-	
-	SVAR selectedTrace = NTF:selectedTrace
-	SVAR selectedAxis = NTF:selectedAxis
-	
-	Variable hookResult = 0
-	Variable r = ScreenResolution / 72
-	
-	switch(s.eventCode)
-		case 0:
-			//handle activate
-			break
-		case 1: 
-			//handle deactivate
-			break
-		case 5:
-			//handle mouse up
-			GetMouse/W=NT
-			If(V_top > 515 && V_top < 515 + 300 - 25)
-				If(strlen(selectedTrace))
-					ModifyGraph/W=NT#ntViewerGraph lsize($selectedTrace)=1
-				EndIf
-				
-				String trace = TraceFromPixel(V_left,V_top,"WINDOW:NT#ntViewerGraph;DELTAX:3;DELTAY:3")
-				trace = StringByKey("TRACE",trace)
-				
-				If(strlen(trace))
-					selectedTrace = trace
-					String axis = TraceInfo("NT#ntViewerGraph",trace,0)
-					selectedAxis = StringByKey("/B",StringByKey("AXISFLAGS",axis),"=")
-					ModifyGraph/W=NT#ntViewerGraph lsize($trace)=2
-				Else
-					selectedTrace = ""
-					selectedAxis = ""
-				EndIf
-			EndIf
-			hookResult = 1
-			break
-		case 11:
-			//handle keyboard input
-			If(strlen(selectedTrace) && strlen(selectedAxis))
-				Variable axisNum = str2num(StringFromList(1,selectedAxis,"_"))	
-				String list = AxisList("NT#ntViewerGraph")
-				list = ListMatch(list,"bottom*",";")
-				
-				//wave ref for the trace we're moving
-				Wave selectedTraceWave = TraceNameToWaveRef("NT#ntViewerGraph",selectedTrace)
-				
-				If(!strlen(list))
-					break
-				EndIf
-					
-				switch(s.keyCode)
-					case 28: //left arrow	
-						String newAxis = ReplaceListItem(1,selectedAxis,"_",num2str(axisNum - 1))
-						//If we are on the first axis moving left, wrap around to the right side
-						If(WhichListItem(newAxis,list) == -1)
-							newAxis = StringFromList(ItemsInList(list,";")-1,list,";")
-							Variable isWrap = 1
-						Else
-							isWrap = 0
-						EndIf
-						
-						//trace that is currently on the axis we're moving to
-						String traceOnNewAxis = AxisInfo("NT#ntViewerGraph",newAxis)
-						traceOnNewAxis = StringByKey("CWAVE",traceOnNewAxis)
-						
-						//wave ref for the trace we're replacing
-						Wave traceOnNewAxisWave = TraceNameToWaveRef("NT#ntViewerGraph",traceOnNewAxis)
-				
-						//Flip the traces, requires reordering traces as they are added/removed			
-						ReplaceWave/W=NT#ntViewerGraph trace=$traceOnNewAxis,selectedTraceWave
-						
-						AppendToGraph/W=NT#ntViewerGraph/B=$selectedAxis traceOnNewAxisWave
-						
-						If(isWrap)
-							ReorderTraces/W=NT#ntViewerGraph _front_,{$selectedTrace}
-							ReorderTraces/W=NT#ntViewerGraph _back_,{$traceOnNewAxis}
-						Else
-							ReorderTraces/W=NT#ntViewerGraph $selectedTrace,{$selectedTrace,$traceOnNewAxis}					
-						EndIf
-						
-						RemoveFromGraph	/W=NT#ntViewerGraph $(selectedTrace + "#1")					
-
-						//Bolden line to indicate selected trace
-						ModifyGraph/W=NT#ntViewerGraph lsize($selectedTrace)=2
-						
-						//Change selected axis
-						selectedAxis = newAxis				
-						break
-					case 29: //right arrow
-						newAxis = ReplaceListItem(1,selectedAxis,"_",num2str(axisNum + 1))
-						//If we are on the last axis moving right, wrap around to the left side
-						If(WhichListItem(newAxis,list) == -1)
-							newAxis = StringFromList(0,list,";")
-							isWrap = 1
-						Else
-							isWrap = 0
-						EndIf
-						
-						//trace that is currently on the axis we're moving to
-						traceOnNewAxis = AxisInfo("NT#ntViewerGraph",newAxis)
-						traceOnNewAxis = StringByKey("CWAVE",traceOnNewAxis)
-						
-						//wave ref for the trace we're replacing
-						Wave traceOnNewAxisWave = TraceNameToWaveRef("NT#ntViewerGraph",traceOnNewAxis)
-					
-						//Flip the traces, requires reordering traces as they are added/removed						
-						ReplaceWave/W=NT#ntViewerGraph trace=$traceOnNewAxis,selectedTraceWave
-						AppendToGraph/W=NT#ntViewerGraph/B=$selectedAxis traceOnNewAxisWave	 
-												
-						If(isWrap)
-							RemoveFromGraph	/W=NT#ntViewerGraph $(selectedTrace + "#1")
-						Else
-							ReorderTraces/W=NT#ntViewerGraph $selectedTrace,{$traceOnNewAxis,$selectedTrace}
-							RemoveFromGraph	/W=NT#ntViewerGraph $selectedTrace
-						EndIf
-						
-						//Bolden line to indicate selected trace
-						ModifyGraph/W=NT#ntViewerGraph lsize($selectedTrace)=2
-						
-						//Change selected axis
-						selectedAxis = newAxis	
-						break
-				endswitch
-				
-			EndIf
-			hookResult = 1
-			break
-	endswitch
-	return hookResult
-End
+//Function viewerHook(s)
+//	STRUCT WMWinHookStruct &s
+//	DFREF NPC = $CW
+//	
+//	SVAR selectedTrace = NPC:selectedTrace
+//	SVAR selectedAxis = NPC:selectedAxis
+//	
+//	Variable hookResult = 0
+//	Variable r = ScreenResolution / 72
+//	
+//	switch(s.eventCode)
+//		case 0:
+//			//handle activate
+//			break
+//		case 1: 
+//			//handle deactivate
+//			break
+//		case 5:
+//			//handle mouse up
+//			GetMouse/W=NTP
+//			If(V_top > 515 && V_top < 515 + 300 - 25)
+//				If(strlen(selectedTrace))
+//					ModifyGraph/W=NTP#Nav#Viewer lsize($selectedTrace)=1
+//				EndIf
+//				
+//				String trace = TraceFromPixel(V_left,V_top,"WINDOW:NTP#Nav#Viewer;DELTAX:3;DELTAY:3")
+//				trace = StringByKey("TRACE",trace)
+//				
+//				If(strlen(trace))
+//					selectedTrace = trace
+//					String axis = TraceInfo("NTP#Nav#Viewer",trace,0)
+//					selectedAxis = StringByKey("/B",StringByKey("AXISFLAGS",axis),"=")
+//					ModifyGraph/W=NTP#Nav#Viewer lsize($trace)=2
+//				Else
+//					selectedTrace = ""
+//					selectedAxis = ""
+//				EndIf
+//			EndIf
+//			hookResult = 1
+//			break
+//		case 11:
+//			//handle keyboard input
+//			If(strlen(selectedTrace) && strlen(selectedAxis))
+//				Variable axisNum = str2num(StringFromList(1,selectedAxis,"_"))	
+//				String list = AxisList("NTP#Nav#Viewer")
+//				list = ListMatch(list,"bottom*",";")
+//				
+//				//wave ref for the trace we're moving
+//				Wave selectedTraceWave = TraceNameToWaveRef("NTP#Nav#Viewer",selectedTrace)
+//				
+//				If(!strlen(list))
+//					break
+//				EndIf
+//					
+//				switch(s.keyCode)
+//					case 28: //left arrow	
+//						String newAxis = ReplaceListItem(1,selectedAxis,"_",num2str(axisNum - 1))
+//						//If we are on the first axis moving left, wrap around to the right side
+//						If(WhichListItem(newAxis,list) == -1)
+//							newAxis = StringFromList(ItemsInList(list,";")-1,list,";")
+//							Variable isWrap = 1
+//						Else
+//							isWrap = 0
+//						EndIf
+//						
+//						//trace that is currently on the axis we're moving to
+//						String traceOnNewAxis = AxisInfo("NTP#Nav#Viewer",newAxis)
+//						traceOnNewAxis = StringByKey("CWAVE",traceOnNewAxis)
+//						
+//						//wave ref for the trace we're replacing
+//						Wave traceOnNewAxisWave = TraceNameToWaveRef("NTP#Nav#Viewer",traceOnNewAxis)
+//				
+//						//Flip the traces, requires reordering traces as they are added/removed			
+//						ReplaceWave/W=NTP#Nav#Viewer trace=$traceOnNewAxis,selectedTraceWave
+//						
+//						AppendToGraph/W=NTP#Nav#Viewer/B=$selectedAxis traceOnNewAxisWave
+//						
+//						If(isWrap)
+//							ReorderTraces/W=NTP#Nav#Viewer _front_,{$selectedTrace}
+//							ReorderTraces/W=NTP#Nav#Viewer _back_,{$traceOnNewAxis}
+//						Else
+//							ReorderTraces/W=NTP#Nav#Viewer $selectedTrace,{$selectedTrace,$traceOnNewAxis}					
+//						EndIf
+//						
+//						RemoveFromGraph	/W=NTP#Nav#Viewer $(selectedTrace + "#1")					
+//
+//						//Bolden line to indicate selected trace
+//						ModifyGraph/W=NTP#Nav#Viewer lsize($selectedTrace)=2
+//						
+//						//Change selected axis
+//						selectedAxis = newAxis				
+//						break
+//					case 29: //right arrow
+//						newAxis = ReplaceListItem(1,selectedAxis,"_",num2str(axisNum + 1))
+//						//If we are on the last axis moving right, wrap around to the left side
+//						If(WhichListItem(newAxis,list) == -1)
+//							newAxis = StringFromList(0,list,";")
+//							isWrap = 1
+//						Else
+//							isWrap = 0
+//						EndIf
+//						
+//						//trace that is currently on the axis we're moving to
+//						traceOnNewAxis = AxisInfo("NTP#Nav#Viewer",newAxis)
+//						traceOnNewAxis = StringByKey("CWAVE",traceOnNewAxis)
+//						
+//						//wave ref for the trace we're replacing
+//						Wave traceOnNewAxisWave = TraceNameToWaveRef("NTP#Nav#Viewer",traceOnNewAxis)
+//					
+//						//Flip the traces, requires reordering traces as they are added/removed						
+//						ReplaceWave/W=NTP#Nav#Viewer trace=$traceOnNewAxis,selectedTraceWave
+//						AppendToGraph/W=NTP#Nav#Viewer/B=$selectedAxis traceOnNewAxisWave	 
+//												
+//						If(isWrap)
+//							RemoveFromGraph	/W=NTP#Nav#Viewer $(selectedTrace + "#1")
+//						Else
+//							ReorderTraces/W=NTP#Nav#Viewer $selectedTrace,{$traceOnNewAxis,$selectedTrace}
+//							RemoveFromGraph	/W=NTP#Nav#Viewer $selectedTrace
+//						EndIf
+//						
+//						//Bolden line to indicate selected trace
+//						ModifyGraph/W=NTP#Nav#Viewer lsize($selectedTrace)=2
+//						
+//						//Change selected axis
+//						selectedAxis = newAxis	
+//						break
+//				endswitch
+//				
+//			EndIf
+//			hookResult = 1
+//			break
+//	endswitch
+//	return hookResult
+//End
 
 //Opens the parameter infold opening
 Function openParameterFold([size])
 	Variable size
 	
-	DFREF NTF =  root:Packages:NT:
-	SVAR listFocus = NTF:listFocus
-	NVAR Folders_Position = NTF:Folders_Position
+	DFREF NPC =  root:Packages:NT:
+	SVAR listFocus = NPC:listFocus
+	NVAR Folders_Position = NPC:Folders_Position
 	NVAR ppr = root:Packages:NT:Settings:ppr//pixel shift per refresh; can adjust Settings panel
 	
 	If(ParamIsDefault(size))
@@ -1615,15 +1673,15 @@ Function openParameterFold([size])
 	GroupBox parameterBox win=NT,pos={455,69},size={size-13,437}
 	
 	//shift text label
-	SetDrawEnv/W=NT  fstyle= 0
-	DrawAction/W=NT delete,getgroup=parameterText
-	SetDrawEnv/W=NT xcoord= abs,ycoord= abs, fsize=14, textrgb= (0,0,0), textxjust= 1,textyjust= 1,fname=$LIGHT,gstart,gname=parameterText
-	DrawText/W=NT 455+(size/2)-6,15,"Parameters"
-	SetDrawEnv/W=NT gstop
+	SetDrawEnv/W=NTP  fstyle= 0
+	DrawAction/W=NTP delete,getgroup=parameterText
+	SetDrawEnv/W=NTP xcoord= abs,ycoord= abs, fsize=14, textrgb= (0,0,0), textxjust= 1,textyjust= 1,fname=$LIGHT,gstart,gname=parameterText
+	DrawText/W=NTP 455+(size/2)-6,15,"Parameters"
+	SetDrawEnv/W=NTP gstop
 	
 	//Draw the help message
-	SVAR selectedCmd = NTF:selectedCmd	
-	switchHelpMessage(selectedCmd)
+	SVAR selectedCmd = NPC:selectedCmd	
+//	switchHelpMessage(selectedCmd)
 	
 	Variable r = ScreenResolution/72
 	Variable delta = ppr/r
@@ -1638,32 +1696,32 @@ Function openParameterFold([size])
 		Variable expansion = (right*r - left*r) - 754 //current expansion relative to original width of the panel
 		
 		If(expansion >= size)
-			ControlInfo/W=NT#navigatorPanel folderListBox
+			ControlInfo/W=NTP#navigatorPanel folderListBox
 			Folders_Position = 460 + V_width + size
 			break
 		EndIf
 		
 		Variable pixelsLeft = size - expansion
 		If(pixelsLeft < ppr)
-			MoveWindow/W=NT left,top,right+(pixelsLeft/r),bottom;DelayUpdate
+			MoveWindow/W=NTP left,top,right+(pixelsLeft/r),bottom;DelayUpdate
 			Variable shift = size
 		Else
 			//Extend right edge of the panel to make room
-			MoveWindow/W=NT left,top,right+delta,bottom;DelayUpdate
+			MoveWindow/W=NTP left,top,right+delta,bottom;DelayUpdate
 			shift = expansion + delta
 		EndIf
 				
 		//Shift the right line
-		SetDrawEnv/W=NT  fstyle= 0
-		DrawAction/W=NT delete,getgroup=rightLine
-		SetDrawEnv/W=NT xcoord= abs,ycoord= abs,linefgc= (0,0,0,16384),linethick= 4,gname=rightLine,gstart
-		DrawLine/W=NT 448 + shift,0, 448 + shift,515;DelayUpdate
-		SetDrawEnv/W=NT gstop
+		SetDrawEnv/W=NTP  fstyle= 0
+		DrawAction/W=NTP delete,getgroup=rightLine
+		SetDrawEnv/W=NTP xcoord= abs,ycoord= abs,linefgc= (0,0,0,16384),linethick= 4,gname=rightLine,gstart
+		DrawLine/W=NTP 448 + shift,0, 448 + shift,515;DelayUpdate
+		SetDrawEnv/W=NTP gstop
 		
-		DoUpdate/W=NT
+		DoUpdate/W=NTP
 	While(expansion <= size)
 	
-	SVAR loadedPackages = NTF:loadedPackages
+	SVAR loadedPackages = NPC:loadedPackages
 	
 	//Special case enabling and disabling
 	strswitch(selectedCmd)
@@ -1711,11 +1769,11 @@ End
 //Closes the parameter infold
 Function closeParameterFold([size])
 	Variable size
-	DFREF NTF =  root:Packages:NT:
+	DFREF NPC =  root:Packages:NT:
 	
 	NVAR ppr = root:Packages:NT:Settings:ppr //pixel shift per refresh; can adjust in Settings panel
-	NVAR Folders_Position = NTF:Folders_Position
-	SVAR selectedCmd = NTF:selectedCmd	
+	NVAR Folders_Position = NPC:Folders_Position
+	SVAR selectedCmd = NPC:selectedCmd	
 	
 	Variable r = ScreenResolution/72
 	Variable delta = ppr/r
@@ -1733,11 +1791,11 @@ Function closeParameterFold([size])
 		ListBox scanLoadListbox, win=NT,disable=3
 	Else
 		//shift text label if there is a non-zero size
-		SetDrawEnv/W=NT  fstyle= 0
-		DrawAction/W=NT delete,getgroup=parameterText
-		SetDrawEnv/W=NT xcoord= abs,ycoord= abs, textrgb= (0,0,0), fsize=14, textxjust= 1,textyjust= 1,fname=$LIGHT,gstart,gname=parameterText
-		DrawText/W=NT 455+(size/2)-6,15,"Parameters"
-		SetDrawEnv/W=NT gstop	
+		SetDrawEnv/W=NTP  fstyle= 0
+		DrawAction/W=NTP delete,getgroup=parameterText
+		SetDrawEnv/W=NTP xcoord= abs,ycoord= abs, textrgb= (0,0,0), fsize=14, textxjust= 1,textyjust= 1,fname=$LIGHT,gstart,gname=parameterText
+		DrawText/W=NTP 455+(size/2)-6,15,"Parameters"
+		SetDrawEnv/W=NTP gstop	
 	EndIf
 	
 	//hide the list selector menu unless the command is 'Run Cmd Line', in which case it is hidden
@@ -1760,7 +1818,7 @@ Function closeParameterFold([size])
 	endswitch
 	
 	//Erase the help message
-	switchHelpMessage("")
+//	switchHelpMessage("")
 	
 	
 	Variable i = 0
@@ -1777,35 +1835,35 @@ Function closeParameterFold([size])
 		EndIf
 		
 		If(expansion <= size)
-			ControlInfo/W=NT#navigatorPanel folderListBox
+			ControlInfo/W=NTP#navigatorPanel folderListBox
 			Folders_Position = 460 + V_width + size
 			break
 		EndIf
 		
 		Variable pixelsLeft = expansion - size
 		If(pixelsLeft < ppr)
-			MoveWindow/W=NT left,top,right-(pixelsLeft/r),bottom;DelayUpdate
+			MoveWindow/W=NTP left,top,right-(pixelsLeft/r),bottom;DelayUpdate
 			Variable shift = size
 		Else
 			//Extend right edge of the panel to make room
-			MoveWindow/W=NT left,top,right-delta,bottom;DelayUpdate
+			MoveWindow/W=NTP left,top,right-delta,bottom;DelayUpdate
 			shift = expansion - delta
 		EndIf
 
 		//Shift the right line
-		SetDrawEnv/W=NT  fstyle= 0
-		DrawAction/W=NT delete,getgroup=rightLine
-		SetDrawEnv/W=NT xcoord= abs,ycoord= rel,textxjust= 1,textyjust= 1,linefgc= (0,0,0,16384),linethick= 4,gname=rightLine,gstart
-		DrawLine/W=NT 448 + shift,0, 448 + shift,1;DelayUpdate
-		SetDrawEnv/W=NT gstop,textxjust= 1,textyjust= 1
+		SetDrawEnv/W=NTP  fstyle= 0
+		DrawAction/W=NTP delete,getgroup=rightLine
+		SetDrawEnv/W=NTP xcoord= abs,ycoord= rel,textxjust= 1,textyjust= 1,linefgc= (0,0,0,16384),linethick= 4,gname=rightLine,gstart
+		DrawLine/W=NTP 448 + shift,0, 448 + shift,1;DelayUpdate
+		SetDrawEnv/W=NTP gstop,textxjust= 1,textyjust= 1
 
-		DoUpdate/W=NT
+		DoUpdate/W=NTP
 		i += 1
 	While(expansion > size )
 	
 	//delete midline after animation
 	If(!size)
-		DrawAction/W=NT delete,getgroup=rightLine
+		DrawAction/W=NTP delete,getgroup=rightLine
 	EndIf
 	
 	//expand group box first
@@ -1819,8 +1877,8 @@ End
 // and selectively delete and edit entries
 Function cmdLineEntryHook(s)
 	STRUCT WMWinHookStruct &s
-	DFREF NTF = root:Packages:NT
-	NVAR foldStatus = NTF:foldStatus
+	DFREF NPC = $CW
+	NVAR foldStatus = NPC:foldStatus
 	
 	Variable hookResult = 0
 	
@@ -1833,18 +1891,18 @@ Function cmdLineEntryHook(s)
 			break
 		case 3:
 			//handle mouse down
-			SVAR masterCmdLineStr = NTF:masterCmdLineStr
+			SVAR masterCmdLineStr = NPC:masterCmdLineStr
 
 			If(s.eventMod == 16 || s.eventMod == 17) //right click
 				Variable numEntries = ItemsInList(masterCmdLineStr,";/;")
-				GetMouse/W=NT
+				GetMouse/W=NTP
 				
 				Variable selection = whichCmdLineEntry(V_left,V_top,numEntries)
 				
 				//NaN, no valid selection
 				If(numtype(selection) == 2)
 					//Reset selection drawing
-					DrawAction/W=NT getgroup=cmdEntrySelection,delete
+					DrawAction/W=NTP getgroup=cmdEntrySelection,delete
 					return 0
 				EndIf
 				
@@ -1861,7 +1919,7 @@ Function cmdLineEntryHook(s)
 				//If the selection was a break line in the menu
 				If(cmpstr(popStr[0],"-") == 0)
 					//Reset selection drawing
-					DrawAction/W=NT getgroup=cmdEntrySelection,delete
+					DrawAction/W=NTP getgroup=cmdEntrySelection,delete
 					return 0
 				EndIf
 				
@@ -1875,7 +1933,7 @@ Function cmdLineEntryHook(s)
 				endswitch
 				
 				//Reset selection drawing
-				DrawAction/W=NT getgroup=cmdEntrySelection,delete
+				DrawAction/W=NTP getgroup=cmdEntrySelection,delete
 	
 				hookResult = 1
 			EndIf
@@ -1893,62 +1951,62 @@ Function whichCmdLineEntry(left,top,num)
 	Variable yPos = 144
 	
 	//Reset selection drawing
-	DrawAction/W=NT getgroup=cmdEntrySelection,delete
+	DrawAction/W=NTP getgroup=cmdEntrySelection,delete
 	
 	If(left > 455 && left < 624) 
 		If(top > yPos && top < yPos + 20 && num > 0)
 			SetDrawEnv linefgc= (3,52428,1),linethick= 3.00,xcoord=abs,ycoord=abs,gname=cmdEntrySelection,gstart
-			DrawLine/W=NT 458,yPos,458,yPos+20
+			DrawLine/W=NTP 458,yPos,458,yPos+20
 			SetDrawEnv gstop
 			return 0
 		ElseIf(top > yPos + 20 && top < yPos + 40 && num > 1)
 			SetDrawEnv linefgc= (3,52428,1),linethick= 3.00,xcoord=abs,ycoord=abs,gname=cmdEntrySelection,gstart
-			DrawLine/W=NT 458,yPos+20,458,yPos+40
+			DrawLine/W=NTP 458,yPos+20,458,yPos+40
 			SetDrawEnv gstop
 			return 1
 		ElseIf(top > yPos + 40 && top < yPos + 60 && num > 2)
 			SetDrawEnv linefgc= (3,52428,1),linethick= 3.00,xcoord=abs,ycoord=abs,gname=cmdEntrySelection,gstart
-			DrawLine/W=NT 458,yPos+40,458,yPos+60
+			DrawLine/W=NTP 458,yPos+40,458,yPos+60
 			SetDrawEnv gstop
 			return 2
 		ElseIf(top > yPos + 60 && top < yPos + 80 && num > 3)
 			SetDrawEnv linefgc= (3,52428,1),linethick= 3.00,xcoord=abs,ycoord=abs,gname=cmdEntrySelection,gstart
-			DrawLine/W=NT 458,yPos+60,458,yPos+80
+			DrawLine/W=NTP 458,yPos+60,458,yPos+80
 			SetDrawEnv gstop
 			return 3
 		ElseIf(top > yPos + 80 && top < yPos + 100 && num > 4)
 			SetDrawEnv linefgc= (3,52428,1),linethick= 3.00,xcoord=abs,ycoord=abs,gname=cmdEntrySelection,gstart
-			DrawLine/W=NT 458,yPos+80,458,yPos+100
+			DrawLine/W=NTP 458,yPos+80,458,yPos+100
 			SetDrawEnv gstop
 			return 4
 		ElseIf(top > yPos + 100 && top < yPos + 120 && num > 5)
 			SetDrawEnv linefgc= (3,52428,1),linethick= 3.00,xcoord=abs,ycoord=abs,gname=cmdEntrySelection,gstart
-			DrawLine/W=NT 458,yPos+100,458,yPos+120
+			DrawLine/W=NTP 458,yPos+100,458,yPos+120
 			SetDrawEnv gstop
 			return 5
 		ElseIf(top > yPos + 120 && top < yPos + 140 && num > 6)
 			SetDrawEnv linefgc= (3,52428,1),linethick= 3.00,xcoord=abs,ycoord=abs,gname=cmdEntrySelection,gstart
-			DrawLine/W=NT 458,yPos+120,458,yPos+140
+			DrawLine/W=NTP 458,yPos+120,458,yPos+140
 			SetDrawEnv gstop
 			return 6
 		ElseIf(top > yPos + 140 && top < yPos + 160 && num > 7)
 			SetDrawEnv linefgc= (3,52428,1),linethick= 3.00,xcoord=abs,ycoord=abs,gname=cmdEntrySelection,gstart
-			DrawLine/W=NT 458,yPos+140,458,yPos+160
+			DrawLine/W=NTP 458,yPos+140,458,yPos+160
 			SetDrawEnv gstop
 			return 7
 		ElseIf(top > yPos + 160 && top < yPos + 180 && num > 8)
 			SetDrawEnv linefgc= (3,52428,1),linethick= 3.00,xcoord=abs,ycoord=abs,gname=cmdEntrySelection,gstart
-			DrawLine/W=NT 458,yPos+160,458,yPos+180
+			DrawLine/W=NTP 458,yPos+160,458,yPos+180
 			SetDrawEnv gstop
 			return 8
 		ElseIf(top > yPos + 180 && top < yPos + 200 && num > 9)
 			SetDrawEnv linefgc= (3,52428,1),linethick= 3.00,xcoord=abs,ycoord=abs,gname=cmdEntrySelection,gstart
-			DrawLine/W=NT 458,yPos+180,458,yPos+200
+			DrawLine/W=NTP 458,yPos+180,458,yPos+200
 			SetDrawEnv gstop
 			return 9
 		ElseIf(top > yPos + 200 && top < yPos + 220 && num > 10)
 			SetDrawEnv linefgc= (3,52428,1),linethick= 3.00,xcoord=abs,ycoord=abs,gname=cmdEntrySelection,gstart
-			DrawLine/W=NT 458,yPos+200,458,yPos+220
+			DrawLine/W=NTP 458,yPos+200,458,yPos+220
 			SetDrawEnv gstop
 			return 10
 		EndIf
@@ -1959,8 +2017,8 @@ End
 Function DeleteCmdLineEntry(selection)
 	Variable selection
 	
-	DFREF NTF = root:Packages:NT
-	SVAR masterCmdLineStr = NTF:masterCmdLineStr
+	DFREF NPC = $CW
+	SVAR masterCmdLineStr = NPC:masterCmdLineStr
 	
 	masterCmdLineStr = RemoveListItem(selection,masterCmdLineStr,";/;")
 	DrawMasterCmdLineEntry()
@@ -1969,9 +2027,9 @@ End
 Function EditCmdLineEntry(selection)
 	Variable selection
 	
-	DFREF NTF = root:Packages:NT
-	SVAR masterCmdLineStr = NTF:masterCmdLineStr
-	NVAR editingMasterCmdLineStr = NTF:editingMasterCmdLineStr
+	DFREF NPC = $CW
+	SVAR masterCmdLineStr = NPC:masterCmdLineStr
+	NVAR editingMasterCmdLineStr = NPC:editingMasterCmdLineStr
 	
 	//Pull the entry into the editing box
 	SetVariable cmdLineStr win=NT,value=_STR:StringFromList(selection,masterCmdLineStr,";/;"),activate
@@ -1982,23 +2040,84 @@ Function EditCmdLineEntry(selection)
 End
 
 
+Function SendNotificationTask(s)		// This is the function that will be called periodically
+	STRUCT WMBackgroundStruct &s
+	DFREF NPC = $CW
+	
+	NVAR maxNotificationSize = NPC:maxNotificationSize
+	SVAR notificationEntry = NPC:notificationEntry
+	NVAR funcPanelWidth = NPC:funcPanelWidth
+	NVAR screenBottom = NPC:screenBottom
+	NVAR notificationSize = NPC:notificationSize
+	notificationSize += 20
+	
+	If(notificationSize > 1000)
+		//end the notification after some additional time
+		StopNotificationTask()
+		
+	ElseIf(notificationSize < maxNotificationSize)
+		//Animate the notification box
+		GroupBox notificationBox win=NTP#Func,align=1,size={notificationSize,50}
+	Else
+		//after reaching a certain size (maxNotificationSize), the text pops up in the notification box
+		DrawAction/W=NTP#Func getgroup=notificationText,delete
+		SetDrawEnv/W=NTP#Func gname=notificationText,gstart
+		SetDrawEnv/W=NTP#Func xcoord= abs,ycoord= abs, fsize=16, textxjust= 0,textyjust= 1,fname="Helvetica Light"
+		DrawText/W=NTP#Func funcPanelWidth - maxNotificationSize + 50,screenBottom-35,notificationEntry
+		SetDrawEnv/W=NTP#Func gstop
+	EndIf
+	
+	return 0	// Continue background task
+End
+
+Function SendNotification([maxSize])
+	Variable maxSize //max width of the notification box to accomodate longer text
+	
+	DFREF NPC = $CW
+	Variable/G NPC:maxNotificationSize
+	NVAR maxNotificationSize = NPC:maxNotificationSize
+	
+	maxNotificationSize = (ParamIsDefault(maxSize)) ? 300 : maxSize
+	
+	Variable/G NPC:notificationSize
+	NVAR notificationSize = NPC:notificationSize
+	notificationSize = 0
+	
+	NVAR funcPanelWidth = NPC:funcPanelWidth
+	NVAR screenBottom = NPC:screenBottom
+	
+	//Initialize the notifiaction
+	GroupBox notificationBox win=NTP#Func,pos={funcPanelWidth - 10,screenBottom-60},align=1,size={notificationSize,50},disable=0,labelBack=(0,0xb000,0,0x4000)
+	
+	Variable numTicks = 1		// Run every two seconds (120 ticks)
+	CtrlNamedBackground sendNotification, period=numTicks, proc=SendNotificationTask
+	CtrlNamedBackground sendNotification, start
+End
+
+Function StopNotificationTask()
+	CtrlNamedBackground sendNotification, stop
+	DrawAction/W=NTP#Func getgroup=notificationText,delete
+	KillControl/W=NTP#Func notificationBox
+End
+
+
 //SHORTCUTS-----------------------------------------------------------
 
 //Function/S handleShortcut()
-	DFREF NTF = root:Packages:NT
-	DFREF NTD = root:Packages:NT:DataSets
+	DFREF NPC = $CW
+	DFREF NPD = $DSF
 	
 	//Get the activated shortcut
 	GetLastUserMenuInfo
 	
-	Wave/T shortCuts = NTF:shortCuts
-	SVAR selectedCmd = NTF:selectedCmd
-	SVAR prevCmd = NTF:prevCmd
+	Wave/T shortCuts = NPC:shortCuts
+	SVAR selectedCmd = NPC:selectedCmd
+	SVAR prevCmd = NPC:prevCmd
 	
 	String theFunction = shortCuts[str2num(S_Value)-1][1]
 	
 	//Make sure we're in the function tab
-	NVAR currentTab = NTF:currentTab
+	NVAR currentTab = NPC:currentTab
 	
 	//special case for Data Sets, need a tab switch, not a function switch
 	If(!cmpstr(theFunction,"Data Sets"))
@@ -2015,7 +2134,7 @@ End
 	EndIf
 	
 	//kill previous text in the panel
-	DrawAction/W=NTF delete
+	DrawAction/W=NPC delete
 	
 	prevCmd = selectedCmd
 	selectedCmd = theFunction
@@ -2036,19 +2155,19 @@ End
 			case "Kill Waves":
 			case "Run Cmd Line":
 			case "Duplicate Rename":
-				Wave/T DSNamesLB_ListWave = NTF:DSNamesLB_ListWave
-				SVAR DSNames = NTD:DSNames
+				Wave/T DSNamesLB_ListWave = NPC:DSNamesLB_ListWave
+				SVAR DSNames = NPD:DSNames
 				DSNames = "--None--;--Scan List--;--Item List--;" + textWaveToStringList(DSNamesLB_ListWave,";")		
 				break
 		endswitch
 	EndIf
 	
 	Button AT_CommandPop win=analysis_tools,title = "\\JL▼    " + selectedCmd
-	DrawText/W=NT 15,53,"Commands:"
-	ControlInfo/W=NT CommandMenu
+	DrawText/W=NTP 15,53,"Commands:"
+	ControlInfo/W=NTP CommandMenu
 						
 	If(!cmpstr(selectedCmd,"External Function"))
-		DrawText/W=NT 23,84,"Functions:"
+		DrawText/W=NTP 23,84,"Functions:"
 	EndIf
 
 End

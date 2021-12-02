@@ -1,9 +1,9 @@
 #pragma TextEncoding = "MacRoman"
 #pragma rtGlobals=3		// Use modern global access method and strict wave access.
 
-Menu "Data"
-	"Load ABF2", /Q, InitializeABFPanel()
-End
+//Menu "Data"
+//	"Load ABF2", /Q, InitializeABFPanel()
+//End
 
 Function InitializeABFPanel()
 	DoWindow ABF2_Loader
@@ -17,12 +17,12 @@ Function Build_ABF2_Loader()
 	If(!DataFolderExists("root:ABFvar"))
 		NewDataFolder root:ABFvar
 	EndIf
-	String/G root:ABFvar:ABF_folderpath
-	String/G root:ABFvar:ABF_filename
-	String/G root:ABFvar:ABF_lines
-	SVAR ABF_folderpath = root:ABFvar:ABF_folderpath
-	SVAR ABF_filename = root:ABFvar:ABF_filename	
-	SVAR ABF_lines = root:ABFvar:ABF_lines
+	String/G root:Packages:NeuroToolsPlus:ABFvar:ABF_folderpath
+	String/G root:Packages:NeuroToolsPlus:ABFvar:ABF_filename
+	String/G root:Packages:NeuroToolsPlus:ABFvar:ABF_lines
+	SVAR ABF_folderpath = root:Packages:NeuroToolsPlus:ABFvar:ABF_folderpath
+	SVAR ABF_filename = root:Packages:NeuroToolsPlus:ABFvar:ABF_filename	
+	SVAR ABF_lines = root:Packages:NeuroToolsPlus:ABFvar:ABF_lines
 	ABF_lines = "0"
 	
 	// Create the table folder
@@ -47,9 +47,9 @@ Function Build_ABF2_Loader()
 	If(!V_flag)
 		NewPanel/K=1/N=ABF2Loader/W=(0,0,380,100) as "ABF2 Loader"
 		ModifyPanel/W=ABF2Loader fixedsize=1
-		SetVariable ABF_folderpath win=ABF2Loader,pos={10,10},size={320,20},title="Path:",value=root:ABFvar:ABF_folderpath
-		SetVariable ABF_filename win=ABF2Loader,pos={10,30},size={150,20},title="File:",value=root:ABFvar:ABF_filename
-		SetVariable ABF_TableLines win=ABF2Loader,pos={10,50},size={100,20},title="Lines:",value=root:ABFvar:ABF_lines
+		SetVariable ABF_folderpath win=ABF2Loader,pos={10,10},size={320,20},title="Path:",value=root:Packages:NeuroToolsPlus:ABFvar:ABF_folderpath
+		SetVariable ABF_filename win=ABF2Loader,pos={10,30},size={150,20},title="File:",value=root:Packages:NeuroToolsPlus:ABFvar:ABF_filename
+		SetVariable ABF_TableLines win=ABF2Loader,pos={10,50},size={100,20},title="Lines:",value=root:Packages:NeuroToolsPlus:ABFvar:ABF_lines
 		Button ABF_Browse win=ABF2Loader,pos={340,7},size={25,20},title="...",proc=ABF2_BrowseFiles
 		Button ABF_Index win=ABF2Loader,pos={180,27},size={50,20},title="Index",proc=ABF2_BrowseFiles
 		Button ABF_LoadWaves win=ABF2Loader,pos={180,47},size={50,20},title="Load",proc=ABF2_BrowseFiles
@@ -58,11 +58,809 @@ Function Build_ABF2_Loader()
 	EndIf
 End
 
+Function GetProtocolParam(refnum,ProtSection,param)
+	Variable refnum
+	Wave ProtSection
+	String param
+	
+	String protStr = "operationMode;ADCSequenceInterval;enableFileCompression;unused1;fileCompressionRatio;synchTimeUnit;secondsPerRun;numSamplesPerEpisode;preTriggerSamples;"
+	protStr += "episodesPerRun;runsPerTrial;numberOfTrials;averagingMode;undoRunCount;firstEpisodeInRun;triggerThreshold;triggerSource;triggerAction;triggerPolarity;scopeOutputInterval;"
+	protStr += "episodeStartToStart;runStartToStart;averageCount;trialStartToStart;autoTriggerStrategy;firstRunDelayS;channelStatsStrategy;samplesPerTrace;startDisplayNum;finishDisplayNum;"
+	protStr += "showPNRawData;statisticsPeriod;statisticsMeasurements;statisticsSaveStrategy;ADCRange;DACRange;ADCResolution;DACResolution;experimentType;manualInfoStrategy;commentsEnable;"
+	protStr += "fileCommentIndex;autoAnalyseEnable;signalType;digitalEnable;ActiveDACChannel;digitalHolding;digitalInterEpisode;digitalDACChannel;digitalTrainActiveLogic;statsEnable;statisticsClearStrategy;levelHysteresis;"
+	protStr += "timeHysteresis;allowExternalTags;averageAlgorithm;averageWeighting;undoPromptStrategy;trialTriggerSource;statisticsDisplayStrategy;externalTagType;scopeTriggerOut;LTPType;"
+	protStr += "alternateDACOutputState;alternateDigitalOutputState;cellID;digitizerADCs;digitizerDACs;digitizerTotalDigitalOuts;digitizerSynchDigitalOuts;digitizerType"
+	
+	Make/FREE protocolSectionBitFormat = {2,4,1,1,3,4,4,3,3,3,3,3,2,2,2,4,2,2,2,4,4,4,3,4,2,4,2,3,3,3,2,4,3,2,4,4,3,3,2,2,2,3,2,2,2,2,2,2,2,2,2,2,2,3,2,2,4,2,2,2,2,2,2,2,2,4,2,2,2,2,2}
+	protocolSectionBitFormat[3] += 2
+	protocolSectionBitFormat[64] += 8
+	
+	String bitPositions = "0;2;6;7;10;14;18;22;26;30;34;38;42;44;46;48;52;54;56;58;62;66;70;74;78;80;84;86;90;94;98;100;104;108;110;114;"
+	bitPositions += "118;122;126;128;130;132;136;138;140;142;144;146;148;150;152;154;156;158;162;164;166;170;172;174;176;178;180;182;184;194;198;200;202;204;206;"
+	
+	Make/FREE/N=(DimSize(protocolSectionBitFormat,0) + 1) protocolSectionBitOffset
+	protocolSectionBitOffset[1,DimSize(protocolSectionBitOffset,0) - 1] = protocolSectionBitFormat[p - 1] + protocolSectionBitOffset[p-1]
 
-Function ABFLoader(filepath,whichChannel,doLoad)
+	Variable returnVar = 0
+	
+	//Channel scale factor
+	Variable index = WhichListItem(param,protStr,";")
+	
+	If(index == -1)
+		return -1
+	EndIf
+	
+	Variable bitOffset = str2num(StringFromList(index,bitPositions,";"))
+	
+	Variable offset = ProtSection[0] * 512 + bitOffset
+	FSetPos refnum,offset
+	
+	Variable bitFormat = protocolSectionBitFormat[index]
+	FBInRead/B=3/F=(bitFormat) refnum,returnVar
+	
+	return returnVar
+End
+
+Function GetADCParam(refnum,ADCSection,whichChannel,param)
+	Variable refnum
+	Wave ADCSection
+	Variable whichChannel
+	String param
+	
+	String adcStr = "ADCNum;telegraphEnable;telegraphInstrument;telegraphAdditGain;telegraphFilter;telegraphMembraneCap;telegraphMode;"
+	adcStr += "telegraphAccessResistance;ADCPtoLChannelMap;ADCSamplingSeq;ADCProgrammableGain;ADCDisplayAmplification;ADCDisplayOffset;"
+	adcStr += "instrumentScaleFactor;instrumentOffset;signalGain;signalOffset;signalLowpassFilter;signalHighpassFilter;lowpassFilterType;"
+	adcStr += "highpassFilterType;postProcessLowpassFilter;postProcessLowpassFilterType;enabledDuringPN;StatsChannelPolarity;ADCChannelNameIndex;ADCUnitsIndex"
+	
+	String adcBitFormat = "2;2;2;4;4;4;2;4;2;2;4;4;4;4;4;4;4;4;4;1;1;4;1;1;2;3;3;"
+	String adcBitOffset = "0;2;4;6;10;14;18;20;24;26;28;32;36;40;44;48;52;56;60;64;65;66;70;71;72;74;77;80;"
+	
+	Variable returnVar = 0
+	
+	//Channel scale factor
+	Variable index = WhichListItem(param,adcStr,";")
+	
+	If(index == -1)
+		return -1
+	EndIf
+	
+	Variable bitOffset = str2num(StringFromList(index,adcBitOffset,";"))
+	
+	Variable offset = ADCSection[0] * 512 + ADCSection[1]*whichChannel + bitOffset
+	FSetPos refnum,offset
+	
+	Variable bitFormat = str2num(StringFromList(index,adcBitFormat,";"))
+	FBInRead/B=3/F=(bitFormat) refnum,returnVar
+	
+	return returnVar
+End
+
+//Function/S GetSweeps()
+	String filePath = "ASTRODRIVE:Data:Ephys:2017:08:R2_170808:170808_01_0000.abf"
+	Variable refnum
+	
+	STRUCT abfInfo a
+	
+	Open/R/Z=2 refnum as filepath
+	FStatus refnum
+	Variable eof = V_logEOF
+	
+	//Number sweeps
+	FSetPos refnum,12
+	FBInRead/B=3/F=3 refnum,a.nSweeps
+	
+	Variable c
+	For(i=0;i<a.nSweeps;i+=1)
+		FSetPos refnum,selectedSegStartInPts[i] //set position to start of each sweep.
+		FBInRead/B=3/F=(bitFormat) refnum,tempd	 //load data for all channels recorded for that sweep
+		
+		String traceList = ""
+		
+		//Figure out the wave names for each of the channels in each sweep
+		For(c=0;c<a.nChannels;c+=1)
+			String unitBase = StringFromList(c,a.channelBase,";")
+			
+			//Prefix
+			strswitch(unitBase)
+				case "A": //amps, voltage clamp
+					String prefix = "Im"
+					break
+				case "V": //volts, current clamp
+					prefix = "Vm"
+					break
+			endswitch
+			
+			String group = ParseFilePath(0,filePath,":",1,0)
+			group = ParseFilePath(0,group,"_",1,0)
+			group = ParseFilePath(0,group,".",0,0)
+			group = num2str(str2num(group))
+			String series = num2str(i+1)
+			String sweep = "1"
+			String trace = "1"
+			
+			String traceName = prefix + "_" + group + "_" + series + "_" + sweep + "_" + trace
+			Do
+				//Check for duplicates, if so increment the trace counter
+				If(WhichListItem(traceName,traceList,";") != -1)
+					trace = num2str(str2num(trace) + 1)
+					traceName = prefix + "_" + group + "_" + series + "_" + sweep + "_" + trace
+				Else
+					break
+				EndIf
+			While(1)
+			
+			traceList += traceName + ";"
+		EndFor
+		
+		String folder = ntSeparateChannels(filepath,traceList,tempd,a)
+	EndFor
+	
+End
+
+Function/Wave GetADCSection(refnum)
+	Variable refnum
+	
+	//Section list
+	String sectionStr = "ProtocolSection;ADCSection;DACSection;EpochSection;ADCPerDACSection;EpochPerDACSection;UserListSection;StatsRegionSection;MathSection;"
+	sectionStr += "StringsSection;DataSection;TagSection;ScopeSection;DeltaSection;VoiceTagSection;SynchArraySection;AnnotationSection;StatsSection;"
+	
+	//ADC Section Info
+	Variable whichSection = WhichListItem("ADCSection",sectionStr,";")
+	Variable offset = 76 + 16 * whichSection
+	
+	Make/N=3/FREE ADCSection
+	
+	Variable tempVar
+	
+	//uBlockIndex
+	FSetPos refnum,offset
+	FBInRead/B=3/F=3/U refnum,tempVar
+	ADCSection[0] = tempVar
+	//uBytes
+	FSetPos refnum,offset+4
+	FBInRead/B=3/F=3/U refnum,tempVar
+	ADCSection[1] = tempVar
+	//numEntries
+	FSetPos refnum,offset+8
+	FBInRead/B=3/F=6 refnum,tempVar
+	ADCSection[2] = tempVar
+	
+	return ADCSection
+End
+
+Function/Wave GetDataSection(refnum)
+	Variable refnum
+	
+	//Section list
+	String sectionStr = "ProtocolSection;ADCSection;DACSection;EpochSection;ADCPerDACSection;EpochPerDACSection;UserListSection;StatsRegionSection;MathSection;"
+	sectionStr += "StringsSection;DataSection;TagSection;ScopeSection;DeltaSection;VoiceTagSection;SynchArraySection;AnnotationSection;StatsSection;"
+	
+	//Data start byte and data length
+	Variable whichSection = WhichListItem("DataSection",sectionStr,";")
+	Variable offset = 76 + 16 * whichSection
+	
+	Make/N=3/FREE DataSection
+	
+	Variable tempVar
+	
+	//uBlockIndex
+	FSetPos refnum,offset
+	FBInRead/B=3/F=3/U refnum,tempVar
+	DataSection[0] = tempVar
+	//uBytes
+	FSetPos refnum,offset+4
+	FBInRead/B=3/F=3/U refnum,tempVar
+	DataSection[1] = tempVar
+	//numEntries
+	FSetPos refnum,offset+8
+	FBInRead/B=3/F=6 refnum,tempVar
+	DataSection[2] = tempVar
+	
+	return DataSection
+End
+
+Function/Wave GetProtocolSection(refnum)
+	Variable refnum
+	
+	//Section list
+	String sectionStr = "ProtocolSection;ADCSection;DACSection;EpochSection;ADCPerDACSection;EpochPerDACSection;UserListSection;StatsRegionSection;MathSection;"
+	sectionStr += "StringsSection;DataSection;TagSection;ScopeSection;DeltaSection;VoiceTagSection;SynchArraySection;AnnotationSection;StatsSection;"
+	
+	//Data start byte and data length
+	Variable whichSection = WhichListItem("ProtocolSection",sectionStr,";")
+	Variable offset = 76 + 16 * whichSection
+	
+	Make/N=3/FREE ProtocolSection
+	
+	Variable tempVar
+	
+	//uBlockIndex
+	FSetPos refnum,offset
+	FBInRead/B=3/F=3/U refnum,tempVar
+	ProtocolSection[0] = tempVar
+	//uBytes
+	FSetPos refnum,offset+4
+	FBInRead/B=3/F=3/U refnum,tempVar
+	ProtocolSection[1] = tempVar
+	//numEntries
+	FSetPos refnum,offset+8
+	FBInRead/B=3/F=6 refnum,tempVar
+	ProtocolSection[2] = tempVar
+	
+	return ProtocolSection
+End
+
+Function/Wave GetStringsSection(refnum)
+	Variable refnum
+	
+	//Section list
+	String sectionStr = "ProtocolSection;ADCSection;DACSection;EpochSection;ADCPerDACSection;EpochPerDACSection;UserListSection;StatsRegionSection;MathSection;"
+	sectionStr += "StringsSection;DataSection;TagSection;ScopeSection;DeltaSection;VoiceTagSection;SynchArraySection;AnnotationSection;StatsSection;"
+	
+	//Data start byte and data length
+	Variable whichSection = WhichListItem("StringsSection",sectionStr,";")
+	Variable offset = 76 + 16 * whichSection
+	
+	Make/N=3/FREE StringsSection
+	
+	Variable tempVar
+	
+	//uBlockIndex
+	FSetPos refnum,offset
+	FBInRead/B=3/F=3/U refnum,tempVar
+	StringsSection[0] = tempVar
+	//uBytes
+	FSetPos refnum,offset+4
+	FBInRead/B=3/F=3/U refnum,tempVar
+	StringsSection[1] = tempVar
+	//numEntries
+	FSetPos refnum,offset+8
+	FBInRead/B=3/F=6 refnum,tempVar
+	StringsSection[2] = tempVar
+	
+	return StringsSection
+End
+
+Function/Wave GetSynchSection(refnum)
+	Variable refnum
+	
+	//Section list
+	String sectionStr = "ProtocolSection;ADCSection;DACSection;EpochSection;ADCPerDACSection;EpochPerDACSection;UserListSection;StatsRegionSection;MathSection;"
+	sectionStr += "StringsSection;DataSection;TagSection;ScopeSection;DeltaSection;VoiceTagSection;SynchArraySection;AnnotationSection;StatsSection;"
+	
+	//Data start byte and data length
+	Variable whichSection = WhichListItem("SynchArraySection",sectionStr,";")
+	Variable offset = 76 + 16 * whichSection
+	
+	Make/N=3/FREE SynchArraySection
+	
+	Variable tempVar
+	
+	//uBlockIndex
+	FSetPos refnum,offset
+	FBInRead/B=3/F=3/U refnum,tempVar
+	SynchArraySection[0] = tempVar
+	//uBytes
+	FSetPos refnum,offset+4
+	FBInRead/B=3/F=3/U refnum,tempVar
+	SynchArraySection[1] = tempVar
+	//numEntries
+	FSetPos refnum,offset+8
+	FBInRead/B=3/F=6 refnum,tempVar
+	SynchArraySection[2] = tempVar
+	
+	return SynchArraySection
+End
+
+//returns the number of sweeps in a pclamp file
+Function pClamp_GetNumSweeps(file)
+	String file //this needs to be a full path to the file
+	
+	file = RemoveEnding(file,".abf") + ".abf"
+	
+	Variable refnum,nSweeps
+	
+	Open/R/Z=2 refnum as file
+		
+	If(V_flag == -1 || V_flag > 0)
+		return 0
+	EndIf
+		
+	//Number sweeps
+	FSetPos refnum,12
+	FBInRead/B=3/F=3 refnum,nSweeps
+	
+	Close/A
+	
+	return nSweeps
+End
+
+//returns the number of channels in a pclamp file
+Function pClamp_nChannels(file)
+	String file //this needs to be a full path to the file
+	
+	file = RemoveEnding(file,".abf") + ".abf"
+	
+	Variable refnum,nSweeps
+	
+	Open/R/Z=2 refnum as file
+		
+	If(V_flag == -1 || V_flag > 0)
+		return 0
+	EndIf
+	
+	Wave ADCSection = GetADCSection(refnum)
+	Variable nChannels = ADCSection[2]
+	
+	Close/A
+	
+	return nChannels
+End
+
+//Much improved ABF2 loader - doesn't bother with a lot of the unnecessary header information,
+//uses multi-threading, and also optimized some wave assignments. Overall about 5-6x faster than NeuroMatic. 
+Function NT_LoadPClamp(fileList[,channels,table])
+	String fileList
+	String channels
+	String table
+	
+	DFREF NPD = $DSF
+	NVAR dti = NPD:dataTableIndex
+	
+	If(ParamIsDefault(table))
+		table = ""
+	EndIf
+	
+	If(strlen(table))
+		Wave/T dataTable = NPD:$("DS_" + table + "_archive")
+		
+		If(!WaveExists(dataTable))
+			return 0
+		EndIf
+	EndIf
+	
+	Variable refnum
+	
+	STRUCT abfInfo a
+	
+	Variable f
+	
+	For(f=0;f<ItemsInList(fileList,";");f+=1)
+	
+		Variable refTime = StartMSTimer
+			
+		String filePath = StringFromList(f,fileList,";")
+		filePath = RemoveEnding(filePath,".abf") + ".abf" //"ASTRODRIVE:Data:Ephys:2017:08:R2_170808:170808_01_0000.abf"
+		
+		Variable tempVar = 0
+		String tempStr = ""
+		
+		Open/R/Z=2 refnum as filepath
+		
+		If(V_flag == -1)
+			return 0
+		EndIf
+		
+		FStatus refnum
+		Variable eof = V_logEOF
+		
+		//Number sweeps
+		FSetPos refnum,12
+		FBInRead/B=3/F=3 refnum,a.nSweeps
+		
+		//Data format
+		FSetPos refnum,30
+		FBInRead/B=3/F=2 refnum,a.dataFormat
+		
+		Variable dataSz	,bitFormat
+		switch(a.dataFormat)
+			case 0:
+				dataSz = 2 //bytes/point
+				bitFormat = 2
+				break
+			case 1:
+				dataSz = 4 //bytes/point
+				bitFormat = 3
+				break
+			default:
+				DoAlert 0,"Invalid number format"
+				return -1
+				break
+		endswitch
+	
+		//Section info
+		Wave ADCSection = GetADCSection(refnum)
+		Wave DataSection = GetDataSection(refnum)
+		Wave ProtocolSection = GetProtocolSection(refnum)
+		Wave StringsSection = GetStringsSection(refnum)
+		Wave SynchArraySection = GetSynchSection(refnum)
+		
+		//Number channels
+		a.nChannels = ADCSection[2]
+		
+		//Start bytes for the data
+		a.startByte = DataSection[0] * 512
+		a.dataPoints = DataSection[2]
+		
+		//Synch array for some data location/scaling things
+		a.synchArray[0] = SynchArraySection[0]
+		a.synchArray[1] = SynchArraySection[1]
+		a.synchArray[2] = SynchArraySection[2]
+		
+		//Longer strings information about the recording
+		FSetPos refnum,StringsSection[0]*512
+		String bigString = ""
+		bigString = PadString(bigString,StringsSection[1],0)
+		FBInRead refnum,bigString
+		String progStr = "clampex;clampfit;axoscope;patchexpress"
+		Variable goodStart,j,i
+		For(i=0;i<4;i+=1)
+			goodStart = strsearch(bigString,StringFromList(i,progStr,";"),0,2)
+			If(goodStart)
+				break
+			EndIf
+		EndFor
+		
+		Variable lastSpace = 0
+		Variable nextSpace
+	
+		bigString = bigString[goodStart,strlen(bigString)]
+		Make/FREE/T/N=1 Strings
+		Strings[0] = ""
+		For(i=0;i<30;i+=1)
+			Redimension/N=(i+1) Strings
+			nextSpace = strsearch(bigString,"\u0000",lastSpace)
+			If(nextSpace == -1)
+				Redimension/N=(i) Strings
+				break
+			EndIf
+			Strings[i] = bigString[lastSpace,nextSpace-1]
+			lastSpace = nextSpace + 1
+		EndFor
+		
+		//Get the Channel names, units, and scales
+		a.ChannelNames = ""
+		a.ChannelUnits = ""
+		a.ChannelBase = ""
+		
+		For(i=0;i<a.nChannels;i+=1)
+	
+			String name = Strings[2 + 2 * i]
+			String unit = Strings[3 + 2 * i]
+			
+			a.ChannelNames += name + ";"
+			a.ChannelUnits += unit + ";"
+			a.ChannelScale[i] = 0 //reset
+			a.ChannelBase += unit[1,strlen(unit)-1] + ";"
+			
+			String scalePrefix = unit[0]
+			strswitch(scalePrefix)
+				case "k":
+					a.ChannelScale[i] = 1e3
+					break
+				case "m":
+					a.ChannelScale[i] = 1e-3
+					break
+				case "µ":
+				case "u":
+					a.ChannelScale[i] = 1e-6
+					break
+				case "n":
+					a.ChannelScale[i] = 1e-9
+					break
+				case "p":
+					a.ChannelScale[i] = 1e-12
+					break
+				default:
+					a.ChannelScale[i] = 1
+					break
+			endswitch
+		EndFor
+		
+		//ADC data
+		For(i=0;i<a.nChannels;i+=1)
+			a.scaleFactor[i] = GetADCParam(refnum,ADCSection,i,"instrumentScaleFactor")
+			a.signalGain[i] = GetADCParam(refnum,ADCSection,i,"signalGain")
+			a.ADCprogrammableGain[i] = GetADCParam(refnum,ADCSection,i,"ADCProgrammableGain")
+			a.instrumentOffset[i] = GetADCParam(refnum,ADCSection,i,"instrumentOffset")
+			a.signalOffset[i] = GetADCParam(refnum,ADCSection,i,"signalOffset")
+			a.ChannelIndex[i] = GetADCParam(refnum,ADCSection,i,"ADCNum")
+			a.telegraphEnable[i] = GetADCParam(refnum,ADCSection,i,"telegraphEnable")
+			a.additGain[i] = GetADCParam(refnum,ADCSection,i,"telegraphAdditGain")
+		EndFor
+		
+		
+		a.startByte = DataSection[0] * 512
+		a.dataPoints = DataSection[2]
+		
+		a.synchArrTimeBase = GetProtocolParam(refnum,ProtocolSection,"synchTimeUnit")
+		a.ADCSampleInterval = GetProtocolParam(refnum,ProtocolSection,"ADCSequenceInterval") / a.nChannels
+		a.actualSampleInterval = a.ADCSampleInterval * a.nChannels
+		a.ADCRange = GetProtocolParam(refnum,ProtocolSection,"ADCRange")
+		a.ADCResolution = GetProtocolParam(refnum,ProtocolSection,"ADCResolution")
+			
+		//Synch Array information and sweep pointers
+		a.synchArrayPtrByte = 512 * a.synchArray[0]
+		
+		FSetPos refnum,a.synchArrayPtrByte
+		Make/FREE/N=(a.synchArray[2]*2) synchArray
+		FBInRead/B=3/F=3 refnum,synchArray
+		
+		Redimension/N=(-1,2) synchArray
+		Make/N=(a.synchArray[2])/FREE temp1,temp2
+	
+		Variable count1,count2
+		count1 = 0
+		count2 = 0
+		For(i=0;i<DimSize(synchArray,0);i+=1)
+			If(mod(i,2) == 0)
+				temp1[count1] = synchArray[i][0]
+				count1 += 1 					
+			Else
+				temp2[count2] = synchArray[i][0] 	
+				count2 += 1	
+			EndIf
+		EndFor
+	
+		Redimension/N=(a.synchArray[2],2) synchArray
+		synchArray[][0] = temp1[p][0]
+		synchArray[][1] = temp2[p][0]
+		
+		a.sweepLengthInPts = synchArray[0][1]/a.nChannels
+		
+		//Kept as wave instead of structure element because I have to dimension it according to the number of sweeps
+		Make/N=(DimSize(synchArray,0))/FREE sweepStartInPts
+		sweepStartInPts = synchArray * (a.synchArrTimeBase/a.ADCSampleInterval/a.nChannels)
+		
+		FSetPos refnum,a.startByte
+		
+		//Sweep list	
+		Make/FREE sweeps = x + 1
+			
+		//Sweep offsets
+		Make/FREE/N=(a.nSweeps) selectedSegStartInPts
+		a.dataPtsPerSweep = a.sweepLengthInPts * a.nChannels
+		
+		For(i=0;i<a.nSweeps;i+=1)
+			selectedSegStartInPts[i] = (sweeps[i] - 1) * a.dataPtsPerSweep * dataSz + a.startByte
+		EndFor
+		
+		//Loads the data
+		Make/FREE/N=(a.dataPtsPerSweep) tempd
+		
+		Variable c
+		For(i=0;i<a.nSweeps;i+=1)
+			FSetPos refnum,selectedSegStartInPts[i] //set position to start of each sweep.
+			FBInRead/B=3/F=(bitFormat) refnum,tempd	 //load data for all channels recorded for that sweep
+			
+			String traceList = ""
+			
+			//Figure out the wave names for each of the channels in each sweep
+			For(c=0;c<a.nChannels;c+=1)
+				
+				String unitBase = StringFromList(c,a.channelBase,";")
+				
+				
+				If(strlen(table))
+					String prefix = dataTable[dti][%Pos_0]
+					
+					String group = dataTable[dti][%Pos_1]
+
+					String series = ParseFilePath(0,filePath,":",1,0)
+					series = ParseFilePath(0,series,"_",1,0)
+					series = ParseFilePath(0,series,".",0,0)
+					series = num2str(str2num(series))
+					
+					String sweep = ResolveListItems(dataTable[dti][%Pos_3],";",noEnding=1)
+					sweep = StringFromList(i,sweep,";")
+					
+					String trace = dataTable[dti][%Pos_4]
+				Else
+				
+					//Prefix
+					strswitch(unitBase)
+						case "A": //amps, voltage clamp
+							prefix = "Im"
+							break
+						case "V": //volts, current clamp
+							prefix = "Vm"
+							break
+					endswitch
+					
+					group = "1"
+					
+					series = ParseFilePath(0,filePath,":",1,0)
+					series = ParseFilePath(0,series,"_",1,0)
+					series = ParseFilePath(0,series,".",0,0)
+					series = num2str(str2num(series))
+					
+					sweep = num2str(i+1)
+					trace = "1"
+				EndIf
+								
+				String traceName = prefix + "_" + group + "_" + series + "_" + sweep + "_" + trace
+				Do
+					//Check for duplicates, if so increment the trace counter
+					If(WhichListItem(traceName,traceList,";") != -1)
+						trace = num2str(str2num(trace) + 1)
+						traceName = prefix + "_" + group + "_" + series + "_" + sweep + "_" + trace
+					Else
+						break
+					EndIf
+				While(1)
+				
+				traceList += traceName + ";"
+			EndFor
+			
+			String folder = ntSeparateChannels(filepath,traceList,channels,tempd,a)
+			If(strlen(table))
+				dataTable[dti][%IgorPath] = folder					
+			EndIf
+		EndFor
+		
+				
+		Close/A
+		
+		Variable duration = StopMSTimer(refTime)/1000000
+		print "Loaded",filepath,"in",duration,"s"
+		
+	EndFor
+End
+
+Structure abfInfo
+	int32 dataFormat
+	int32 nSweeps
+	int32 nChannels
+	int32 startByte
+	int32 dataPoints
+	string ChannelNames
+	string ChannelBase
+	string ChannelUnits
+	double ChannelScale[8]
+	double scaleFactor[8]
+	float signalGain[8]
+	float ADCprogrammableGain[8]
+	float instrumentOffset[8]
+	int32 telegraphEnable[8]
+	int32 additGain[8]
+	float ADCRange
+	int32 ADCResolution
+	int32 ChannelIndex[8]
+	float signalOffset[8]
+	int32 synchArray[3]
+	int32 synchArrayPtrByte
+	int32 sweepLengthInPts
+	int32 dataPtsPerSweep
+	float ADCSampleInterval
+	float actualSampleInterval
+	float synchArrTimeBase
+EndStructure
+
+//Splits a 2D ephys wave into multiple 1D waves while loading a pclamp file
+Function/S ntSeparateChannels(filepath,traceList,channels,tempd,a)
+	String filepath,traceList,channels
+	Wave tempd
+	
+	STRUCT abfInfo &a
+	
+	Variable i,j
+	DFREF cdf = GetDataFolderDFR()
+	
+	j = 0
+	Make/FREE/N=(a.dataPtsPerSweep/a.nChannels,a.nChannels) d //name from the first trace name
+	
+	switch(a.nChannels)
+		case 2:
+			//Much faster than the original version. Overall load speed is about 5-6x faster than NeuroMatic's ABF2 loader.
+			Multithread d[][0] = tempd[p * 2][0]
+			Multithread d[][1] = tempd[1 + p * 2][0]
+		break
+		case 3:
+			Multithread d[][0] = tempd[p * 3][0]
+			Multithread d[][1] = tempd[1 + p * 3][0]
+			Multithread d[][2] = tempd[2 + p * 3][0]
+		break
+		case 4:
+			Multithread d[][0] = tempd[p * 4][0]
+			Multithread d[][1] = tempd[1 + p * 4][0]
+			Multithread d[][2] = tempd[2 + p * 4][0]
+			Multithread d[][2] = tempd[3 + p * 4][0]
+			break
+		default:
+			Multithread d = tempd[p][0]
+		break
+	endswitch
+	
+	//Apply scale factors and gains
+	For(i=0;i<DimSize(d,1);i+=1)
+		Variable addGain = a.telegraphEnable[i] * a.additGain[i]
+		addGain = (addGain == 0) ? 1 : addGain
+		
+		//	d[][i] = unitScaleFactor*(d[p][i])/(h.InstrumentScaleFactor[index]*h.signalGain[index]*h.ADCProgrammableGain[index]*addGain[index])*(h.ADCRange/h.ADCResolution) + h.instrumentOffset[index] - h.signalOffset[index]
+		Multithread d[][i] = a.ChannelScale[i] * (d[p][i]) / (a.scaleFactor[i] * a.signalGain[i] * a.ADCprogrammableGain[i] * addGain) * (a.ADCRange/a.ADCResolution) + a.instrumentOffset[i] - a.signalOffset[i]
+	EndFor
+
+	//Split the scaled data into channel waves in the correct data folder
+	For(j=0;j<a.nChannels;j+=1)
+		
+		String channelName = num2str(a.ChannelIndex[j])
+		
+		//Check that the channel is meant to be loaded
+		If(cmpstr(channels,"All"))
+			Variable index = WhichListItem(channelName,channels,",")
+			
+			If(index == -1)
+				continue
+			EndIf
+		EndIf
+		
+//		If(cmpstr(channels,"All"))
+//			If(str2num(channels) != j + 1)
+//				continue
+//			EndIf
+//		EndIf
+		
+		//Make the folder to put the waves in
+		If(!DataFolderExists("root:Ephys"))
+			NewDataFolder root:Ephys
+		EndIf
+		
+		String outputFolder = ParseFilePath(0,filepath,":",1,1)
+		
+		//Check for initial numbers - Igor doesn't like folders starting with numbers
+		Variable isAlpha = str2num(outputFolder[0])
+		If(numtype(isAlpha) != 2)
+			outputFolder = "Cell_" + outputFolder
+		EndIf
+		
+		outputFolder = ReplaceString(",",outputFolder,"_")
+		
+		outputFolder = ReplaceString(" ",outputFolder,"_")
+		
+		If(!DataFolderExists("root:Ephys:" + outputFolder))
+			NewDataFolder $"root:Ephys:" + outputFolder
+		EndIf
+		
+		SetDataFolder $"root:Ephys:" + outputFolder
+		
+		String traceName = StringFromList(j,traceList,";")
+		
+		Make/O/N=(DimSize(d,0)) $StringFromList(j,traceList,";")
+		Wave outWave = $StringFromList(j,traceList,";")
+		
+		outWave[] = d[p][j]
+		SetScale/P x,0,a.actualSampleInterval/(1e6),"s",outWave
+		
+		String chScale = StringFromList(j,a.ChannelBase,";")
+		SetScale/P y,0,1,chScale,outWave
+		
+		Note/K outWave,filepath
+		
+//		//Append stimulus name
+//		If(cmpstr(stimChannel,"None"))
+//			Note outWave,"Stimulus: " + stimName
+//		EndIf
+	EndFor
+	
+	//Cleanup
+	KillWaves/Z d
+	
+	return GetWavesDataFolder(outWave,1)
+End
+
+
+Function ABFLoader(filepath,whichChannel,doLoad,[fileIndex,table])
 	String filepath
 	String whichChannel
 	Variable doLoad
+	Variable fileIndex //file number in the list that is being loaded. Used for data table naming purposes
+	String table //name of the archived data set that the data is being loaded from
+	
+	fileIndex = ParamIsDefault(fileIndex) ? -1 : fileIndex
+	
+	If(ParamIsDefault(table))
+		table = ""
+	EndIf
 	
 	STRUCT headerPosition hpos
 	STRUCT headerParameters h
@@ -95,20 +893,18 @@ Function ABFLoader(filepath,whichChannel,doLoad)
 	protStr += "alternateDACOutputState;alternateDigitalOutputState;cellID;digitizerADCs;digitizerDACs;digitizerTotalDigitalOuts;digitizerSynchDigitalOuts;digitizerType"
 	
 	//Make ABFvar folder
-	If(!DataFolderExists("root:ABFvar"))
-		NewDataFolder root:ABFvar
+	If(!DataFolderExists("root:Packages:NeuroToolsPlus:ABFvar"))
+		NewDataFolder root:Packages:NeuroToolsPlus:ABFvar
 	EndIf
 	
 	//Make bitformat lookup table for the protocol parameters
-	Make/O/N=(ItemsInList(protStr,";")) root:ABFvar:protocolSectionBitFormat
-	Wave protocolSectionBitFormat = root:ABFvar:protocolSectionBitFormat
+	Make/O/N=(ItemsInList(protStr,";")) root:Packages:NeuroToolsPlus:ABFvar:protocolSectionBitFormat
+	Wave protocolSectionBitFormat = root:Packages:NeuroToolsPlus:ABFvar:protocolSectionBitFormat
 	protocolSectionBitFormat = {2,4,1,1,3,4,4,3,3,3,3,3,2,2,2,4,2,2,2,4,4,4,3,4,2,4,2,3,3,3,2,4,3,2,4,4,3,3,2,2,2,3,2,2,2,2,2,2,2,2,2,2,2,3,2,2,4,2,2,2,2,2,2,2,2,4,2,2,2,2,2}
 	
-	If(!DataFolderExists("root:ABFvar"))
-		NewDataFolder root:ABFvar
-	EndIf
-	String/G root:ABFvar:fileSig
-	SVAR fileSig = root:ABFvar:fileSig
+
+	String/G root:Packages:NeuroToolsPlus:ABFvar:fileSig
+	SVAR fileSig = root:Packages:NeuroToolsPlus:ABFvar:fileSig
 	fileSig = ""
 	
 	start = 0
@@ -237,8 +1033,8 @@ Function ABFLoader(filepath,whichChannel,doLoad)
 		offset = 76
 		//Creates section waves
 		For(i=0;i<ItemsInList(sectionStr,";");i+=1)
-			Make/O/N=3 $("root:ABFvar:" + StringFromList(i,sectionStr,";"))
-			Wave theWave = $("root:ABFvar:" + StringFromList(i,sectionStr,";"))
+			Make/O/N=3 $("root:Packages:NeuroToolsPlus:ABFvar:" + StringFromList(i,sectionStr,";"))
+			Wave theWave = $("root:Packages:NeuroToolsPlus:ABFvar:" + StringFromList(i,sectionStr,";"))
 			//uBlockIndex
 			FSetPos refnum,offset
 			FBInRead/B=3/F=3/U refnum,tempVar
@@ -256,7 +1052,7 @@ Function ABFLoader(filepath,whichChannel,doLoad)
 		EndFor
 		
 		//Read in some file and stimulus information into a wave called 'Strings'
-		Wave StringsSection = root:ABFvar:StringsSection
+		Wave StringsSection = root:Packages:NeuroToolsPlus:ABFvar:StringsSection
 		fSetPos refnum,StringsSection[0]*BLOCKSIZE
 		String bigString = ""
 		bigString = PadString(bigString,StringsSection[1],0)
@@ -274,8 +1070,8 @@ Function ABFLoader(filepath,whichChannel,doLoad)
 		Variable nextSpace
 	
 		bigString = bigString[goodStart,strlen(bigString)]
-		Make/O/T/N=1 root:ABFvar:Strings
-		Wave/T Strings = root:ABFvar:Strings
+		Make/O/T/N=1 root:Packages:NeuroToolsPlus:ABFvar:Strings
+		Wave/T Strings = root:Packages:NeuroToolsPlus:ABFvar:Strings
 		Strings[0] = ""
 		For(i=0;i<30;i+=1)
 			Redimension/N=(i+1) Strings
@@ -289,12 +1085,12 @@ Function ABFLoader(filepath,whichChannel,doLoad)
 		EndFor
 		
 		//Reads in the ADCSection and gets some more header parameters
-		Wave ADCSection = root:ABFvar:ADCSection
-		Make/O/N=(ItemsInList(adcStr,";"),ADCSection[2]) root:ABFvar:ADCsec
-		Wave ADCsec = root:ABFvar:ADCsec
+		Wave ADCSection = root:Packages:NeuroToolsPlus:ABFvar:ADCSection
+		Make/O/N=(ItemsInList(adcStr,";"),ADCSection[2]) root:Packages:NeuroToolsPlus:ABFvar:ADCsec
+		Wave ADCsec = root:Packages:NeuroToolsPlus:ABFvar:ADCsec
 		
-		Make/O/N=(ADCSection[2]) root:ABFvar:ADCSamplingSeq
-		Wave ADCSamplingSeq = root:ABFvar:ADCSamplingSeq
+		Make/O/N=(ADCSection[2]) root:Packages:NeuroToolsPlus:ABFvar:ADCSamplingSeq
+		Wave ADCSamplingSeq = root:Packages:NeuroToolsPlus:ABFvar:ADCSamplingSeq
 		
 		h.recChNames = ""
 		h.recChUnits = ""
@@ -310,7 +1106,7 @@ Function ABFLoader(filepath,whichChannel,doLoad)
 				If(stringMatch(theStr,"ADCNum") || stringMatch(theStr,"telegraphEnable") || stringMatch(theStr,"telegraphInstrument") || stringMatch(theStr,"telegraphMode"))
 					bitFormat = 2
 				ElseIf(stringMatch(theStr,"ADCPtoLChannelMap") || stringMatch(theStr,"ADCSamplingSeq") || stringMatch(theStr,"statsChannelPolarity"))
-					bitFormat = 2
+					bitFormat = 2					
 				ElseIf(stringMatch(theStr,"lowpassFilterType") || stringMatch(theStr,"highpassFilterType") || stringMatch(theStr,"postProcessLowpassFilterType") || stringMatch(theStr,"enabledDuringPN"))
 					bitFormat = 1
 				ElseIf(stringMatch(theStr,"ADCChannelNameIndex") || stringMatch(theStr,"ADCUnitsIndex"))
@@ -321,6 +1117,8 @@ Function ABFLoader(filepath,whichChannel,doLoad)
 				FBInRead/B=3/F=(bitFormat) refnum,tempVar
 				ADCSec[j][i] = tempVar
 				
+//				FGetPos refnum
+//				print theStr,V_filePos
 				If(stringMatch(theStr,"ADCChannelNameIndex"))
 					h.recChNames += Strings[tempVar-1]
 					h.recChNames = TrimString(h.recChNames) + ";"
@@ -343,6 +1141,7 @@ Function ABFLoader(filepath,whichChannel,doLoad)
 			//	ii = 0
 			//EndIf
 			
+			
 			h.telegraphEnable[ii] = ADCSec[WhichListItem("telegraphEnable",adcStr,";")][i]
 			h.telegraphAdditGain[ii] = ADCSec[WhichListItem("telegraphAdditGain",adcStr,";")][i]
 			h.instrumentScaleFactor[ii] = ADCSec[WhichListItem("instrumentScaleFactor",adcStr,";")][i]
@@ -354,50 +1153,52 @@ Function ABFLoader(filepath,whichChannel,doLoad)
 		h.recChNames = RemoveEnding(h.recChNames,";") 
 		h.recChUnits = RemoveEnding(h.recChUnits,";") 
 			
-	//DTABLE INDEXING
-	If(doLoad == 0)
-		Make/O/T/N=(8) root:ABFvar:dTable_Values
-		Wave/T dTable_Values = root:ABFvar:dTable_Values
-		
-		//Prefix
-		If(StringMatch(h.recChUnits[0],"mV"))
-			dTable_Values[0] = "Vm"
-		Else
-			dTable_Values[0] = "Im"
+		//DTABLE INDEXING
+		If(doLoad == 0)
+			Make/O/T/N=(8) root:Packages:NeuroToolsPlus:ABFvar:dTable_Values
+			Wave/T dTable_Values = root:Packages:NeuroToolsPlus:ABFvar:dTable_Values
+			
+			//Prefix
+			If(StringMatch(h.recChUnits[0],"mV"))
+				dTable_Values[0] = "Vm"
+			Else
+				dTable_Values[0] = "Im"
+			EndIf
+			
+			//Group
+			dTable_Values[1] = "1"
+			//Series
+			dTable_Values[2] = ParseFilePath(0,S_filename,"_",1,0)
+			dTable_Values[2] = StringFromList(0,dTable_Values[2],".")
+			dTable_Values[2] = num2str(str2num(dTable_Values[2]))
+			//Sweep
+			dTable_Values[3] = "1-" + num2str(h.actualEpisodes)
+			//Trace
+			dTable_Values[4] = "1-" + num2str(ADCSection[2])
+			//TF
+			dTable_Values[5] = "0"
+			//Comment
+			dTable_Values[6] = Strings[1]
+			dTable_Values[6] = ParseFilePath(0,dTable_Values[6],"\\",1,0)
+			dTable_Values[6] = RemoveEnding(dTable_Values[6],".pro")
+			//Filepath
+			dTable_Values[7] = RemoveEnding(S_path,":")
+			return 0
 		EndIf
-		
-		//Group
-		dTable_Values[1] = "1"
-		//Series
-		dTable_Values[2] = ParseFilePath(0,S_filename,"_",1,0)
-		dTable_Values[2] = StringFromList(0,dTable_Values[2],".")
-		dTable_Values[2] = num2str(str2num(dTable_Values[2]))
-		//Sweep
-		dTable_Values[3] = "1-" + num2str(h.actualEpisodes)
-		//Trace
-		dTable_Values[4] = "1-" + num2str(ADCSection[2])
-		//TF
-		dTable_Values[5] = "0"
-		//Comment
-		dTable_Values[6] = Strings[1]
-		dTable_Values[6] = ParseFilePath(0,dTable_Values[6],"\\",1,0)
-		dTable_Values[6] = RemoveEnding(dTable_Values[6],".pro")
-		//Filepath
-		dTable_Values[7] = RemoveEnding(S_path,":")
-		return 0
-	EndIf
 				
 		//Read protocol section and add some parameters to the header structure
-		Wave ProtocolSection = root:ABFvar:ProtocolSection
-		Make/O/N=(ItemsInList(protStr,";"),ProtocolSection[2]) root:ABFvar:protSec
-		Wave protSec = root:ABFvar:protSec
+		Wave ProtocolSection = root:Packages:NeuroToolsPlus:ABFvar:ProtocolSection
+		Make/O/N=(ItemsInList(protStr,";"),ProtocolSection[2]) root:Packages:NeuroToolsPlus:ABFvar:protSec
+		Wave protSec = root:Packages:NeuroToolsPlus:ABFvar:protSec
 		
+		String/G protBits = ""
 		offset = ProtocolSection[0]*BLOCKSIZE
 		fSetPos refnum,offset
 		
 		For(i=0;i<ItemsInList(protStr,";");i+=1)
 			bitFormat = protocolSectionBitFormat[i]
-		
+			FGetPos refnum
+			protBits += num2str(V_filePos - offset) + ";"
 			FBInRead/B=3/F=(bitFormat) refnum,tempVar
 			protSec[i] = tempVar
 			If(i == 3)
@@ -412,14 +1213,14 @@ Function ABFLoader(filepath,whichChannel,doLoad)
 		h.operationMode = protSec[WhichListItem("operationMode",protStr,";")]
 		h.synchTimeUnit = protSec[WhichListItem("synchTimeUnit",protStr,";")]
 		h.ADCNumChannels = ADCSection[2]
-		Wave DataSection = root:ABFvar:DataSection
+		Wave DataSection = root:Packages:NeuroToolsPlus:ABFvar:DataSection
 		h.actualAcqLength = DataSection[2]
 		h.dataSectionPtr = DataSection[0]
 		h.numPointsIgnored = 0
 		h.ADCSampleInterval = protSec[WhichListItem("ADCSequenceInterval",protStr,";")]/h.ADCNumChannels
 		h.ADCRange = protSec[WhichListItem("ADCRange",protStr,";")]
 		h.ADCResolution = protSec[WhichListItem("ADCResolution",protStr,";")]
-		Wave SynchArraySection = root:ABFvar:SynchArraySection
+		Wave SynchArraySection = root:Packages:NeuroToolsPlus:ABFvar:SynchArraySection
 		h.synchArrayPtr = SynchArraySection[0]
 		h.synchArraySize = SynchArraySection[2]
 	Else
@@ -434,9 +1235,9 @@ Function ABFLoader(filepath,whichChannel,doLoad)
 		return -1
 	EndIf
 	
-	Make/O/N=(DimSize(ADCSamplingSeq,0)) root:ABFvar:recChIdx, root:ABFvar:recChInd
-	Wave recChIdx = root:ABFvar:recChIdx
-	Wave recChInd = root:ABFvar:recChInd
+	Make/O/N=(DimSize(ADCSamplingSeq,0)) root:Packages:NeuroToolsPlus:ABFvar:recChIdx, root:Packages:NeuroToolsPlus:ABFvar:recChInd
+	Wave recChIdx = root:Packages:NeuroToolsPlus:ABFvar:recChIdx
+	Wave recChInd = root:Packages:NeuroToolsPlus:ABFvar:recChInd
 	
 	recChIdx = ADCSamplingSeq
 	For(i=0;i<DimSize(recChIdx,0);i+=1)
@@ -448,8 +1249,8 @@ Function ABFLoader(filepath,whichChannel,doLoad)
 		return -1
 	EndIf
 	
-	Make/O/N=(DimSize(recChInd,0)) root:ABFvar:chInd
-	Wave chInd = root:ABFvar:chInd
+	Make/O/N=(DimSize(recChInd,0)) root:Packages:NeuroToolsPlus:ABFvar:chInd
+	Wave chInd = root:Packages:NeuroToolsPlus:ABFvar:chInd
 	If(cmpstr(channels,"a") == 0)
 		chInd = recChInd
 	Else
@@ -458,8 +1259,8 @@ Function ABFLoader(filepath,whichChannel,doLoad)
 	EndIf
 	
 	//edit to add 4 gain channels
-	Make/O/N=15 root:ABFvar:addGain
-	Wave addGain = root:ABFvar:addGain
+	Make/O/N=15 root:Packages:NeuroToolsPlus:ABFvar:addGain
+	Wave addGain = root:Packages:NeuroToolsPlus:ABFvar:addGain
 	If(h.fileVersionNumber >= 1.65)		
 		addGain[0] = h.telegraphEnable[0]*h.telegraphAdditGain[0]
 		addGain[1] = h.telegraphEnable[1]*h.telegraphAdditGain[1]
@@ -561,8 +1362,8 @@ Function ABFLoader(filepath,whichChannel,doLoad)
 				return -1
 			EndIf
 			fSetPos refnum,h.synchArrayPtrByte
-			Make/O/N=(h.synchArraySize*2) root:ABFvar:synchArray
-			Wave synchArray = root:ABFvar:synchArray
+			Make/O/N=(h.synchArraySize*2) root:Packages:NeuroToolsPlus:ABFvar:synchArray
+			Wave synchArray = root:Packages:NeuroToolsPlus:ABFvar:synchArray
 			FBInRead/B=3/F=3 refnum,synchArray
 			
 			Redimension/N=(-1,2) synchArray
@@ -590,8 +1391,8 @@ Function ABFLoader(filepath,whichChannel,doLoad)
 			
 			h.sweepLengthInPts = synchArray[0][1]/h.ADCNumChannels
 			//Kept as wave instead of structure element because I have to dimension it according to the number of sweeps
-			Make/O/N=(DimSize(synchArray,0)) root:ABFvar:sweepStartInPts
-			Wave sweepStartInPts = root:ABFvar:sweepStartInPts
+			Make/O/N=(DimSize(synchArray,0)) root:Packages:NeuroToolsPlus:ABFvar:sweepStartInPts
+			Wave sweepStartInPts = root:Packages:NeuroToolsPlus:ABFvar:sweepStartInPts
 			sweepStartInPts = synchArray*(h.synchArrTimeBase/h.ADCSampleInterval/h.ADCNumChannels)
 			
 			h.recTime[0] = h.fileStartTimeMS*(1e-3)
@@ -610,10 +1411,10 @@ Function ABFLoader(filepath,whichChannel,doLoad)
 			fSetPos refnum,startPt*dataSz+offset
 			
 			//Make data wave
-			Make/O/N=(h.sweepLengthInPts,DimSize(chInd,0),nSweeps) root:ABFvar:d
-			Wave d = root:ABFvar:d
-			Make/O/N=(nSweeps)  root:ABFvar:selectedSegStartInPts
-			Wave selectedSegStartInPts = root:ABFvar:selectedSegStartInPts
+			Make/O/N=(h.sweepLengthInPts,DimSize(chInd,0),nSweeps) root:Packages:NeuroToolsPlus:ABFvar:d
+			Wave d = root:Packages:NeuroToolsPlus:ABFvar:d
+			Make/O/N=(nSweeps)  root:Packages:NeuroToolsPlus:ABFvar:selectedSegStartInPts
+			Wave selectedSegStartInPts = root:Packages:NeuroToolsPlus:ABFvar:selectedSegStartInPts
 			
 			//Sweep offsets
 			For(i=0;i<nSweeps;i+=1)
@@ -627,22 +1428,113 @@ Function ABFLoader(filepath,whichChannel,doLoad)
 				prefix = "Im"
 			EndIf
 			
+			String prefixList = ""
+			For(i=0;i<itemsInList(h.recChUnits,";");i+=1)
+				String u = StringFromList(i,h.recChUnits,";")
+				strswitch(u)
+					case "pA":
+						prefixList += "Im" + ";"
+						break
+					case "mV":
+						prefixList += "Vm" + ";"
+						break
+				endswitch
+			EndFor
 			//Loads the data
-			Make/O/N=(dataPtsPerSweep) root:ABFvar:tempd
-			Wave tempd = root:ABFvar:tempd
+			Make/O/N=(dataPtsPerSweep) root:Packages:NeuroToolsPlus:ABFvar:tempd
+			Wave tempd = root:Packages:NeuroToolsPlus:ABFvar:tempd
 			
 			For(i=0;i<nSweeps;i+=1)
 				fSetPos refnum,selectedSegStartInPts[i]
 				FBInRead/B=3/F=(bitFormat) refnum,tempd	
 				//Scale traces
-				String traceName = GenerateTraceName(filepath,i,whichChannel,prefix)
-				SeparateChannels(filepath,traceName,tempd,h,dataPtsPerSweep,whichChannel,chInd)
+				String traceName = GenerateTraceName(filepath,i,whichChannel,prefix,table=table,fileIndex=fileIndex)
+							
+				String folder = SeparateChannels(filepath,traceName,tempd,h,dataPtsPerSweep,whichChannel,chInd)
 			EndFor
+			
+			If(strlen(table))
+				String protocol = Strings[1]
+				protocol = ParseFilePath(0,protocol,"\\",1,0)
+				protocol = RemoveEnding(protocol,".pro")
+				
+				String channelList = ""
+				If(stringmatch(whichChannel,"All"))
+					For(i=0;i<DimSize(chInd,0);i+=1)
+						channelList += num2str(chInd[i]) + ","
+					EndFor
+				Else
+					channelList = whichChannel
+				EndIf
+				
+				ABF_FillDTable(prefix,channelList,folder,protocol,table)
+			EndIf
 			
 			break
 	endswitch
 	Close refnum
 	//KillDataFolder/Z root:ABFvar
+End
+
+//Fills a neurotoolsplus data table with the loaded wave name
+Function ABF_FillDTable(prefix,channels,folder,protocol,table)
+	String prefix,channels,folder,protocol,table
+		
+	DFREF NTD = $DSF
+	//Data table wave
+	Wave/T dataTable = NTD:$("DS_" + table + "_archive")
+	
+	//row of data table that we're loading
+	NVAR dti = NTD:dataTableIndex
+	
+	Variable trialCol = FindDimLabel(dataTable,1,"Trials")
+	Variable traceCol = FindDimLabel(dataTable,1,"Traces")
+	Variable igorPathCol = FindDimLabel(dataTable,1,"IgorPath")
+	Variable commentCol = FindDimLabel(dataTable,1,"Comment")
+	
+	If(!strlen(dataTable[dti][0]))
+		dataTable[dti][0] = prefix
+	EndIf
+	
+	If(!strlen(dataTable[dti][1]))
+		dataTable[dti][1] = dataTable[dti][trialCol]
+	EndIf
+	
+	If(!strlen(dataTable[dti][2]))
+		dataTable[dti][2] = dataTable[dti][traceCol]
+	EndIf
+	
+	If(!strlen(dataTable[dti][3]))
+		dataTable[dti][3] = "1"
+	EndIf
+	
+	If(!strlen(dataTable[dti][4]))
+		dataTable[dti][igorPathCol] = RemoveEnding(folder,":") + ":"
+	EndIf
+	
+	If(!strlen(dataTable[dti][commentCol]))
+		dataTable[dti][commentCol] = protocol
+	EndIf
+	
+	channels = resolveListItems(channels,",",noEnding=1)
+	
+	Variable channelCol = FindDimLabel(dataTable,1,"Channels")
+	
+	Variable numChannels = ItemsInList(channels,";")
+//	If(numChannels > 1)
+
+		If(!strlen(dataTable[dti][4]))
+			dataTable[dti][4] = channels
+		EndIf
+		
+		If(!strlen(dataTable[dti][channelCol]))
+			dataTable[dti][channelCol] = channels
+		EndIf
+		
+//	Else
+//		dataTable[dti][4] = num2str(numChannels)
+//		dataTable[dti][channelCol] = num2str(numChannels)
+//	EndIf
 End
 
 Structure sectionInfo
@@ -872,7 +1764,7 @@ Function LoadABF([fromAT])
 	//doLoad = 1 to actually load the data
 	//doLoad = 0 to index the data and print a dTable
 	
-	SVAR ABF_filename = root:ABFvar:ABF_filename
+	SVAR ABF_filename = root:Packages:NeuroToolsPlus:ABFvar:ABF_filename
 
 	If(fromAT)
 		String dtableName = "DTable_Browse"
@@ -883,7 +1775,7 @@ Function LoadABF([fromAT])
 	String info = TableInfo(dtableName,-2)
 	Variable i,numRows = str2num(StringByKey("ROWS",info,":",";"))
 	
-	SVAR ABF_lines = root:ABFvar:ABF_lines
+	SVAR ABF_lines = root:Packages:NeuroToolsPlus:ABFvar:ABF_lines
 	//Load everything if it isn't specified
 	
 	If(!fromAT)
@@ -987,7 +1879,7 @@ End
 
 Function/S GetFolderPath(dti,[fromAT])
 	Variable dti,fromAT
-	SVAR ABF_filename = root:ABFvar:ABF_filename
+	SVAR ABF_filename = root:Packages:NeuroToolsPlus:ABFvar:ABF_filename
 	String dtableName
 	
 	If(ParamIsDefault(fromAT))
@@ -1021,7 +1913,7 @@ End
 
 Function/S GetIndex(dti,[fromAT])
 	Variable dti,fromAT
-	SVAR ABF_filename = root:ABFvar:ABF_filename
+	SVAR ABF_filename = root:Packages:NeuroToolsPlus:ABFvar:ABF_filename
 	String dtableName
 	
 	If(ParamIsDefault(fromAT))
@@ -1043,7 +1935,7 @@ End
 
 Function/S GetChannelStr(dti,[fromAT])
 	Variable dti,fromAT
-	SVAR ABF_filename = root:ABFvar:ABF_filename
+	SVAR ABF_filename = root:Packages:NeuroToolsPlus:ABFvar:ABF_filename
 	String dtableName
 	
 	If(fromAT)
@@ -1140,7 +2032,7 @@ Function/S ABF_LoadWaves(folderpath,filebase,index,whichChannel,doLoad)
 	return errorStr
 End
 
-Function SeparateChannels(filepath,traceName,tempd,h,dataPtsPerSweep,whichChannel,chInd)
+Function/S SeparateChannels(filepath,traceName,tempd,h,dataPtsPerSweep,whichChannel,chInd)
 	String filepath,traceName
 	Wave tempd
 	STRUCT headerParameters &h
@@ -1185,7 +2077,7 @@ Function SeparateChannels(filepath,traceName,tempd,h,dataPtsPerSweep,whichChanne
 	endswitch
 	
 	//Apply scale factors and gains
-	Wave addGain = root:ABFvar:addGain
+	Wave addGain = root:Packages:NeuroToolsPlus:ABFvar:addGain
 	For(i=0;i<DimSize(d,1);i+=1)
 		//d[][i-1] = (1e-12)*(d[p][i-1])/(h.InstrumentScaleFactor[i]*h.signalGain[i]*h.ADCProgrammableGain[i]*addGain[i])*(h.ADCRange/h.ADCResolution) + h.instrumentOffset[i] - h.signalOffset[i]
 		Variable index = chInd[i]// - 1
@@ -1288,30 +2180,81 @@ Function SeparateChannels(filepath,traceName,tempd,h,dataPtsPerSweep,whichChanne
 	
 	//Cleanup
 	KillWaves/Z d
-
+	
+	return GetWavesDataFolder(outWave,1)
 End
 
-Function/S GenerateTraceName(filepath,i,whichChannel,prefix)
+Function/S GenerateTraceName(filepath,i,whichChannel,prefix,[table,fileIndex])
 	String filepath
 	Variable i
 	String whichChannel,prefix
+	String table //optional data table name
+	Variable fileIndex //file number that we're loading, used for naming the 'group' category for data tables
+	
 	String group,series,sweep,trace,traceName,traceByComma
 	Variable totalChannels,j
 	
-	group = ParseFilePath(0,filePath,":",1,0)
-	group = ParseFilePath(0,group,"_",1,0)
-	group = ParseFilePath(0,group,".",0,0)
-	group = num2str(str2num(group))
-	series = num2str(i+1)
-	sweep = "1"
+	DFREF NTD = $DSF
+	NVAR dti = NTD:dataTableIndex
+	
+	If(strlen(table))
+		Wave/T dataTable = GetDataSetWave(table,"Archive")
+		String entry = dataTable[dti][0] //prefix
+		
+		If(strlen(entry))
+			prefix = entry
+		EndIf
+		
+		entry = dataTable[dti][1] //group
+		
+		If(strlen(entry))
+			entry = ResolveListItems(entry,",",noEnding=1)
+			group = StringFromList(fileIndex,entry,",")
+		Else
+			Variable trialsCol = FindDimLabel(dataTable,1,"Trials")
+			group = dataTable[dti][trialsCol]
+			group = ResolveListItems(group,",",noEnding=1)
+			group = StringFromList(fileIndex,group,",")
+		EndIf
+		
+		entry = dataTable[dti][2] //series
+		
+		If(strlen(entry))
+			entry = ResolveListItems(entry,",",noEnding=1)
+			series = StringFromList(i,entry,",")
+		Else
+			Variable TracesCol = FindDimLabel(dataTable,1,"Traces")
+			series = dataTable[dti][TracesCol]
+			series = ResolveListItems(series,",",noEnding=1)
+			series = StringFromList(i,series,",")
+		EndIf
+		
+		entry = dataTable[dti][3] //sweep
+		If(strlen(entry))
+			sweep = entry
+		Else
+			sweep = "1"
+		EndIf
+		
+		traceName = ""
+
+		trace = resolveListItems(whichChannel,";")
+	Else
+		group = ParseFilePath(0,filePath,":",1,0)
+		group = ParseFilePath(0,group,"_",1,0)
+		group = ParseFilePath(0,group,".",0,0)
+		group = num2str(str2num(group))
+		series = num2str(i+1)
+		sweep = "1"
 	//trace = num2str(whichChannel)
 	
-	traceName = ""
+		traceName = ""
 
-	trace = resolveListItems(whichChannel,";")
+		trace = resolveListItems(whichChannel,";")
+	EndIf
 	
 	If(!cmpstr(trace,"All;"))
-		Wave chInd = root:ABFvar:chInd
+		Wave chInd = root:Packages:NeuroToolsPlus:ABFvar:chInd
 		trace = ""
 		For(i=0;i<DimSize(chInd,0);i+=1)
 			trace += num2str(i + 1) + ";"
@@ -1346,8 +2289,8 @@ End
 Function/S MakeNewTable(type,tablename,hookFunction,numLines[,left,top,right,bottom])
 	Variable type; String tablename,hookFunction; Variable numLines,left,top,right,bottom
 
-	SVAR CmdTab_tag = root:ABFvar:CmdTab_tag; 
-	SVAR Dtab_tag = root:ABFvar:Dtab_tag
+	SVAR CmdTab_tag = root:Packages:NeuroToolsPlus:ABFvar:CmdTab_tag; 
+	SVAR Dtab_tag = root:Packages:NeuroToolsPlus:ABFvar:Dtab_tag
 	Variable j, num
 	String windowList,fldrwaveList,newWaveList, theWave, tableSize=""
 	DFREF saveDFR = GetDataFolderDFR()
@@ -1394,8 +2337,8 @@ Function/S MakeNewTable(type,tablename,hookFunction,numLines[,left,top,right,bot
 	endfor
 	
 	//BMB, added to handle .phys2 file types, this just allows me to pass the newWaveList on to the LoadPhysTable function.
-	String/G root:ABFvar:tableWaveList
-	SVAR  tableWaveList = root:ABFvar:tableWaveList
+	String/G root:Packages:NeuroToolsPlus:ABFvar:tableWaveList
+	SVAR  tableWaveList = root:Packages:NeuroToolsPlus:ABFvar:tableWaveList
 	tableWaveList = newWaveList
 	////
 	
@@ -1448,8 +2391,8 @@ Function/S IndexABF(ABF_filename,fullpath,fileList,[fromAT])
 		ABFLoader(filepath,"1",doLoad)
 		
 	
-		If(WaveExists(root:ABFvar:dTable_Values))
-			Wave/T dTable_Values = root:ABFvar:dTable_Values
+		If(WaveExists(root:Packages:NeuroToolsPlus:ABFvar:dTable_Values))
+			Wave/T dTable_Values = root:Packages:NeuroToolsPlus:ABFvar:dTable_Values
 			
 			If(!fromAT)
 				String tableName = "DTable_" + ABF_filename
@@ -1492,8 +2435,8 @@ End
 
 Function ABF2_BrowseFiles(ba) : ButtonControl
 	STRUCT WMButtonAction &ba
-	SVAR ABF_folderpath = root:ABFvar:ABF_folderpath
-	SVAR ABF_filename = root:ABFvar:ABF_filename
+	SVAR ABF_folderpath = root:Packages:NeuroToolsPlus:ABFvar:ABF_folderpath
+	SVAR ABF_filename = root:Packages:NeuroToolsPlus:ABFvar:ABF_filename
 	
 	switch( ba.eventCode )
 		case 2: // mouse up
