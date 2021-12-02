@@ -495,10 +495,13 @@ Function GetDSIndex()
 End
 
 //Returns the number of wavesets in the input list
-Function GetNumWaveSets(listWave)
+Function GetNumWaveSets(listWave,[dsNum])
 	Wave/T listWave
+	Variable dsNum
 	Variable item = 0,count = 0
 	String name = ""
+	
+	dsNum = (ParamIsDefault(dsNum)) ? 0 : dsNum
 	
 	If(!WaveExists(listWave))
 		return 0
@@ -509,7 +512,7 @@ Function GetNumWaveSets(listWave)
 	EndIf
 	
 	Do
-		name = listWave[item][0][0]
+		name = listWave[item][dsNum][0]
 		If(stringmatch(name,"*WAVE SET*"))
 			count += 1 
 		EndIf
@@ -526,18 +529,29 @@ End
 Function GetNumWaves(listWave,wsn)
 	Wave/T listWave
 	Variable wsn
-	Variable size
+	Variable size,i
 	
-	Wave/T ws = GetWaveSet(listWave,wsn)
-	size = DimSize(ws,0)
+	Variable numDataSets = DimSize(listWave,1)
 	
+	If(numDataSets == 0)
+		numDataSets = 1
+	EndIf
+	
+	For(i=0;i<numDataSets;i+=1)
+		Wave/T ws = GetWaveSet(listWave,wsn)
+		size = DimSize(ws,0)
+	EndFor
 	return size
 End
 
 //Returns the waves with the indicated wave set index from the listwave
-Function/WAVE GetWaveSet(listWave,wsn)
+Function/WAVE GetWaveSet(listWave,wsn,[dsNum])
 	Wave/T listWave
 	Variable wsn
+	Variable dsNum
+	
+	dsNum = (ParamIsDefault(dsNum)) ? 0 : dsNum
+	
 	Variable i = 0,count = 0
 	
 	//If listwave is empty or doesn't exist
@@ -550,14 +564,14 @@ Function/WAVE GetWaveSet(listWave,wsn)
 	EndIf
 	
 	//Only 1 wave set
-	If(!stringmatch(listWave[0][0][0],"*WAVE SET*") && wsn == 0)
+	If(!stringmatch(listWave[0][dsNum][0],"*WAVE SET*") && wsn == 0)
 		Duplicate/T/FREE listWave,tempWave
 		return tempWave
 	EndIf
 	
 	//Get start of the wave set
 	
-	Variable first = tableMatch("*WAVE SET*" + num2str(wsn) + "*",listWave) + 1
+	Variable first = tableMatch("*WAVE SET*" + num2str(wsn) + "*",listWave,whichCol=dsNum) + 1
 	
 	//wave set was not found
 	If(first == 0)
@@ -572,7 +586,7 @@ Function/WAVE GetWaveSet(listWave,wsn)
 		return $""
 	EndIf
 	
-	Variable last = tableMatch("*WAVE SET*" + num2str(wsn + 1) + "*",listWave)
+	Variable last = tableMatch("*WAVE SET*" + num2str(wsn + 1) + "*",listWave,whichCol=dsNum)
 	
 	//couldn't find the end of the wave set,
 	//so it must be the last waveset
@@ -589,24 +603,28 @@ Function/WAVE GetWaveSet(listWave,wsn)
 		return $""
 	EndIf
 	
-	tempWave[][0][0] = listWave[first+p][0][0]	 //names
-	tempWave[][0][1] = listWave[first+p][0][1] //full path
+	tempWave[][0][0] = listWave[first+p][dsNum][0]	 //names
+	tempWave[][0][1] = listWave[first+p][dsNum][1] //full path
 	
 	return tempWave
 End
 
 //Returns a string list of the wave set instead of a wave as in GetWaveSet()
-Function/S GetWaveSetList(listWave,wsn,fullPath)
+Function/S GetWaveSetList(listWave,wsn,fullPath,[dsNum])
 	Wave/T listWave
 	Variable wsn
 	Variable fullPath //1 for full path, 0 for names only
+	Variable dsNum
+	
+	dsNum = (ParamIsDefault(dsNum)) ? 0 : dsNum
+	
 	String list = ""
 	
 	If(!WaveExists(listWave))
 		return ""
 	EndIf
 	
-	Wave/T ws = GetWaveSet(listWave,wsn)
+	Wave/T ws = GetWaveSet(listWave,wsn,dsNum=dsNum)
 	
 	If(!WaveExists(ws))
 		return ""
@@ -643,6 +661,15 @@ Function/WAVE GetWaveSetRefs(listWave,wsn)
 		EndIf
 		
 		currentDS = listWave[p][i][r]
+		
+		//remove ending white space
+		Do
+			If(!strlen(currentDS[DimSize(currentDS,0)-1]))
+				DeletePoints/M=0 DimSize(currentDS,0)-1,1,currentDS
+			Else
+				break
+			EndIf
+		While(1)
 		
 		//current data set
 		String list = GetWaveSetList(currentDS,wsn,1)

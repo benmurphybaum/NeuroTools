@@ -41,7 +41,21 @@ Structure ds
 	int16 wsi //current wave set index
 	int16 wsn //current wave set number
 	int16 numWaves //number of waves in the current wsn
+	int16 numDataSets //number of datasets defined
 EndStructure
+
+Structure ds2
+	STRUCT progress progress
+	Wave/T listWave //listwave being used by the data set (Wave Match, Navigator, or a Data Set)
+	Wave/T name //holds data set names
+	Wave/T paths //string list of the waves in the wsn
+	Wave/WAVE waves //wave of wave references for the wsn
+	Wave num //number of wave sets
+	int16 wsi //current wave set index
+	int16 wsn //current wave set number
+	Wave numWaves //number of waves in the current wsn for each data set
+	int16 numDataSets //number of datasets defined
+EndStructure 
 
 //Data set info structure
 Structure ds_numOnly
@@ -49,6 +63,7 @@ Structure ds_numOnly
 	int16 wsi //current wave set index
 	int16 wsn //current wave set number
 	int16 numWaves //number of waves in the current wsn6 
+	int16 numDataSets //number of data sets 
 	int16 value
 	int16 count
 	int16 steps

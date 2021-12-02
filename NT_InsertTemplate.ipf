@@ -7,7 +7,7 @@
 
 Function NT_MyFunction()
 	//Data set info structure
-	STRUCT ds ds 
+	STRUCT ds2 ds 
 	
 	//Fills the data set structure
 	GetStruct(ds)
@@ -30,6 +30,6 @@ Function NT_MyFunction()
 		
 		
 		ds.wsi += 1
-	While(ds.wsi < ds.numWaves)
+	While(ds.wsi < ds.numWaves[0])
 	
 End

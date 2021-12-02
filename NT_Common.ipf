@@ -2,10 +2,10 @@
 #pragma rtGlobals=3		// Use modern global access method and strict wave access.
 
 //If str matches an entry in the tableWave, returns the row, otherwise return -1
-Function tableMatch(str,tableWave,[startp,endp,returnCol])
+Function tableMatch(str,tableWave,[startp,endp,whichCol,returnCol])
 	String str
 	Wave/T tableWave
-	Variable startp,endp,returnCol//for range
+	Variable startp,endp,whichCol,returnCol//for range
 	Variable i,j,size = DimSize(tableWave,0)
 	Variable cols = DimSize(tableWave,1)
 	
@@ -25,12 +25,24 @@ Function tableMatch(str,tableWave,[startp,endp,returnCol])
 		returnCol = 0
 	EndIf
 	
+	If(ParamIsDefault(whichCol))
+		whichCol = 0
+	EndIf
+	
 	If(startp > DimSize(tableWave,0) - 1)
 		return -1
 	EndIf
 	
 	If(endp < DimSize(tableWave,0) - 1)
 		return -1
+	EndIf
+	
+	If(whichCol)
+		For(i=startp;i<endp+1;i+=1)
+			If(stringmatch(tableWave[i][whichCol][0],str))
+				return i
+			EndIf
+		EndFor
 	EndIf
 	
 	For(j=0;j<cols;j+=1)
@@ -669,25 +681,47 @@ Function/WAVE StringListToTextWave(strList,separator)
 End
 
 //Same as StringFromList, but is capable of extracting a range from the list
-Function/S StringsFromList(range,list,separator)
+Function/S StringsFromList(range,list,separator,[noEnding])
 	String range,list,separator
+	Variable noEnding
 	String outList = ""
 	Variable i,index
 	
-	range = ResolveListItems(range,separator)
+	noEnding = (ParamIsDefault(noEnding)) ? 0 : 1
+
+	//Detect any asterisk wild cards
+	If(!cmpstr(range[0],"*"))
+		range[0] = "0"
+	EndIf
+	
+	Variable size = strlen(range) - 1
+	
+	If(!cmpstr(range[size],"*"))
+		range = range[0,size-1]
+		range[size] = num2str(ItemsInList(list,separator)-1)
+	EndIf
+	
+	range = ResolveListItems(range,";")
 	
 	For(i=0;i<ItemsInList(range,";");i+=1)
 		index = str2num(StringFromList(i,range,";"))
 		outList += StringFromList(index,list,separator) + separator
 	EndFor	
-
+	
+	If(noEnding)
+		outList = RemoveEnding(outList,separator)
+	EndIf
+	
 	return outList
 End
 
 //Replaces the indicated list item with the replaceWith string
-Function/S ReplaceListItem(index,listStr,separator,replaceWith)
+Function/S ReplaceListItem(index,listStr,separator,replaceWith,[noEnding])
 	Variable index
 	String listStr,separator,replaceWith
+	Variable noEnding
+	
+	noEnding = (ParamIsDefault(noEnding)) ? 0 : 1
 	
 	listStr = RemoveListItem(index,listStr,separator)
 	listStr = AddListItem(replaceWith,listStr,separator,index)
@@ -695,7 +729,20 @@ Function/S ReplaceListItem(index,listStr,separator,replaceWith)
 		listStr = RemoveEnding(listStr,separator)
 	EndIf
 	
+	If(noEnding)
+		listStr = RemoveEnding(listStr,separator)
+	EndIf
+	
 	return listStr
+End
+
+//Removes blank list items in a string list
+Function/S RemoveEmptyItems(list,separator)
+	String list,separator
+	
+	list = RemoveFromList("",list,separator)
+	
+	return list
 End
 
 //Takes a hyphenated range, and resolves it into a comma-separated list
@@ -2550,6 +2597,134 @@ Function GetDataSetInfo(ds[,extFunc])
 	return 0
 End
 
+//USES ds2 structure, which is better for handling multiple data set definitions
+//Returns info about the data set
+//Automatically chooses whatever option is selected in the Wave Selector menu
+Function GetDataSetInfo2(ds[,extFunc])
+	STRUCT ds2 &ds 
+	Variable extFunc //is this an external function? We ignore the wavelistselector in this case
+	
+	DFREF NTF = root:Packages:NT
+	DFREF NTD = root:Packages:NT:DataSets
+	
+	//Wave Selector status
+	SVAR WaveSelectorStr = NTF:WaveSelectorStr
+	SVAR cdf = NTF:currentDataFolder
+	
+	Variable i
+	
+	If(ParamIsDefault(extFunc))
+		extFunc = 0
+	EndIf
+	
+	If(!extFunc)
+		strswitch(WaveSelectorStr)
+			case "Wave Match":
+				Wave/T listWave = NTF:MatchLB_ListWave
+				break
+			case "Navigator":
+				Wave/T WavesLB_ListWave = NTF:WavesLB_ListWave
+				Wave selWave = NTF:WavesLB_SelWave
+					
+				Duplicate/FREE/T WavesLB_ListWave,listWave
+				For(i=DimSize(selWave,0) - 1;i > -1;i-=1) //go backwards
+					If(selWave[i] > 0)
+						listWave[i] = cdf + listWave[i]
+					Else
+						DeletePoints/M=0 i,1,listWave
+					EndIf
+				EndFor
+	
+				break
+			case "Image Browser":
+				Execute/Q/Z "root:Packages:NT:returnStr = SelectedScanFields(fullpath=1)"
+				SVAR returnStr = NTF:returnStr
+				
+				Wave/T listWave = StringListToTextWave(returnStr,";")
+				break
+			default:
+				//Data Set
+				Wave/T listWave = GetDataSetWave(WaveSelectorStr,"ORG")
+				
+		endswitch
+	Else
+		//external function call
+		Wave/T listWave = getExtFuncDataSet()
+		Wave/T ds.listWave = listWave
+	EndIf
+	
+	If(DimSize(listWave,0) == 0)
+		Wave/T ds.paths = NTD:DataSetWaves2
+		ds.paths = "NULL" //prevents error in 'Run Cmd'
+		return -1
+	EndIf
+	
+	//Fill out the data set structure
+	ds.numDataSets = DimSize(listWave,1)
+	Wave/T ds.listWave = listWave
+	
+	Make/N=(ds.numDataSets)/O NTD:numDataSetWaves
+	Wave ds.numWaves = NTD:numDataSetWaves
+	
+	For(i=0;i<ds.numDataSets;i+=1)
+		//Full paths
+		String fullPaths = GetWaveSetList(listWave,ds.wsn,1,dsNum=i)	
+		Variable numItems = ItemsInList(fullPaths,";")
+		
+		If(i == 0)
+			//Full paths
+			Make/O/T/N=(numItems,ds.numDataSets) NTD:DataSetWavePaths
+			Wave/T ds.paths = NTD:DataSetWavePaths
+			
+			//Number of waves in the waveset of each data set
+			Make/O/N=(ds.numDataSets) NTD:numDataSetWaves
+			Wave ds.numWaves = NTD:numDataSetWaves
+			
+			//Data Set Names
+			Make/T/O/N=(ds.numDataSets) NTD:DataSetNames
+			Wave/T ds.name = NTD:DataSetNames
+			
+			//Number of wavesets per data set
+			Make/O/N=(ds.numDataSets) NTD:NumWaveSets
+			Wave ds.num = NTD:NumWaveSets
+		Else
+			If(numItems > DimSize(ds.paths,0))
+				Redimension/N=(numItems,-1) ds.paths
+			EndIf
+		EndIf
+				
+		Wave/T tempPaths = StringListToTextWave(fullPaths,";")
+		Redimension/N=(DimSize(ds.paths,0)) tempPaths
+		
+		ds.paths[][i] = tempPaths[p][0]
+		ds.numWaves[i] = numItems
+		ds.name[i] = GetDimLabel(ds.listWave,1,i)
+		ds.num[i] = GetNumWaveSets(listWave,dsNum=i)
+	EndFor
+	
+	ds.wsn = 0
+	ds.wsi = 0
+	
+	Wave/WAVE ds.waves = GetWaveSetRefs(listWave,ds.wsn)
+	
+//	If(extFunc)
+//		ds.name = StringFromList(1,NameOfWave(ds.listWave),"_")
+//	EndIf
+	
+	//Fill out the progress bar structure	
+	ds.progress.steps = ceil((ds.num[0] * ds.numWaves[0]) / 10) //number of steps that must be processed for each update to progress bar
+	ds.progress.increment = 10 //set to 10 increments to limit overhead for ControlUpdate (~5 ms per call)
+	
+	NVAR ds.progress.value = NTF:progressVal
+	ds.progress.value = 0
+	
+	NVAR ds.progress.count = NTF:progressCount
+	ds.progress.count = 0
+	
+	ValDisplay progress win=NT,disable=0	
+	return 0
+End
+
 //Updates the progress bar value, which is then accessed by a background function to update the control
 Function updateProgress(ds)
 	STRUCT ds &ds
@@ -2566,6 +2741,8 @@ Function/WAVE getExtFuncDataSet()
 	String func = CurrentExtFunc()
 	Variable i,numParams = str2num(getParam("N_PARAMS",func))
 	
+	DFREF NTF = root:Packages:NT
+		
 	Make/T/O/N=(0,0,2) root:Packages:NT:DataSets:extFuncDataSets /Wave=extFuncDataSets
 	Variable count = 0
 	
@@ -2584,8 +2761,13 @@ Function/WAVE getExtFuncDataSet()
 			EndIf
 			
 			String dsName = getParam("PARAM_" + num2str(i) + "_VALUE",func)
-			Wave/T ds = GetDataSetWave(dsName,"ORG")
 			
+			If(stringmatch(dsName,"**Wave Match**"))
+				Wave/T ds = NTF:MatchLB_ListWave
+			Else
+				Wave/T ds = GetDataSetWave(dsName,"ORG")
+			EndIf
+					
 			If(DimSize(ds,0) > DimSize(extFuncDataSets,0))
 				Redimension/N=(DimSize(ds,0),DimSize(extFuncDataSets,1)+1,2) extFuncDataSets
 			Else
@@ -2593,6 +2775,8 @@ Function/WAVE getExtFuncDataSet()
 			EndIf
 			
 			extFuncDataSets[0,DimSize(ds,0)-1][count][] = ds[p][0][r]
+			SetDimLabel 1,count,$dsName,extFuncDataSets
+			
 			count += 1
 //			return ds
 		EndIf
@@ -2740,7 +2924,7 @@ End
 
 //Returns a string list of angles according to the input expression or list in 'Measure' command for the 'Vector Sum' measurement.
 Function/S GetVectorSumAngles(ds,size)
-	STRUCT ds &ds
+	STRUCT ds2 &ds
 	Variable size
 	
 	//Get the angles
@@ -3271,14 +3455,15 @@ End
 
 //Saves the ds structure for later recall by an external function
 Function SaveStruct(ds)
-	STRUCT ds &ds
+	STRUCT ds2 &ds
 	STRUCT ds_numOnly ds2
 	STRUCT ds_progress_numOnly progress2
 	
-	ds2.num = ds.num
+//	ds2.num = ds.num
 	ds2.wsi = ds.wsi
 	ds2.wsn = ds.wsn
-	ds2.numWaves = ds.numWaves
+	ds2.numDataSets = ds.numDataSets
+//	ds2.numWaves = ds.numWaves
 	
 	progress2.value = ds.progress.value
 	progress2.count = ds.progress.count
@@ -3292,19 +3477,21 @@ Function SaveStruct(ds)
 	//waves and strings get saved
 	DFREF NTF = root:Packages:NT
 		
-	Make/O/N=6/T NTF:ds_refs
+	Make/O/N=8/T NTF:ds_refs
 	Wave/T ds_refs = NTF:ds_refs
 	ds_refs[0] = GetWavesDataFolder(ds.listWave,2) //listwave
-	ds_refs[1] =  "root:Packages:NT:WaveSelectorStr" //name
-	ds_refs[2] =  "root:Packages:NT:DataSets:DataSetWaves" //paths
+	ds_refs[1] =  "root:Packages:NT:DataSets:DataSetNames" //data set names
+	ds_refs[2] =  "root:Packages:NT:DataSets:DataSetWavePaths" //paths
 	ds_refs[3] =  GetWavesDataFolder(ds.waves,2) //name
 	ds_refs[4] = "root:Packages:NT:progressVal" //progress bar value
 	ds_refs[5] = "root:Packages:NT:progressCount" //progress bar count
+	ds_refs[6] = "root:Packages:NT:DataSets:numDataSetWaves"//num waves per data set
+	ds_refs[7] = "root:Packages:NT:DataSets:NumWaveSets" //num wave sets per data set
 End
 
 //fills out the ds structure with the save data
 Function GetStruct(ds)
-	STRUCT ds &ds
+	STRUCT ds2 &ds
 	STRUCT ds_numOnly ds2
 	STRUCT ds_progress_numOnly progress2
 	
@@ -3315,10 +3502,11 @@ Function GetStruct(ds)
 	StructGet ds2,root:Packages:NT:ds
 	StructGet progress2,root:Packages:NT:progress
 	
-	ds.num = ds2.num
+//	ds.num = ds2.num
 	ds.wsi = ds2.wsi
 	ds.wsn = ds2.wsn
-	ds.numWaves = ds2.numWaves
+	ds.numDataSets = ds2.numDataSets
+//	ds.numWaves = ds2.numWaves
 	
 	ds.progress.value = progress2.value
 	ds.progress.count = progress2.count
@@ -3327,11 +3515,13 @@ Function GetStruct(ds)
 	
 	
 	Wave/T ds.listWave = $ds_refs[0]
-	SVAR ds.name = $ds_refs[1]
-	SVAR ds.paths = $ds_refs[2]
+	Wave/T ds.name = $ds_refs[1]
+	Wave/T ds.paths = $ds_refs[2]
 	Wave/WAVE ds.waves = $ds_refs[3]
 	NVAR ds.progress.value = $ds_refs[4]
 	NVAR ds.progress.count = $ds_refs[5]
+	Wave ds.numWaves = $ds_refs[6]
+	Wave ds.num = $ds_refs[7]
 End
 
 //Runs the selected external function (user provided)
@@ -3547,6 +3737,8 @@ Function BuildExtFuncControls(theFunction)
 					//Data Set Menu			
 					SVAR DSNameList = NTD:DSNameList
 					DSNameList = textWaveToStringList(NTD:DSNamesLB_ListWave,";")
+					DSNameList = "**Wave Match**;" + DSNameList
+					
 					String selection = getParam("PARAM_" + num2str(i) + "_VALUE",theFunction)
 					Variable selectionIndex = WhichListItem(selection,DSNameList,";")
 					
@@ -4102,6 +4294,24 @@ Function polarMath(pnt1,pnt2,degrad,op,signed)
 		case "rad":
 			angOut = (angOut > 2*pi) ? (angOut - 2*pi) : angOut
 			angOut = (angOut < 0) ? (angOut + 2*pi) : angOut
+			
+			//Determine the sign. Direction of point 2 relative to point 1
+			If(signed)	
+				
+				signTest = pnt1 + angOut
+				
+				If(signTest > 2*pi)
+					signTest -= 2*pi
+				EndIf	
+
+				If(abs(signTest - pnt2) < 0.0001) 
+					theSign = 1
+				Else
+					theSign = -1
+				EndIf
+				
+				angOut *= theSign
+			EndIf
 			break
 	endswitch
 	

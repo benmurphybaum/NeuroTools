@@ -9,7 +9,7 @@ Function RunCmd(cmd)
 	DFREF NTF = root:Packages:NT
 	
 	//Initialize data set info structure
-	STRUCT ds ds
+	STRUCT ds2 ds
 	
 	//Make sure a timer is available
 	ResetAllTimers()
@@ -33,10 +33,10 @@ Function RunCmd(cmd)
 			return 0
 		case "External Function":
 			//Get the data set info
-			Variable error = GetDataSetInfo(ds,extFunc=1)
+			Variable error = GetDataSetInfo2(ds,extFunc=1)
 			break
 		case "Max Project":
-			error = GetDataSetInfo(ds)
+			error = GetDataSetInfo2(ds)
 			break
 		case "Load Ephys":
 			NT_LoadEphys()
@@ -115,7 +115,7 @@ Function RunCmd(cmd)
 			return 0	
 		default:
 			//Get the data set info
-			error = GetDataSetInfo(ds)
+			error = GetDataSetInfo2(ds)
 	endswitch
 	
 	
@@ -138,10 +138,26 @@ Function RunCmd(cmd)
 	//WSN loop
 	Do
 		//Get the waves in the current WSN
-		ds.paths = GetWaveSetList(ds.listWave,ds.wsn,1)
 		Wave/WAVE ds.waves = GetWaveSetRefs(ds.listWave,ds.wsn)
+		Redimension/N=(DimSize(ds.Waves,0),DimSize(ds.Waves,1)) ds.paths
 		
-		ds.numWaves = ItemsInList(ds.paths,";")
+		For(i=0;i<ds.numDataSets;i+=1)
+		
+			String fullPaths = GetWaveSetList(ds.listWave,ds.wsn,1,dsNum=i)
+			
+			//Remove any potential empty positions that might be at the end of the list wave if the two data sets have different numbers of waves
+			fullPaths = RemoveEmptyItems(fullPaths,";")
+			
+			Wave/T tempPaths = StringListToTextWave(fullPaths,";")
+			
+			Redimension/N=(DimSize(ds.paths,0)) tempPaths
+			ds.paths[][i] = tempPaths[p]		
+			ds.numWaves[i] = ItemsInList(fullPaths,";")
+		EndFor
+		
+		
+		
+		
 		
 		//Execute the function returns optional output waves
 //		Do
@@ -162,7 +178,7 @@ Function RunCmd(cmd)
 		
 		//Reset the WSI
 		ds.wsi = 0
-	While(ds.wsn < ds.num)
+	While(ds.wsn < ds.num[0])
 	
 	//Make progress bar invisible
 	ValDisplay progress win=NT,disable=1
@@ -184,7 +200,7 @@ End
 
 //Takes a Command string, executes the corresponding function
 Function/WAVE ExecuteCommand(ds,cmd)
-	STRUCT ds &ds
+	STRUCT ds2 &ds
 	String cmd
 	
 	strswitch(cmd)
@@ -272,7 +288,7 @@ End
 
 //Averages the waves
 Function/WAVE NT_Average(ds[,pass])
-	STRUCT ds &ds //data set info structure
+	STRUCT ds2 &ds //data set info structure
 	
 	Variable pass //1 will output a free wave to pass to the calling function
 					  //0 or no input will output a real wave
@@ -364,7 +380,7 @@ Function/WAVE NT_Average(ds[,pass])
 	
 //	WSI loop
 	//Do the average calculation
-	String noteStr = "Average: " + num2str(ds.numWaves) + " Waves\r"
+	String noteStr = "Average: " + num2str(ds.numWaves[0]) + " Waves\r"
 	
 	If(isCircular)
 		//Circular data
@@ -392,12 +408,12 @@ Function/WAVE NT_Average(ds[,pass])
 				
 			EndIf		
 
-			noteStr += StringFromList(ds.wsi,ds.paths,";") + "\r"
+			noteStr += ds.paths[ds.wsi][0] + "\r"
 			
 			updateProgress(ds)
 			
 			ds.wsi += 1
-		While(ds.wsi < ds.numWaves)
+		While(ds.wsi < ds.numWaves[0])
 		
 		MatrixOP/O/FREE vMean = atan2(yTotal,xTotal)
 		
@@ -413,17 +429,17 @@ Function/WAVE NT_Average(ds[,pass])
 			Wave theWave = ds.waves[ds.wsi]
 			Multithread outWave += theWave
 			
-			noteStr += StringFromList(ds.wsi,ds.paths,";") + "\r"
+			noteStr += ds.paths[ds.wsi][0] + "\r"
 			
 			updateProgress(ds)
 			ds.wsi += 1
-		While(ds.wsi < ds.numWaves)
+		While(ds.wsi < ds.numWaves[0])
 		
 		If(WaveType(outWave) > 7) //any type of integer
 			Redimension/S outWave
 		EndIf
 		
-		Multithread outWave /= ds.numWaves
+		Multithread outWave /= ds.numWaves[0]
 	EndIf
 		
 	//Set the wave note
@@ -440,7 +456,7 @@ End
 
 //Gets the error of the waves - SEM or SDEV
 Function/WAVE NT_Error(ds[,pass])
-	Struct ds &ds
+	STRUCT ds2 &ds
 	Variable pass
 	
 	If(ParamIsDefault(pass))
@@ -508,24 +524,24 @@ Function/WAVE NT_Error(ds[,pass])
 	outWave = 0
 	
 	//Do the error calculation
-	String noteStr = "Errors: " + suffix + "(" + num2str(ds.numWaves) + " Waves)\r"
+	String noteStr = "Errors: " + suffix + "(" + num2str(ds.numWaves[0]) + " Waves)\r"
 	Do
 		Wave theWave = ds.waves[ds.wsi]
 		outWave += (theWave - avg)^2
-		noteStr += StringFromList(ds.wsi,ds.paths,";") + "\r"
+		noteStr += ds.paths[ds.wsi][0] + "\r"
 		
 		updateProgress(ds)
 		
 		ds.wsi += 1
-	While(ds.wsi < ds.numWaves)
+	While(ds.wsi < ds.numWaves[0])
 	
 	//stdev
-	outWave = sqrt(outWave / (ds.numWaves - 1))
+	outWave = sqrt(outWave / (ds.numWaves[0] - 1))
 	
 	//sem
 	If(!cmpstr(suffix,"sem"))
 		//sem
-		outWave /= sqrt(ds.numWaves)
+		outWave /= sqrt(ds.numWaves[0])
 	EndIf
 
 	//Set the wave note
@@ -542,7 +558,7 @@ End
 
 //Sets the wave note for the waves
 Function NT_SetWaveNote(ds[,noteStr,overwrite])
-	Struct ds &ds
+	STRUCT ds2 &ds
 	
 	//if the string is passed by a calling function
 	//instead of from the Parameters panel
@@ -565,22 +581,23 @@ Function NT_SetWaveNote(ds[,noteStr,overwrite])
 	
 	//Set the wave note of the input waves
 	Do
+		Wave theWave = ds.waves[ds.wsi]
 		If(overwrite)
-			Note/K ds.waves[ds.wsi], noteStr
+			Note/K theWave, noteStr
 		Else
-			Note ds.waves[ds.wsi], noteStr
+			Note theWave, noteStr
 		EndIf
 		
 		updateProgress(ds)
 		
 		ds.wsi += 1
-	While(ds.wsi < ds.numWaves)
+	While(ds.wsi < ds.numWaves[0])
 End
 
 
 //inputs spike recording, outputs histograms
 Function/WAVE NT_PSTH(ds)
-	Struct ds &ds
+	STRUCT ds2 &ds
 	
 	//Parameters
 	ControlInfo/W=NT binSize
@@ -629,7 +646,7 @@ Function/WAVE NT_PSTH(ds)
 		EndIf
 		
 		//Make Spike Count wave
-		Make/FREE/N=(ds.numWaves) spkct
+		Make/FREE/N=(ds.numWaves[0]) spkct
 		
 		//Get spike times and counts
 		FindLevels/Q/EDGE=1/M=0.002/R=(startTm,endTm)/D=spktm theWave,threshold
@@ -703,13 +720,13 @@ Function/WAVE NT_PSTH(ds)
 		updateProgress(ds)
 		
 		ds.wsi += 1
-	While(ds.wsi < ds.numWaves)
+	While(ds.wsi < ds.numWaves[0])
 	
 End
 
 //Subtracts the overall average value from the wave
 Function NT_SubtractMean(ds)
-	STRUCT ds &ds
+	STRUCT ds2 &ds
 	
 	ds.wsi = 0
 	Do
@@ -719,12 +736,12 @@ Function NT_SubtractMean(ds)
 		theWave -= V_avg
 		
 		ds.wsi += 1
-	While(ds.wsi < ds.numWaves)
+	While(ds.wsi < ds.numWaves[0])
 End
 
 //Fits a low frequency trend to the data and subtracts it
 Function NT_SubtractTrend(ds)
-	STRUCT ds &ds
+	STRUCT ds2 &ds
 	
 	ds.wsi = 0
 	Do
@@ -733,11 +750,11 @@ Function NT_SubtractTrend(ds)
 		FlattenWave(theWave)
 		
 		ds.wsi += 1
-	While(ds.wsi < ds.numWaves)
+	While(ds.wsi < ds.numWaves[0])
 End
 
 Function delSuffix(ds)
-	STRUCT ds &ds
+	STRUCT ds2 &ds
 	
 	ControlInfo/W=NT killOriginals
 	Variable killOriginals = V_Value
@@ -766,7 +783,7 @@ Function delSuffix(ds)
 		EndIf
 		
 		ds.wsi += 1
-	While(ds.wsi < ds.numWaves)
+	While(ds.wsi < ds.numWaves[0])
 
 	//Update the list boxes since we've just modified waves
 		
@@ -779,7 +796,7 @@ Function delSuffix(ds)
 End
 
 Function NT_DuplicateRename(ds)
-	STRUCT ds &ds
+	STRUCT ds2 &ds
 	
 	Variable numWaves,j,pos,numAddItems
 	String theWaveList,name,newName,posList,ctrlList,addItem
@@ -855,7 +872,7 @@ Function NT_DuplicateRename(ds)
 		updateProgress(ds)
 		
 		ds.wsi += 1
-	While(ds.wsi < ds.numWaves)
+	While(ds.wsi < ds.numWaves[0])
 
 End
 
@@ -864,7 +881,7 @@ End
 //Use the relative depth to back out of the current data folder.
  
 Function NT_MoveToFolder(ds)
-	STRUCT ds &ds
+	STRUCT ds2 &ds
 	
 	Variable i
 
@@ -925,7 +942,7 @@ Function NT_MoveToFolder(ds)
 		MoveWave theWave,$folderPath
 		
 		ds.wsi += 1
-	While(ds.wsi < ds.numWaves)
+	While(ds.wsi < ds.numWaves[0])
 
 End
 
@@ -1126,7 +1143,7 @@ End
 
 //Kills the waves
 Function NT_KillWaves(ds)
-	STRUCT ds &ds
+	STRUCT ds2 &ds
 		
 	ds.wsi = 0
 	
@@ -1145,11 +1162,11 @@ Function NT_KillWaves(ds)
 		ReallyKillWaves(theWave)
 		
 		ds.wsi += 1
-	While(ds.wsi < ds.numWaves)
+	While(ds.wsi < ds.numWaves[0])
 	
 	//print out the total size of the deleted waves after killing the waves.
 	//print on last wave set
-	If(ds.wsn == ds.num-1)
+	If(ds.wsn == ds.num[0]-1)
 		print "Deleted:", totalSize / (1e6),"MB"
 	EndIf
 End
@@ -1235,7 +1252,7 @@ End
 
 //Performs various measurements on the data set and puts the result in an output wave
 Function NT_Measure(ds)
-	STRUCT ds &ds
+	STRUCT ds2 &ds
 	
 	//Get input parameters
 	String type = CurrentMeasureType()
@@ -1315,8 +1332,8 @@ Function NT_Measure(ds)
 	
 	
 	//Make the output wave
-	String outName = StringFromList(0,ds.paths,";") + suffix
-	Make/O/N=(ds.numWaves) $outName /Wave = outWave
+	String outName = ds.paths[0][0] + suffix
+	Make/O/N=(ds.numWaves[0]) $outName /Wave = outWave
 	
 	//Make the measurement
 	ds.wsi = 0
@@ -1375,7 +1392,7 @@ Function NT_Measure(ds)
 		endswitch
 		
 		//Add wave name to wave note
-		theNote += StringFromList(ds.wsi,ds.paths,";") + "\n"
+		theNote += ds.paths[ds.wsi][0] + "\n"
 		
 		//Reset the end point to its original value for the next wave
 		endTm = origEndTm
@@ -1383,7 +1400,7 @@ Function NT_Measure(ds)
 		updateProgress(ds)
 		
 		ds.wsi += 1
-	While(ds.wsi < ds.numWaves)
+	While(ds.wsi < ds.numWaves[0])
 	
 	//Optional sorting
 	strswitch(sortType)
@@ -1687,9 +1704,16 @@ Function NT_SpikeCount(theWave,startTm,endTm,threshold)
 		return -1
 	EndIf
 	
-	FindLevels/Q/EDGE=1/R=(startTm,endTm) theWave,threshold
+	//Ensure correct data folder is set to pick up V_LevelsFound
+	DFREF saveDF = GetDataFolderDFR()
+	SetDataFolder GetWavesDataFolder(theWave,1)
+	
+	FindLevels/Q/D=spktm/R=(startTm,endTm)/M=0.002/T=0.0005 theWave,threshold
+//	FindLevels/Q/EDGE=1/R=(startTm,endTm) theWave,threshold
 	spkct = V_LevelsFound
 	KillWaves/Z W_FindLevels
+	
+	SetDataFolder saveDF
 	return spkct
 End
 
