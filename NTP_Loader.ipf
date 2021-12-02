@@ -2,8 +2,6 @@
 #pragma rtGlobals=3		// Use modern global access method and strict wave access.
 
 
-STRCONSTANT NTversion = "1.0"
-
 #if(DataFolderExists("root:Packages:twoP"))
 	//Adds #includes the external procedure files
 	Function NT_InsertIncludes()
@@ -59,17 +57,7 @@ STRCONSTANT NTversion = "1.0"
 	End
 #endif
 
-#if(!cmpstr(IgorInfo(2),"Macintosh"))
-	StrConstant LIGHT = "Roboto Light"
-	StrConstant REG = "Roboto"
-	StrConstant TITLE = "Bodoni 72 Smallcaps"
-	StrConstant SUBTITLE = "Bodoni 72 Oldstyle"
-#else
-	StrConstant LIGHT = "Roboto Light"
-	StrConstant REG = "Roboto"
-	StrConstant TITLE = "Mongolian Baiti"
-	StrConstant SUBTITLE = "Mongolian Baiti"
-#endif
+
 
 //Setup menu for loading NT
 Menu "Analysis", dynamic
@@ -212,7 +200,7 @@ Function Update_NT()
 	String updateTime = Secs2Time(secs,1)
 	String updateDate = Secs2Date(secs,0)
 	
-	print "Version: ",NTversion
+//	print "Version: ",NTversion
 	print "Last Update: ",updateDate,updateTime,"UTC"
 End
 

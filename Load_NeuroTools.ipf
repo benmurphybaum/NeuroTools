@@ -12,6 +12,19 @@
 //StrConstant TITLE = "Mongolian Baiti"
 //StrConstant SUBTITLE = "Mongolian Baiti"
 
+STRCONSTANT NTversion = "1.0"
+
+#if(!cmpstr(IgorInfo(2),"Macintosh"))
+	StrConstant LIGHT = "Roboto Light"
+	StrConstant REG = "Roboto"
+	StrConstant TITLE = "Bodoni 72 Smallcaps"
+	StrConstant SUBTITLE = "Bodoni 72 Oldstyle"
+#else
+	StrConstant LIGHT = "Roboto Light"
+	StrConstant REG = "Roboto"
+	StrConstant TITLE = "Mongolian Baiti"
+	StrConstant SUBTITLE = "Mongolian Baiti"
+#endif
 
 //Builds the GUI
 Function LoadNT([left,top])

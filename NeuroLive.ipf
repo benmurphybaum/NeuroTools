@@ -57,7 +57,7 @@ Function Load_NeuroLive([left,top])
 	Button browseFiles win=NL,pos={10,29},size={30,20},fsize=14,title="...",proc=nlButtonProc
 	
 	//File Type Menu
-	PopUpMenu fileType win=NL,pos={50,30},size={100,20},title="Type",font=$NL_LIGHT,fsize=10,value="PClamp;WaveSurfer;Presentinator;"
+	PopUpMenu fileType win=NL,pos={50,30},size={100,20},title="Type",font=$NL_LIGHT,fsize=10,value="PClamp;WaveSurfer;Turntable;Presentinator;"
 	
 	//Channel Selector
 	PopUpMenu channel win=NL,pos={335,30},size={50,20},title="Channel",value="1;2;3;4;All;",font=$NL_LIGHT,fsize=10,proc=nlMenuProc
@@ -514,6 +514,280 @@ Static Function MakePackageFolders()
 	EndIf
 End
 
+Function BrowseTurntable()
+
+	DFREF NLF = root:Packages:NeuroLive
+	Wave/T fileListWave = NLF:fileListWave 
+	Wave fileSelWave = NLF:fileSelWave
+	
+	SVAR fullpath = NLF:turntable_Filepath
+	
+	Variable fileID
+	HDF5OpenFile/I/Z/R fileID as ""
+	
+	If(V_flag)
+		return 0
+	EndIf
+	
+	String path = S_path
+	String file = S_fileName
+	
+	String/G NLF:turntable_Filepath
+	SVAR fullpath = NLF:turntable_Filepath
+	fullpath = path + file
+	
+	String folder = ParseFilePath(0,path,":",1,0)
+	
+	NewPath/O/Q/Z filePath,path
+	
+	String seriesList = TT_GetSeriesList(fileID)
+
+	Variable i,j,k
+	Variable whichColor = 0
+	
+	//Get the sweep list if it's a wavesurfer file
+	For(i=0;i<ItemsInList(seriesList,";");i+=1)
+		String series = StringFromList(i,seriesList,";")
+		
+		String sweepListTemp = TT_GetSweepList(fileID,series)
+		String unitsList = TT_GetSeriesUnits(fileID,series)
+		
+		//Resize the list box that holds the file names and parent folders
+		Redimension/N=(ItemsInList(sweepListTemp,";"),2,2) fileListWave
+		Redimension/N=(ItemsInList(sweepListTemp,";"),2,2) fileSelWave
+	
+		String colorList = "", chList = "", sweepList = "", fullPathList = "", prefixList = ""
+		
+		//Extract number of channels and the row color from the list
+		For(j=0;j<ItemsInList(sweepListTemp,";");j+=1)
+			colorList += num2str(whichColor) + ";"
+			prefixList += StringFromList(j,unitsList,";") + ";"
+			chList += "1" + ";"
+			sweepList += StringFromList(j,sweepListTemp,";") + ";"
+			
+			fileSelWave[i][][1] = str2num(StringFromList(i,colorList,";"))
+		EndFor
+		
+		whichColor  = (whichColor) ? 0 : 1
+		
+		For(j=0;j<ItemsInList(sweepList,";");j+=1)	
+			String sweepNum = StringFromList(j,sweepList,";")
+			String wavePath = ""
+			
+			String prefix = StringFromList(j,prefixList,";")
+			
+			strswitch(prefix)
+				case "A":
+					prefix = "Im"
+					break
+				case "V":
+					prefix = "Vm"
+					break
+			endswitch
+			
+			wavePath = "root:EPhys:" + folder + ":" + prefix + "_1_" + series + "_" + sweepNum + "_1" + ";"
+			
+			fileListWave[j][0][1] = wavePath
+		EndFor
+		
+	EndFor
+	
+	HDF5CloseFile fileID
+	
+	
+	
+	LoadTurnTable(fullpath,seriesList)
+	
+	
+End
+
+//Returns the list of data series in the provided turntable ephys file
+Static Function/S TT_GetSeriesList(fileID)
+	Variable fileID
+	
+	//Open the data group
+	Variable DataGroup_ID
+	HDF5OpenGroup/Z fileID,"/Data",DataGroup_ID
+	
+	//Gets the series list
+	HDF5ListGroup/TYPE=1/Z DataGroup_ID,"/Data"
+	String seriesList = S_HDF5ListGroup
+	
+	//alphanumeric sort
+	seriesList = SortList(seriesList,";",2)
+	
+	return seriesList
+End
+
+//Returns the list of sweeps in the provided turntable ephys file and series number
+Static Function/S TT_GetSweepList(fileID,series)
+	Variable fileID
+	String series
+	
+	//Open the data group
+	Variable DataGroup_ID
+	HDF5OpenGroup/Z fileID,"/Data",DataGroup_ID
+
+	//Gets the series list
+	HDF5ListGroup/TYPE=1/Z DataGroup_ID,"/Data"
+	HDF5CloseGroup/Z DataGroup_ID
+	
+	String seriesList = S_HDF5ListGroup
+	
+	//Is the series requested valid?
+	Variable err = WhichListItem(series,seriesList,";")
+	
+	If(err == -1)
+		return ""
+	EndIf
+	
+	String address = "/Data/" + series + "/Ch1"
+	HDF5OpenGroup/Z fileID,address,DataGroup_ID
+	HDF5ListGroup/TYPE=2/Z DataGroup_ID,address
+	String sweepList = S_HDF5ListGroup
+	
+	HDF5CloseGroup/Z DataGroup_ID
+	
+	sweepList = SortList(sweepList,";",2)
+	return sweepList
+End
+
+//Returns the list of sweeps in the provided turntable ephys file and series number
+Static Function/S TT_GetSeriesUnits(fileID,series)
+	Variable fileID
+	String series
+	
+	//Open the data group
+	Variable DataGroup_ID
+	HDF5OpenGroup/Z fileID,"/Data",DataGroup_ID
+	
+	//Gets the series list
+	String sweepList = TT_GetSweepList(fileID,series)
+	
+	Variable i,seriesID
+	String unitList = ""
+	
+	For(i=0;i<ItemsInList(sweepList,";");i+=1)
+		String sweep = StringFromList(i,sweepList,";")
+		
+		HDF5LoadData/A="IGORWaveUnits"/N=units/TYPE=2/O fileID,"/Data/" + series + "/Ch1/" + sweep
+		Wave/T units
+		unitList += units[0] + ";"
+	
+		KillWaves units
+	EndFor
+	
+	return unitList
+End
+
+//Returns the list of sweeps in the provided turntable ephys file and series number
+Static Function/S TT_GetSeriesScale(fileID,series)
+	Variable fileID
+	String series
+	
+	//Open the data group
+	Variable DataGroup_ID
+	HDF5OpenGroup/Z fileID,"/Data",DataGroup_ID
+	
+	//Gets the series list
+	String sweepList = TT_GetSweepList(fileID,series)
+	
+	Variable i,seriesID
+	String scaleList = ""
+	
+	For(i=0;i<ItemsInList(sweepList,";");i+=1)
+		String sweep = StringFromList(i,sweepList,";")
+		
+		HDF5LoadData/A="IGORWaveScaling"/N=scale/TYPE=2/O fileID,"/Data/" + series + "/Ch1/" + sweep
+		Wave scale
+		scaleList += num2str(scale[1][0]) + ";"
+	
+		KillWaves scale
+	EndFor
+	
+	return scaleList
+End
+
+
+Static Function LoadTurnTable(filePathList,seriesList)
+	String filePathList,seriesList
+	
+	DFREF saveDF = GetDataFolderDFR()
+	
+	Variable i,j,fileID,numSeries = ItemsInList(seriesList,";")
+	
+	String file = StringFromList(0,filePathList,";")
+	
+	//Open the file
+	HDF5OpenFile/R fileID as file
+			
+	If(V_flag == -1) //cancelled
+		return 0
+	EndIf
+
+	//Ensure folders exist for loading data into
+	If(!DataFolderExists("root:Ephys"))
+		NewDataFolder root:Ephys
+	EndIf
+	
+	//Ensure valid subfolder name
+	String subfolder = S_fileName
+	subfolder = RemoveEnding(S_fileName,".h5")
+	subfolder = ReplaceString(" ",subfolder,"_")
+	subfolder = ReplaceString("-",subfolder,"_")
+	
+	If(isnum(subfolder[0]))
+		subfolder = "Cell_" + subfolder
+	EndIf
+	
+	String destFolder = "root:Ephys:" + subfolder
+	
+	If(!DataFolderExists(destFolder))
+		NewDataFolder $destFolder
+	EndIf
+	
+	SetDataFolder $destFolder
+	
+	//load each channel in the selected series
+	For(i=0;i<numSeries;i+=1)
+		String series = StringFromList(i,seriesList,";")
+		String sweepList = TT_GetSweepList(fileID,series)
+		String unitsList = TT_GetSeriesUnits(fileID,series)
+		String scaleList = TT_GetSeriesScale(fileID,series)
+		
+		Variable nSweeps = ItemsInList(sweepList,";")
+		For(j=0;j<nSweeps;j+=1)
+			String sweep = StringFromList(j,sweepList,";")
+			String unit = StringFromList(j,unitsList,";")
+			String scale = StringFromList(j,scaleList,";")
+			
+			strswitch(unit)
+				case "V":
+					//Current clamp
+					String prefix = "Vm"
+					break
+				case "A":
+					//Voltage clamp
+					prefix = "Im"
+					break
+			endswitch
+			
+			String dataName = prefix + "_1_" + series + "_" + sweep + "_1"
+			
+			HDF5LoadData/O/TYPE=2/Q/N=$dataName fileID,"/Data/" + series + "/Ch1/" + sweep
+			Wave d = $dataName
+			
+			//Scale the data
+			SetScale/P x,0,str2num(scale),"s",d
+			SetScale/P y,0,1,unit,d
+		EndFor
+		
+	EndFor
+	
+	HDF5CloseFile fileID
+	
+	SetDataFolder saveDF
+End
 
 //Opens a browse dialog and lists out the files with the indicated type
 Static Function BrowseFiles(fileType)
@@ -533,6 +807,11 @@ Static Function BrowseFiles(fileType)
 			break
 		case "Presentinator":
 			filter = ".phys"
+			break
+		case "Turntable":
+			filter = ".h5"
+			BrowseTurntable()
+			return 0
 			break
 	endswitch
 	
@@ -699,6 +978,7 @@ Static Function BrowseFiles(fileType)
 			StringListToTextWave(fileList,fileListWave,";",col=0)
 
 			break
+		
 	endswitch
 
 
