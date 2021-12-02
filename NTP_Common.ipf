@@ -4684,10 +4684,9 @@ Function/S GetExternalFunctions()
 	userFunctionPath += "User Procedures:NeuroTools+:Functions"
 	
 	GetFileFolderInfo/Q/Z userFunctionPath
-	
-	NewPath/O/Q userPath,userFunctionPath
-	
+
 	If(V_isFolder)
+		NewPath/O/Q userPath,userFunctionPath
 		String userFileList = IndexedFile(userPath,-1,".ipf")
 		
 		For(i=0;i<ItemsInList(userFileList,";");i+=1)

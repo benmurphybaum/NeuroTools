@@ -38,13 +38,15 @@ Function NTP_InsertIncludes()
 	userFunctionPath += "User Procedures:NeuroTools+:Functions"
 	
 	GetFileFolderInfo/Q/Z userFunctionPath
+	If(!V_flag)
+		NewPath/O/Q userPath,userFunctionPath
 	
-	NewPath/O/Q userPath,userFunctionPath
-	
-	If(V_isFolder)
-		String userFileList = IndexedFile(userPath,-1,".ipf")
-		fileList += userFileList
+		If(V_isFolder)
+			String userFileList = IndexedFile(userPath,-1,".ipf")
+			fileList += userFileList
+		EndIf
 	EndIf
+
 	
 	//remove potential dependencies for old NeuroTools version
 	String removeList = "NT_Loader;Load_NeuroTools;NT_Common;NT_Controls;NT_DataSets;NT_ScanImage_Package;ScanImageTiffReader;NT_Image_Registration;NT_Functions;NT_InsertTemplate;NT_ExternalFunctions;NT_Structures;json_functions;NT_ABF_loader;NT_Presentinator;NT_ScanImage_Package;NT_ScanImageTiffReader;"
