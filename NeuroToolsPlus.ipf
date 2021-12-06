@@ -17,785 +17,6 @@
 		"New Data Set With Selection",NewDataSetWithSelection()
 	End
 	
-	//Removes the last folder in the Igor Path column for the selected rows in a data table
-	//Works oppositely to 'Add to Igor Path'
-	Function RemoveLastSubPath()
-		GetLastUserMenuInfo
-		GetSelection table,$S_tableName,1
-		
-		Wave/T archive = $S_firstColumnPath
-		
-		If(!WaveExists(archive))
-			return 0
-		EndIf
-
-		Variable row
-
-		For(row=V_startRow;row<V_endRow+1;row+=1)
-			String path = archive[row][%IgorPath]
-			path = ParseFilePath(1,path,":",1,0)
-			archive[row][%IgorPath] = path
-		EndFor
-	End
-	
-	//Uses the selection in the data table and collapses all data folder into just a single row
-	Function CollapseByFolder()
-		GetLastUserMenuInfo
-		GetSelection table,$S_tableName,1
-		
-		Wave/T archive = $S_firstColumnPath
-		
-		If(!WaveExists(archive))
-			return 0
-		EndIf
-	
-		DFREF NPD = $DSF
-		NVAR dti = NPD:dataTableIndex
-		
-		If(!NVAR_Exists(dti))
-			Variable/G NPD:dataTableIndex
-			NVAR dti = NPD:dataTableIndex
-		EndIf
-		
-		//Get a list of the folder paths contained in the selection
-		String list = ""
-		For(dti=V_startRow;dti<V_endRow + 1;dti+=1)
-			list += archive[dti][%IgorPath] + ";"
-		EndFor
-		
-		list = RemoveDuplicateList(list,";")
-		
-		//Determine which rows need to be deleted within the selection
-		String whichRows = ""
-		Variable i
-		For(i=0;i<ItemsInList(list,";");i+=1)
-			String folder = StringFromList(i,list,";")
-			
-			Variable count = 0
-			For(dti=V_startRow;dti<V_endRow + 1;dti+=1)
-				If(!cmpstr(archive[dti][%IgorPath],folder))
-					If(count)
-						whichRows += num2str(dti) + ";"
-					EndIf
-					
-					count += 1
-				EndIf
-			EndFor
-		EndFor
-		
-		//Delete the rows, decrementing
-		For(i=ItemsInList(whichRows,";")-1;i>-1;i-=1)
-			Variable theRow = str2num(StringFromList(i,whichRows,";"))
-			
-			DeletePoints/M=0 theRow,1,archive
-		EndFor
-		
-	End
-	
-	//Same as NT_LoadEphysTable but does it directly from the data table selection
-	Function LoadDataTableSelection()
-		GetLastUserMenuInfo
-		GetSelection table,$S_tableName,1
-		
-		Wave/T archive = $S_firstColumnPath
-		
-		If(!WaveExists(archive))
-			return 0
-		EndIf
-		
-		String dataset = NameOfWave(archive)
-		dataset = RemoveEnding(dataset,"_archive")
-		dataset = StringsFromList("1-*",dataset,"_",noEnding=1)
-		
-		If(!isArchive(dataSet))
-			Abort "Couldn't find the data set: " + dataset
-		EndIf
-		
-		String masterFilePathList = ""
-		String channelList = ""
-	
-		DFREF NPD = $DSF
-		NVAR dti = NPD:dataTableIndex
-		
-		For(dti=V_startRow;dti<V_endRow + 1;dti+=1)	
-			String fileType = 	archive[dti][%Type]
-			
-			strswitch(fileType)
-				case "pclamp":
-				case ".abf":
-				case ".abf2":
-				case "abf":
-				case "abf2":
-					//PClamp file
-					//these aren't packed files, so each sweep is its own file. The File path column should hold the folder base name without the
-					//trace numbers. All traces will be loaded unless indicated in one of the Pos_ columns
-					String theFile = archive[dti][%Path]
-					
-					theFile = GetABFTrialList(theFile,archive,dti)
-					
-					//For each Trials entry, if multiple trials are defined, they all must have the same number of traces. Check this here
-					Variable numTraces = CheckABFTraceCounts(theFile)
-					
-					If(!numTraces) //not all equal if zero
-						Abort "All trials must have the same number of traces if defined on the same data table line."
-					EndIf
-					
-					//Fill the trace counts into the correct data table lines
-					Variable traceCol = FindDimLabel(archive,1,"Traces")
-					
-					archive[dti][traceCol] = "1-" + num2str(numTraces)
-					
-					channelList = archive[dti][%Channels]
-					
-					If(!strlen(channelList))
-						channelList = "All"
-					ElseIf(cmpstr(channelList,"All"))
-						channelList = ResolveListItems(channelList,",",noEnding=1)
-					EndIf
-					
-					InsertWaveNames()
-					
-					NT_LoadPClamp(theFile,channels=channelList,table=dataset)
-					
-//					LoadPClamp(theFile,channels=channelList,table=S_tableName) //list of pclamp file paths depending on the sweeps
-					break
-				case "wavesurfer":
-				case ".h5":
-				case "h5":
-				case "hdf5":
-				case "hdf":
-					//wavesurfer file
-					//these are packed files, so each one contains series of traces. Auto loads all traces unless indicated in one
-					//of the Pos_ columns
-					theFile = archive[dti][%Path]
-					
-					//		String theFile = StringFromList(dti,filePathList,";")
-					channelList = archive[dti][%Channels]
-					
-					//Load the files one at a time so we can increment the data table index
-					Load_WaveSurfer(theFile,channels=channelList,table=dataset)
-					break
-			endswitch
-		EndFor
-		
-	End
-	
-	//Add the user input string to the end of the igor path in the selected data table rows
-	Function AddToIgorPath()
-		GetLastUserMenuInfo
-		GetSelection table,$S_tableName,1
-		
-		Wave/T archive = $S_firstColumnPath
-		
-		If(!WaveExists(archive))
-			return 0
-		EndIf
-		
-		String input = ""
-		Prompt input,"Add:"
-		DoPrompt "Add to Igor Path",input
-		
-		If(V_flag)
-			return 0
-		EndIf
-		
-		Variable row
-
-		For(row=V_startRow;row<V_endRow+1;row+=1)
-			archive[row][%IgorPath] += input
-		EndFor
-	End
-	
-	//Marks the data table according to the folder in the 'Marker' column
-	Function MarkByFolder()
-		GetLastUserMenuInfo
-		GetSelection table,$S_tableName,1
-		
-		Wave/T archive = $S_firstColumnPath
-		
-		If(!WaveExists(archive))
-			return 0
-		EndIf
-		
-		String folderList = ""
-		
-		Variable i,count = 1
-		For(i=0;i<DimSize(archive,0);i+=1)
-			String folder = archive[i][%IgorPath]
-			
-			If(i == 0)
-				folderList = folder + ";"
-			EndIf
-			
-			If(WhichListItem(folder,folderList,";") == -1)
-				folderList += folder + ";"
-				count += 1
-			EndIf
-			
-			archive[i][%Marker] = num2str(count)			
-		EndFor
-	End
-	
-	//Inserts a new row onto the data table
-	Function InsertNewRow()
-		GetLastUserMenuInfo
-		GetSelection table,$S_tableName,1
-		
-		Wave/T archive = $S_firstColumnPath
-		
-		If(!WaveExists(archive))
-			return 0
-		EndIf
-		
-		InsertPoints/M=0 V_startRow,1,archive
-	End
-	
-	//Fills the selected table rows with whatever is in the top selected row. Only for text waves.
-	Function FillTableSelection()
-		GetLastUserMenuInfo
-		WAVE/Z/T tableWave = $S_firstColumnPath
-		GetSelection table, $S_TableName, 3
-		
-		If(!V_flag)
-			return 0
-		EndIf
-		
-		//only handles text table waves for now
-		If(WaveType(tableWave,1) != 2)
-			return 0
-		EndIf
-		
-		//Index column is showing in data tables, offsets the selection column by 1.
-		V_startCol -= 1
-		V_endCol -= 1
-		
-		Variable row,col
-		For(col=V_startCol;col<V_endCol+1;col+=1)
-			//Get the top selected entry in each selected column
-			String entry = tableWave[V_startRow][col]
-			
-			For(row=V_startRow;row<V_endRow+1;row+=1)
-				tableWave[row][col] = entry
-			EndFor
-		EndFor
-	End
-	
-	//Fills data table rows with incrementing values starting with the value of the top row
-	Function IncrementFromTop()
-		GetLastUserMenuInfo
-		WAVE/Z/T tableWave = $S_firstColumnPath
-		GetSelection table, $S_TableName, 3
-		
-		If(!V_flag)
-			return 0
-		EndIf
-		
-		//only handles text table waves for now
-		If(WaveType(tableWave,1) != 2)
-			return 0
-		EndIf
-		
-		//Index column is showing in data tables, offsets the selection column by 1.
-		V_startCol -= 1
-		V_endCol -= 1
-		
-		Variable row,col
-		For(col=V_startCol;col<V_endCol+1;col+=1)
-			//Get the top selected entry in each selected column
-			String entry = tableWave[V_startRow][col]
-			
-			//Check that its a number in the top row, otherwise return
-			Variable firstNum = str2num(entry)
-			
-			If(numtype(firstNum == 2))
-				return 0
-			EndIf
-			
-			For(row=V_startRow;row<V_endRow+1;row+=1,firstNum+=1)
-				tableWave[row][col] = num2str(firstNum)
-			EndFor
-		EndFor
-	End
-	
-	//Browses for a file, and inserts the selection into the data table
-	Function InsertFilePath()
-		DFREF NPC = $CW
-		Variable fileID
-	
-		GetLastUserMenuInfo
-		GetSelection table,$S_tableName,1
-		
-		Wave/T archive = $S_firstColumnPath
-				
-		Open/R/D/MULT=1/F="All Files:.*" fileID
-		
-		If(strlen(S_fileName))
-			S_fileName = ReplaceString("/",S_fileName,":")
-			S_fileName = ReplaceString("\r",S_fileName,";")
-		Else
-			return 0
-		EndIf
-		
-		Close/A
-		
-		Variable i,numFiles = ItemsInList(S_fileName,";")
-		
-		For(i=0;i<numFiles;i+=1)
-			String theFile = StringFromList(i,S_fileName,";")
-			
-			//is this an .abf file? If so, we need to remove the trace indexing so we can specify that in other parts of the data table
-			If(stringmatch(theFile,"*.abf"))
-				String fileBase = ParseFilePath(1,theFile,":",1,0)
-				
-				String newFileName = ParseFilePath(0,theFile,":",1,0)
-				newFileName = RemoveEnding(newFileName,".abf")
-				
-				String trialNum = ParseFilePath(0,newFileName,"_",1,0)
-				newFileName = RemoveEnding(ParseFilePath(1,newFileName,"_",1,0),"_")
-				
-				//buffered zeros removed
-				trialNum = num2str(str2num(trialNum))
-				
-				If(V_startRow > DimSize(archive,0) - 1)
-					InsertPoints/M=0 DimSize(archive,0),1,archive
-				EndIf
-				
-				If(i > 0)
-					InsertPoints/M=0 V_startRow + i,1,archive
-				EndIf
-				
-				archive[V_startRow + i][%Path] = fileBase + newFileName
-				archive[V_startRow + i][%Trials] = trialNum
-				archive[V_startRow + i][%Type] = "pClamp"
-			ElseIf(stringmatch(theFile,"*.h5"))
-				If(V_startRow > DimSize(archive,0) - 1)
-					InsertPoints/M=0 DimSize(archive,0),1,archive
-				EndIf
-				
-				If(i > 0)
-					InsertPoints/M=0 V_startRow + i,1,archive
-				EndIf
-				archive[V_startRow + i][%Path] = theFile
-				archive[V_startRow + i][%Type] = "WaveSurfer"
-			EndIf
-		EndFor		
-	End
-	
-	Function InsertWaveNames()
-		DFREF NPC = $CW
-		Variable fileID
-		
-		GetLastUserMenuInfo
-		GetSelection table,$S_tableName,1
-		
-		Wave/T archive = $S_firstColumnPath
-		
-		If(!WaveExists(archive))
-			return 0
-		EndIf
-		
-		Variable f
-		For(f=V_startRow;f<V_endRow+1;f+=1)
-			String filePathStr = archive[f][%Path]
-			String type = archive[f][%Type]
-			
-			String folderPath = ParseFilePath(1,filePathStr,":",1,0)
-			
-			NewPath/O/Q/Z filePath,folderPath
-			
-			strswitch(type)
-				case "WaveSurfer":
-					HDF5OpenFile/Z/R fileID as filePathStr
-					If(V_flag)
-						Abort "Couldn't load the file: " + filePathStr
-					EndIf
-					
-					//Channels indicated on the data table
-					String channels = archive[f][%Channels]
-					channels = ResolveListItems(channels,";",noEnding=1)
-					
-					//Finds the data sweep groups
-					//Get the groups in the file
-					HDF5ListGroup/F/R/TYPE=1 fileID,"/"
-					S_HDF5ListGroup = ListMatch(S_HDF5ListGroup,"/sweep*",";")	
-					Variable numSweeps = ItemsInList(S_HDF5ListGroup,";")		
-					
-					//Sweep List
-					Variable j,k
-					String sweepList = ""
-					For(k=0;k<numSweeps;k+=1)
-						//Get the sweep index, truncate zeros
-						String theSweep = StringFromList(1,StringFromList(k,S_HDF5ListGroup,";"),"_")
-						
-						j = 0
-						Do
-							If(!cmpstr(theSweep[j],"0"))
-								theSweep = theSweep[j+1,strlen(theSweep)-1] //truncate leading zeros
-								continue
-							Else
-								break
-							EndIf
-							
-							j += 1
-						While(j < strlen(theSweep)-1)
-						
-						sweepList += theSweep + ","
-					EndFor
-					
-					sweepList = RemoveEnding(sweepList,",")
-					
-					//Protocol name
-					HDF5LoadData/N=prot/Q fileID,"/header/AbsoluteProtocolFileName"
-					Wave/T prot = :prot
-					String protocol = RemoveEnding(ParseFilePath(0,prot[0],"\\",1,0),".wsp")
-					
-					//Units for the prefix
-					HDF5LoadData/N=unit/Q fileID,"/header/AIChannelUnits"
-					Wave/T unit = :unit
-					
-					If(!strlen(channels))
-						If(DimSize(unit,0) == 1)
-							channels = "1"
-						Else
-							channels = "1-" + num2str(DimSize(unit,0))
-						EndIf
-						
-						archive[f][%Channels] = channels
-						channels = ResolveListItems(channels,";",noEnding=1)
-					EndIf
-					
-					String channelList = ""
-					
-					For(j=0;j<ItemsInList(channels,";");j+=1)
-						
-						String theUnit = unit[j]
-						String prefix = ""
-						String unitBase = theUnit[1]
-						
-						strswitch(unitBase)
-							case "A":
-								//current
-								prefix = "Im"
-								break
-							case "V":
-								//voltage
-								prefix = "Vm"
-								break
-						endswitch
-						
-						channelList += prefix + ","
-					EndFor
-					
-					channelList = RemoveEnding(channelList,",")
-										
-					archive[f][0] = channelList //position 0
-					archive[f][1] = "1" //position 1
-					archive[f][2] = sweepList//"1-" + num2str(numSweeps) //sweeps
-					archive[f][3] = "1" //position 3
-					archive[f][4] = "1" //position 4
-					archive[f][%Comment] = protocol //position 4
-					
-					//Close file
-					HDF5CloseFile/A fileID
-					
-					//Cleanup
-					KillWaves/Z unit,prot
-					break
-				case "pClamp":
-					//NEED TO CODE
-					STRUCT abfInfo a
-					
-					//Get the full paths to each file
-					String fileList = IndexedFile(filepath,-1,".abf")
-					
-					If(!strlen(fileList))
-						return 0
-					EndIf
-					
-					fileList = SortList(fileList,";",16)
-					
-					fileList = ReplaceString(".abf",fileList,"")
-					//check if archive table has preset trace numbers to load
-					String traceList = ""
-					traceList = archive[f][%Trials]
-					
-					If(strlen(traceList))
-						traceList = ResolveListItems(traceList,";")
-						String firstTrace = StringFromList(0,traceList,";")
-						
-						//Take out the zero buffer in the file name
-						If(str2num(firstTrace) < 10)
-							firstTrace = "000" + firstTrace
-						ElseIf(str2num(firstTrace) < 100)
-							firstTrace = "00" + firstTrace
-						ElseIf(str2num(firstTrace) < 1000)
-							firstTrace = "0" + firstTrace
-						EndIf
-					Else
-						firstTrace = StringFromList(0,fileList,";")
-						firstTrace = ParseFilePath(0,firstTrace,"_",1,0)
-					EndIf
-
-					If(!strlen(firstTrace))
-						sweepList = ""
-						Variable i
-						For(i=0;i<ItemsInList(fileList,";");i+=1)
-							String fileStr = StringFromlist(i,fileList,";")
-							fileStr = ParseFilePath(0,fileStr,":",1,0)
-							sweepList += ParseFilePath(0,fileStr,"_",1,0) + ";"
-						EndFor
-						
-						//Assume all defined traces have the same properties for a single line on a data table.
-						filePathStr += "_" + StringFromList(0,sweepList,";")
-					Else
-						filePathStr += "_" + firstTrace
-					EndIf
-										
-					//Open pclamp file
-					Variable refnum
-					filePathStr = RemoveEnding(filePathStr,".abf") + ".abf"
-					
-				
-					Open/R/Z=2 refnum as filePathStr
-					If(V_flag == -1)
-						Abort "Couldn't load the file: " + filePathStr
-					EndIf
-					
-					//Number sweeps
-					FSetPos refnum,12
-					FBInRead/B=3/F=3 refnum,a.nSweeps
-					
-					//Data format
-					FSetPos refnum,30
-					FBInRead/B=3/F=2 refnum,a.dataFormat
-					
-					Variable dataSz	,bitFormat
-					switch(a.dataFormat)
-						case 0:
-							dataSz = 2 //bytes/point
-							bitFormat = 2
-							break
-						case 1:
-							dataSz = 4 //bytes/point
-							bitFormat = 3
-							break
-						default:
-							DoAlert 0,"Invalid number format"
-							return -1
-							break
-					endswitch
-				
-					//Section info
-					Wave ADCSection = GetADCSection(refnum)
-					Wave DataSection = GetDataSection(refnum)
-					Wave ProtocolSection = GetProtocolSection(refnum)
-					Wave StringsSection = GetStringsSection(refnum)
-					Wave SynchArraySection = GetSynchSection(refnum)
-					
-					//Number channels
-					a.nChannels = ADCSection[2]
-		
-					//Longer strings information about the recording
-					FSetPos refnum,StringsSection[0]*512
-					String bigString = ""
-					bigString = PadString(bigString,StringsSection[1],0)
-					FBInRead refnum,bigString
-					String progStr = "clampex;clampfit;axoscope;patchexpress"
-					Variable goodStart
-					For(i=0;i<4;i+=1)
-						goodStart = strsearch(bigString,StringFromList(i,progStr,";"),0,2)
-						If(goodStart)
-							break
-						EndIf
-					EndFor
-					
-					Variable lastSpace = 0
-					Variable nextSpace
-				
-					bigString = bigString[goodStart,strlen(bigString)]
-					Make/FREE/T/N=1 Strings
-					Strings[0] = ""
-					For(i=0;i<30;i+=1)
-						Redimension/N=(i+1) Strings
-						nextSpace = strsearch(bigString,"\u0000",lastSpace)
-						If(nextSpace == -1)
-							Redimension/N=(i) Strings
-							break
-						EndIf
-						Strings[i] = bigString[lastSpace,nextSpace-1]
-						lastSpace = nextSpace + 1
-					EndFor
-					
-					
-					//Get protocol name
-					protocol = Strings[1]
-					protocol = ParseFilePath(0,protocol,"\\",1,0)
-					protocol = RemoveEnding(protocol,".pro")
-					
-					archive[f][%Comment] = protocol
-					
-					//Get the Channel names, units, and scales
-					a.ChannelNames = ""
-					a.ChannelUnits = ""
-					a.ChannelBase = ""
-					
-					
-					Variable c
-					For(i=0;i<a.nChannels;i+=1)
-				
-						String name = Strings[2 + 2 * i]
-						String unitStr = Strings[3 + 2 * i]
-						
-						a.ChannelNames += name + ";"
-						a.ChannelUnits += unitStr + ";"
-						a.ChannelScale[i] = 0 //reset
-						a.ChannelBase += unitStr[1,strlen(unitStr)-1] + ";"
-								
-						//Channel indices that were recorded
-						a.ChannelIndex[i] = GetADCParam(refnum,ADCSection,i,"ADCNum")
-					EndFor
-					
-					unitBase = StringFromList(c,a.channelBase,";")
-					
-				
-					//Reset the trace section
-					archive[f][%Pos_4] = ""
-					
-					For(i=0;i<a.nSweeps;i+=1)
-											
-						//Figure out the wave names for each of the channels in each sweep
-					
-						//Prefix
-						strswitch(unitBase)
-							case "A": //amps, voltage clamp
-								prefix = "Im"
-								break
-							case "V": //volts, current clamp
-								prefix = "Vm"
-								break
-						endswitch
-						
-						String group = archive[f][%Pos_1]
-						If(!strlen(group))
-							group = "1"
-						EndIf
-						
-						String series = ParseFilePath(0,filePathStr,":",1,0)
-						series = ParseFilePath(0,series,"_",1,0)
-						series = ParseFilePath(0,series,".",0,0)
-						series = num2str(str2num(series))
-						
-						String sweep = archive[f][%Pos_3]
-						If(!strlen(sweep))
-							sweep = num2str(i+1)
-						EndIf
-						
-						
-						String trace = "1"
-						
-						If(!strlen(archive[f][%Pos_0]))
-							archive[f][%Pos_0] = prefix
-						EndIf
-						
-						If(strlen(traceList))
-							archive[f][%Pos_2] = archive[f][%Trials]
-						Else
-							archive[f][%Pos_2] += series + ","
-							archive[f][%Trials] += series + ","
-						EndIf
-						
-						archive[f][%Pos_1] = group
-						archive[f][%Pos_3] = sweep
-						
-						//Insert the channels, but only for initial loop
-						If(i == 0)
-							If(strlen(archive[f][%Channels]))
-								archive[f][%Pos_4] = archive[f][%Channels]
-							Else
-								For(c=0;c<a.nChannels;c+=1)
-									archive[f][%Pos_4] += num2str(a.ChannelIndex[c]) + ","
-									archive[f][%Channels] += num2str(a.ChannelIndex[c]) + ","
-								EndFor
-								
-								archive[f][%Pos_4] = RemoveEnding(archive[f][%Pos_4],",")
-								archive[f][%Channels] = RemoveEnding(archive[f][%Channels],",")
-							EndIf
-						EndIf														
-					EndFor
-					
-					
-					archive[f][%Pos_2] = RemoveEnding(archive[f][%Pos_2],",")	
-					
-					//Sweeps
-					If(strlen(archive[f][%Traces]))
-						String fileSweepList = ResolveListItems(archive[f][%Traces],",",noEnding=1)
-						
-						If(ItemsInList(sweep,",") != ItemsInList(fileSweepList,","))
-							archive[f][%Pos_3] = archive[f][%Traces]
-						EndIf
-					Else
-						archive[f][%Traces] = archive[f][%Pos_3]
-					EndIf
-					
-					//Cleanup the index lists
-					If(!stringmatch(archive[f][%Pos_2],"*-*"))
-						archive[f][%Pos_2] = ListToRange(archive[f][%Pos_2],",")
-						archive[f][%Trials] = archive[f][%Pos_2]
-					EndIf
-					
-					If(!stringmatch(archive[f][%Pos_3],"*-*"))
-						String fullTraceList = ResolveListItems(archive[f][%Pos_3],",",noEnding=1)
-						
-						archive[f][%Traces] = "1-" + num2str(ItemsInList(fullTraceList,","))
-						archive[f][%Pos_3] = ListToRange(archive[f][%Pos_3],",")
-					EndIf
-					
-					If(!stringmatch(archive[f][%Pos_4],"*-*"))
-						archive[f][%Pos_4] = ListToRange(archive[f][%Pos_4],",")
-						archive[f][%Channels] = archive[f][%Pos_4]
-					EndIf
-					
-					break
-			endswitch
-		EndFor	
-		
-	End
-	
-	//Creates a new data set archive with the selected rows in the current data archive
-	Function NewDataSetWithSelection()
-		DFREF NPD = $DSF
-		DFREF NPC = $CW
-	
-		GetLastUserMenuInfo
-		WAVE/Z/T tableWave = $S_firstColumnPath
-		GetSelection table, $S_TableName, 3
-		
-		If(!V_flag)
-			return 0
-		EndIf
-		
-		//only handles text table waves for now
-		If(WaveType(tableWave,1) != 2)
-			return 0
-		EndIf
-		
-		//Index column is showing in data tables, offsets the selection column by 1.
-		V_startCol -= 1
-		V_endCol -= 1
-		
-		//Get the top selected entry in each selected column
-		Variable numRows = V_endRow - V_startRow + 1
-			
-		String dsName = NewDataTable()
-		
-		Wave/T archive = NPD:$("DS_" + dsName + "_archive")
-		
-		Redimension/N=(numRows,-1) archive
-		
-		archive = tableWave[p + V_startRow][q]
-		
-	End
-	
 	Menu "DataBrowserObjectsPopup", dynamic
 		// This menu item is displayed if the shift key is not pressed
 		Display1vs2MenuItemString(0), /Q, DisplayWave1vsWave2(0)
@@ -804,51 +25,385 @@
 		Display1vs2MenuItemString(1), /Q, DisplayWave1vsWave2(1)
 		
 		//Create new data set with data browser selection
-		NewDataSetWithBrowserSelectionString(), /Q, NewDataSetWithBrowserSelection() 
+	NewDataSetWithBrowserSelectionString(), /Q, NewDataSetWithBrowserSelection() 
 	End
-#else
-	Menu "NeuroTools+"
-		SubMenu "Data Sets"
-			"Insert File Path/2",InsertFilePath()
-		End
-	End
+#endif
+
+
 	
-	//Browses for a file, and inserts the selection into the data table
-	Function InsertFilePath()
-		DFREF NPC = $CW
-		Variable fileID
+//Removes the last folder in the Igor Path column for the selected rows in a data table
+//Works oppositely to 'Add to Igor Path'
+Function RemoveLastSubPath()
+	
+	GetWindow kwTopWin activeSW
+	String tableName = S_Value
+
+
+	GetSelection table,tableName,1
+	
+	DFREF NPD = $DSF
+	String archivePath = DSF + S_Selection
+	Wave/T archive = $archivePath
+	
+	If(!WaveExists(archive))
+		return 0
+	EndIf
+
+	Variable row
+
+	For(row=V_startRow;row<V_endRow+1;row+=1)
+		String path = archive[row][%IgorPath]
+		path = ParseFilePath(1,path,":",1,0)
+		archive[row][%IgorPath] = path
+	EndFor
+End
+
+//Uses the selection in the data table and collapses all data folder into just a single row
+Function CollapseByFolder()
+	GetWindow kwTopWin activeSW
+	String tableName = S_Value
+
+
+	GetSelection table,tableName,1
+	
+	DFREF NPD = $DSF
+	String archivePath = DSF + S_Selection
+	Wave/T archive = $archivePath
+	
+	If(!WaveExists(archive))
+		return 0
+	EndIf
+
+	DFREF NPD = $DSF
+	NVAR dti = NPD:dataTableIndex
+	
+	If(!NVAR_Exists(dti))
+		Variable/G NPD:dataTableIndex
+		NVAR dti = NPD:dataTableIndex
+	EndIf
+	
+	//Get a list of the folder paths contained in the selection
+	String list = ""
+	For(dti=V_startRow;dti<V_endRow + 1;dti+=1)
+		list += archive[dti][%IgorPath] + ";"
+	EndFor
+	
+	list = RemoveDuplicateList(list,";")
+	
+	//Determine which rows need to be deleted within the selection
+	String whichRows = ""
+	Variable i
+	For(i=0;i<ItemsInList(list,";");i+=1)
+		String folder = StringFromList(i,list,";")
 		
-		GetWindow kwTopWin activeSW
+		Variable count = 0
+		For(dti=V_startRow;dti<V_endRow + 1;dti+=1)
+			If(!cmpstr(archive[dti][%IgorPath],folder))
+				If(count)
+					whichRows += num2str(dti) + ";"
+				EndIf
+				
+				count += 1
+			EndIf
+		EndFor
+	EndFor
+	
+	//Delete the rows, decrementing
+	For(i=ItemsInList(whichRows,";")-1;i>-1;i-=1)
+		Variable theRow = str2num(StringFromList(i,whichRows,";"))
 		
-		If(WinType(S_Value) != 2)
-			return 0
-		Else
-			String tableName = S_Value
+		DeletePoints/M=0 theRow,1,archive
+	EndFor
+	
+End
+
+//Same as NT_LoadEphysTable but does it directly from the data table selection
+Function LoadDataTableSelection()
+	GetWindow kwTopWin activeSW
+	String tableName = S_Value
+
+
+	GetSelection table,tableName,1
+	
+	DFREF NPD = $DSF
+	String archivePath = DSF + S_Selection
+	Wave/T archive = $archivePath
+	
+	If(!WaveExists(archive))
+		return 0
+	EndIf
+	
+	String dataset = NameOfWave(archive)
+	dataset = RemoveEnding(dataset,"_archive")
+	dataset = StringsFromList("1-*",dataset,"_",noEnding=1)
+	
+	If(!isArchive(dataSet))
+		Abort "Couldn't find the data set: " + dataset
+	EndIf
+	
+	String masterFilePathList = ""
+	String channelList = ""
+
+	DFREF NPD = $DSF
+	NVAR dti = NPD:dataTableIndex
+	
+	For(dti=V_startRow;dti<V_endRow + 1;dti+=1)	
+		String fileType = 	archive[dti][%Type]
+		
+		strswitch(fileType)
+			case "pclamp":
+			case ".abf":
+			case ".abf2":
+			case "abf":
+			case "abf2":
+				//PClamp file
+				//these aren't packed files, so each sweep is its own file. The File path column should hold the folder base name without the
+				//trace numbers. All traces will be loaded unless indicated in one of the Pos_ columns
+				String theFile = archive[dti][%Path]
+				
+				theFile = GetABFTrialList(theFile,archive,dti)
+				
+				//For each Trials entry, if multiple trials are defined, they all must have the same number of traces. Check this here
+				Variable numTraces = CheckABFTraceCounts(theFile)
+				
+				If(!numTraces) //not all equal if zero
+					Abort "All trials must have the same number of traces if defined on the same data table line."
+				EndIf
+				
+				//Fill the trace counts into the correct data table lines
+				Variable traceCol = FindDimLabel(archive,1,"Traces")
+				
+				archive[dti][traceCol] = "1-" + num2str(numTraces)
+				
+				channelList = archive[dti][%Channels]
+				
+				If(!strlen(channelList))
+					channelList = "All"
+				ElseIf(cmpstr(channelList,"All"))
+					channelList = ResolveListItems(channelList,",",noEnding=1)
+				EndIf
+				
+				InsertWaveNames()
+				
+				NT_LoadPClamp(theFile,channels=channelList,table=dataset)
+				
+//					LoadPClamp(theFile,channels=channelList,table=S_tableName) //list of pclamp file paths depending on the sweeps
+				break
+			case "wavesurfer":
+			case ".h5":
+			case "h5":
+			case "hdf5":
+			case "hdf":
+				//wavesurfer file
+				//these are packed files, so each one contains series of traces. Auto loads all traces unless indicated in one
+				//of the Pos_ columns
+				theFile = archive[dti][%Path]
+				
+				//		String theFile = StringFromList(dti,filePathList,";")
+				channelList = archive[dti][%Channels]
+				
+				//Load the files one at a time so we can increment the data table index
+				Load_WaveSurfer(theFile,channels=channelList,table=dataset)
+				break
+		endswitch
+	EndFor
+	
+End
+
+//Add the user input string to the end of the igor path in the selected data table rows
+Function AddToIgorPath()
+	GetWindow kwTopWin activeSW
+	String tableName = S_Value
+
+
+	GetSelection table,tableName,1
+	
+	DFREF NPD = $DSF
+	String archivePath = DSF + S_Selection
+	Wave/T archive = $archivePath
+	
+	If(!WaveExists(archive))
+		return 0
+	EndIf
+	
+	String input = ""
+	Prompt input,"Add:"
+	DoPrompt "Add to Igor Path",input
+	
+	If(V_flag)
+		return 0
+	EndIf
+	
+	Variable row
+
+	For(row=V_startRow;row<V_endRow+1;row+=1)
+		archive[row][%IgorPath] += input
+	EndFor
+End
+
+//Marks the data table according to the folder in the 'Marker' column
+Function MarkByFolder()
+	GetWindow kwTopWin activeSW
+	String tableName = S_Value
+
+
+	GetSelection table,tableName,1
+	DFREF NPD = $DSF
+	String archivePath = DSF + S_Selection
+	Wave/T archive = $archivePath
+	
+	If(!WaveExists(archive))
+		return 0
+	EndIf
+	
+	String folderList = ""
+	
+	Variable i,count = 1
+	For(i=0;i<DimSize(archive,0);i+=1)
+		String folder = archive[i][%IgorPath]
+		
+		If(i == 0)
+			folderList = folder + ";"
 		EndIf
 		
-		GetSelection table,$tableName,2
+		If(WhichListItem(folder,folderList,";") == -1)
+			folderList += folder + ";"
+			count += 1
+		EndIf
 		
-		String path = "root:Packages:NeuroToolsPlus:DataSets:" + StringFromList(0,S_selection,"[")
-		Wave/T archive = $path
+		archive[i][%Marker] = num2str(count)			
+	EndFor
+End
+
+//Inserts a new row onto the data table
+Function InsertNewRow()
+	GetWindow kwTopWin activeSW
+	String tableName = S_Value
+
+
+	GetSelection table,tableName,1
 	
-		Open/R/D/F="All Files:.*" fileID
+	DFREF NPD = $DSF
+	String archivePath = DSF + S_Selection
+	Wave/T archive = $archivePath
+	
+	If(!WaveExists(archive))
+		return 0
+	EndIf
+	
+	InsertPoints/M=0 V_startRow,1,archive
+End
+
+//Fills the selected table rows with whatever is in the top selected row. Only for text waves.
+Function FillTableSelection()
+	GetWindow kwTopWin activeSW
+	String tableName = S_Value
+	
+	GetSelection table,tableName,3
+	
+	If(!V_flag)
+		return 0
+	EndIf
+	
+	Wave/T tableWave
+	
+	//only handles text table waves for now
+	If(WaveType(tableWave,1) != 2)
+		return 0
+	EndIf
+	
+	//Index column is showing in data tables, offsets the selection column by 1.
+	V_startCol -= 1
+	V_endCol -= 1
+	
+	Variable row,col
+	For(col=V_startCol;col<V_endCol+1;col+=1)
+		//Get the top selected entry in each selected column
+		String entry = tableWave[V_startRow][col]
 		
-		If(strlen(S_fileName))
-			S_fileName = ReplaceString("/",S_fileName,":")
-		Else
+		For(row=V_startRow;row<V_endRow+1;row+=1)
+			tableWave[row][col] = entry
+		EndFor
+	EndFor
+End
+
+//Fills data table rows with incrementing values starting with the value of the top row
+Function IncrementFromTop()
+	GetWindow kwTopWin activeSW
+	String tableName = S_Value
+
+
+	GetSelection table,tableName,3
+	
+	If(!V_flag)
+		return 0
+	EndIf
+	
+	Wave/T tableWave
+	
+	//only handles text table waves for now
+	If(WaveType(tableWave,1) != 2)
+		return 0
+	EndIf
+	
+	//Index column is showing in data tables, offsets the selection column by 1.
+	V_startCol -= 1
+	V_endCol -= 1
+	
+	Variable row,col
+	For(col=V_startCol;col<V_endCol+1;col+=1)
+		//Get the top selected entry in each selected column
+		String entry = tableWave[V_startRow][col]
+		
+		//Check that its a number in the top row, otherwise return
+		Variable firstNum = str2num(entry)
+		
+		If(numtype(firstNum == 2))
 			return 0
 		EndIf
 		
-		Close/A
+		For(row=V_startRow;row<V_endRow+1;row+=1,firstNum+=1)
+			tableWave[row][col] = num2str(firstNum)
+		EndFor
+	EndFor
+End
+
+//Browses for a file, and inserts the selection into the data table
+Function InsertFilePath()
+	DFREF NPC = $CW
+	Variable fileID
 	
-		Variable trialCol = FindDimLabel(archive,1,"Trials")
-		Variable typeCol = FindDimLabel(archive,1,"Type")
+	GetWindow kwTopWin activeSW
+	String tableName = S_Value
+
+
+	GetSelection table,tableName,1
+	
+	DFREF NPD = $DSF
+	String archivePath = DSF + S_Selection
+	Wave/T archive = $archivePath
+			
+	Open/R/D/MULT=1/F="All Files:.*" fileID
+	
+	If(strlen(S_fileName))
+		S_fileName = ReplaceString("/",S_fileName,":")
+		S_fileName = ReplaceString("\r",S_fileName,";")
+	Else
+		return 0
+	EndIf
+	
+	Close/A
+	
+	Variable i,numFiles = ItemsInList(S_fileName,";")
+	
+	For(i=0;i<numFiles;i+=1)
+		String theFile = StringFromList(i,S_fileName,";")
 		
 		//is this an .abf file? If so, we need to remove the trace indexing so we can specify that in other parts of the data table
-		If(stringmatch(S_fileName,"*.abf"))
-			String fileBase = ParseFilePath(1,S_fileName,":",1,0)
+		If(stringmatch(theFile,"*.abf"))
+			String fileBase = ParseFilePath(1,theFile,":",1,0)
 			
-			String newFileName = ParseFilePath(0,S_fileName,":",1,0)
+			String newFileName = ParseFilePath(0,theFile,":",1,0)
 			newFileName = RemoveEnding(newFileName,".abf")
 			
 			String trialNum = ParseFilePath(0,newFileName,"_",1,0)
@@ -857,16 +412,456 @@
 			//buffered zeros removed
 			trialNum = num2str(str2num(trialNum))
 			
-			archive[V_startRow][%Path] = fileBase + newFileName
-			archive[V_startRow][%Trials] = trialNum
-			archive[V_startRow][%Type] = "pClamp"
-		ElseIf(stringmatch(S_fileName,"*.h5"))
-			archive[V_startRow][%Path] = S_fileName
-			archive[V_startRow][%Type] = "WaveSurfer"
+			If(V_startRow > DimSize(archive,0) - 1)
+				InsertPoints/M=0 DimSize(archive,0),1,archive
+			EndIf
+			
+			If(i > 0)
+				InsertPoints/M=0 V_startRow + i,1,archive
+			EndIf
+			
+			archive[V_startRow + i][%Path] = fileBase + newFileName
+			archive[V_startRow + i][%Trials] = trialNum
+			archive[V_startRow + i][%Type] = "pClamp"
+		ElseIf(stringmatch(theFile,"*.h5"))
+			If(V_startRow > DimSize(archive,0) - 1)
+				InsertPoints/M=0 DimSize(archive,0),1,archive
+			EndIf
+			
+			If(i > 0)
+				InsertPoints/M=0 V_startRow + i,1,archive
+			EndIf
+			archive[V_startRow + i][%Path] = theFile
+			archive[V_startRow + i][%Type] = "WaveSurfer"
 		EndIf
+	EndFor		
+End
+
+Function InsertWaveNames()
+	DFREF NPC = $CW
+	Variable fileID
+	
+	GetWindow kwTopWin activeSW
+	String tableName = S_Value
+
+
+	GetSelection table,tableName,1
+	
+	DFREF NPD = $DSF
+	String archivePath = DSF + S_Selection
+	Wave/T archive = $archivePath
+	
+	If(!WaveExists(archive))
+		return 0
+	EndIf
+	
+	Variable f
+	For(f=V_startRow;f<V_endRow+1;f+=1)
+		String filePathStr = archive[f][%Path]
+		String type = archive[f][%Type]
 		
-	End
-#endif
+		String folderPath = ParseFilePath(1,filePathStr,":",1,0)
+		
+		NewPath/O/Q/Z filePath,folderPath
+		
+		strswitch(type)
+			case "WaveSurfer":
+				HDF5OpenFile/Z/R fileID as filePathStr
+				If(V_flag)
+					Abort "Couldn't load the file: " + filePathStr
+				EndIf
+				
+				//Channels indicated on the data table
+				String channels = archive[f][%Channels]
+				channels = ResolveListItems(channels,";",noEnding=1)
+				
+				//Finds the data sweep groups
+				//Get the groups in the file
+				HDF5ListGroup/F/R/TYPE=1 fileID,"/"
+				S_HDF5ListGroup = ListMatch(S_HDF5ListGroup,"/sweep*",";")	
+				Variable numSweeps = ItemsInList(S_HDF5ListGroup,";")		
+				
+				//Sweep List
+				Variable j,k
+				String sweepList = ""
+				For(k=0;k<numSweeps;k+=1)
+					//Get the sweep index, truncate zeros
+					String theSweep = StringFromList(1,StringFromList(k,S_HDF5ListGroup,";"),"_")
+					
+					j = 0
+					Do
+						If(!cmpstr(theSweep[j],"0"))
+							theSweep = theSweep[j+1,strlen(theSweep)-1] //truncate leading zeros
+							continue
+						Else
+							break
+						EndIf
+						
+						j += 1
+					While(j < strlen(theSweep)-1)
+					
+					sweepList += theSweep + ","
+				EndFor
+				
+				sweepList = RemoveEnding(sweepList,",")
+				
+				//Protocol name
+				HDF5LoadData/N=prot/Q fileID,"/header/AbsoluteProtocolFileName"
+				Wave/T prot = :prot
+				String protocol = RemoveEnding(ParseFilePath(0,prot[0],"\\",1,0),".wsp")
+				
+				//Units for the prefix
+				HDF5LoadData/N=unit/Q fileID,"/header/AIChannelUnits"
+				Wave/T unit = :unit
+				
+				If(!strlen(channels))
+					If(DimSize(unit,0) == 1)
+						channels = "1"
+					Else
+						channels = "1-" + num2str(DimSize(unit,0))
+					EndIf
+					
+					archive[f][%Channels] = channels
+					channels = ResolveListItems(channels,";",noEnding=1)
+				EndIf
+				
+				String channelList = ""
+				
+				For(j=0;j<ItemsInList(channels,";");j+=1)
+					
+					String theUnit = unit[j]
+					String prefix = ""
+					String unitBase = theUnit[1]
+					
+					strswitch(unitBase)
+						case "A":
+							//current
+							prefix = "Im"
+							break
+						case "V":
+							//voltage
+							prefix = "Vm"
+							break
+					endswitch
+					
+					channelList += prefix + ","
+				EndFor
+				
+				channelList = RemoveEnding(channelList,",")
+									
+				archive[f][0] = channelList //position 0
+				archive[f][1] = "1" //position 1
+				archive[f][2] = sweepList//"1-" + num2str(numSweeps) //sweeps
+				archive[f][3] = "1" //position 3
+				archive[f][4] = "1" //position 4
+				archive[f][%Comment] = protocol //position 4
+				
+				//Close file
+				HDF5CloseFile/A fileID
+				
+				//Cleanup
+				KillWaves/Z unit,prot
+				break
+			case "pClamp":
+				//NEED TO CODE
+				STRUCT abfInfo a
+				
+				//Get the full paths to each file
+				String fileList = IndexedFile(filepath,-1,".abf")
+				
+				If(!strlen(fileList))
+					return 0
+				EndIf
+				
+				fileList = SortList(fileList,";",16)
+				
+				fileList = ReplaceString(".abf",fileList,"")
+				//check if archive table has preset trace numbers to load
+				String traceList = ""
+				traceList = archive[f][%Trials]
+				
+				If(strlen(traceList))
+					traceList = ResolveListItems(traceList,";")
+					String firstTrace = StringFromList(0,traceList,";")
+					
+					//Take out the zero buffer in the file name
+					If(str2num(firstTrace) < 10)
+						firstTrace = "000" + firstTrace
+					ElseIf(str2num(firstTrace) < 100)
+						firstTrace = "00" + firstTrace
+					ElseIf(str2num(firstTrace) < 1000)
+						firstTrace = "0" + firstTrace
+					EndIf
+				Else
+					firstTrace = StringFromList(0,fileList,";")
+					firstTrace = ParseFilePath(0,firstTrace,"_",1,0)
+				EndIf
+
+				If(!strlen(firstTrace))
+					sweepList = ""
+					Variable i
+					For(i=0;i<ItemsInList(fileList,";");i+=1)
+						String fileStr = StringFromlist(i,fileList,";")
+						fileStr = ParseFilePath(0,fileStr,":",1,0)
+						sweepList += ParseFilePath(0,fileStr,"_",1,0) + ";"
+					EndFor
+					
+					//Assume all defined traces have the same properties for a single line on a data table.
+					filePathStr += "_" + StringFromList(0,sweepList,";")
+				Else
+					filePathStr += "_" + firstTrace
+				EndIf
+									
+				//Open pclamp file
+				Variable refnum
+				filePathStr = RemoveEnding(filePathStr,".abf") + ".abf"
+				
+			
+				Open/R/Z=2 refnum as filePathStr
+				If(V_flag == -1)
+					Abort "Couldn't load the file: " + filePathStr
+				EndIf
+				
+				//Number sweeps
+				FSetPos refnum,12
+				FBInRead/B=3/F=3 refnum,a.nSweeps
+				
+				//Data format
+				FSetPos refnum,30
+				FBInRead/B=3/F=2 refnum,a.dataFormat
+				
+				Variable dataSz	,bitFormat
+				switch(a.dataFormat)
+					case 0:
+						dataSz = 2 //bytes/point
+						bitFormat = 2
+						break
+					case 1:
+						dataSz = 4 //bytes/point
+						bitFormat = 3
+						break
+					default:
+						DoAlert 0,"Invalid number format"
+						return -1
+						break
+				endswitch
+			
+				//Section info
+				Wave ADCSection = GetADCSection(refnum)
+				Wave DataSection = GetDataSection(refnum)
+				Wave ProtocolSection = GetProtocolSection(refnum)
+				Wave StringsSection = GetStringsSection(refnum)
+				Wave SynchArraySection = GetSynchSection(refnum)
+				
+				//Number channels
+				a.nChannels = ADCSection[2]
+	
+				//Longer strings information about the recording
+				FSetPos refnum,StringsSection[0]*512
+				String bigString = ""
+				bigString = PadString(bigString,StringsSection[1],0)
+				FBInRead refnum,bigString
+				String progStr = "clampex;clampfit;axoscope;patchexpress"
+				Variable goodStart
+				For(i=0;i<4;i+=1)
+					goodStart = strsearch(bigString,StringFromList(i,progStr,";"),0,2)
+					If(goodStart)
+						break
+					EndIf
+				EndFor
+				
+				Variable lastSpace = 0
+				Variable nextSpace
+			
+				bigString = bigString[goodStart,strlen(bigString)]
+				Make/FREE/T/N=1 Strings
+				Strings[0] = ""
+				For(i=0;i<30;i+=1)
+					Redimension/N=(i+1) Strings
+					nextSpace = strsearch(bigString,"\u0000",lastSpace)
+					If(nextSpace == -1)
+						Redimension/N=(i) Strings
+						break
+					EndIf
+					Strings[i] = bigString[lastSpace,nextSpace-1]
+					lastSpace = nextSpace + 1
+				EndFor
+				
+				
+				//Get protocol name
+				protocol = Strings[1]
+				protocol = ParseFilePath(0,protocol,"\\",1,0)
+				protocol = RemoveEnding(protocol,".pro")
+				
+				archive[f][%Comment] = protocol
+				
+				//Get the Channel names, units, and scales
+				a.ChannelNames = ""
+				a.ChannelUnits = ""
+				a.ChannelBase = ""
+				
+				
+				Variable c
+				For(i=0;i<a.nChannels;i+=1)
+			
+					String name = Strings[2 + 2 * i]
+					String unitStr = Strings[3 + 2 * i]
+					
+					a.ChannelNames += name + ";"
+					a.ChannelUnits += unitStr + ";"
+					a.ChannelScale[i] = 0 //reset
+					a.ChannelBase += unitStr[1,strlen(unitStr)-1] + ";"
+							
+					//Channel indices that were recorded
+					a.ChannelIndex[i] = GetADCParam(refnum,ADCSection,i,"ADCNum")
+				EndFor
+				
+				unitBase = StringFromList(c,a.channelBase,";")
+				
+			
+				//Reset the trace section
+				archive[f][%Pos_4] = ""
+				
+				For(i=0;i<a.nSweeps;i+=1)
+										
+					//Figure out the wave names for each of the channels in each sweep
+				
+					//Prefix
+					strswitch(unitBase)
+						case "A": //amps, voltage clamp
+							prefix = "Im"
+							break
+						case "V": //volts, current clamp
+							prefix = "Vm"
+							break
+					endswitch
+					
+					String group = archive[f][%Pos_1]
+					If(!strlen(group))
+						group = "1"
+					EndIf
+					
+					String series = ParseFilePath(0,filePathStr,":",1,0)
+					series = ParseFilePath(0,series,"_",1,0)
+					series = ParseFilePath(0,series,".",0,0)
+					series = num2str(str2num(series))
+					
+					String sweep = archive[f][%Pos_3]
+					If(!strlen(sweep))
+						sweep = num2str(i+1)
+					EndIf
+					
+					
+					String trace = "1"
+					
+					If(!strlen(archive[f][%Pos_0]))
+						archive[f][%Pos_0] = prefix
+					EndIf
+					
+					If(strlen(traceList))
+						archive[f][%Pos_2] = archive[f][%Trials]
+					Else
+						archive[f][%Pos_2] += series + ","
+						archive[f][%Trials] += series + ","
+					EndIf
+					
+					archive[f][%Pos_1] = group
+					archive[f][%Pos_3] = sweep
+					
+					//Insert the channels, but only for initial loop
+					If(i == 0)
+						If(strlen(archive[f][%Channels]))
+							archive[f][%Pos_4] = archive[f][%Channels]
+						Else
+							For(c=0;c<a.nChannels;c+=1)
+								archive[f][%Pos_4] += num2str(a.ChannelIndex[c]) + ","
+								archive[f][%Channels] += num2str(a.ChannelIndex[c]) + ","
+							EndFor
+							
+							archive[f][%Pos_4] = RemoveEnding(archive[f][%Pos_4],",")
+							archive[f][%Channels] = RemoveEnding(archive[f][%Channels],",")
+						EndIf
+					EndIf														
+				EndFor
+				
+				
+				archive[f][%Pos_2] = RemoveEnding(archive[f][%Pos_2],",")	
+				
+				//Sweeps
+				If(strlen(archive[f][%Traces]))
+					String fileSweepList = ResolveListItems(archive[f][%Traces],",",noEnding=1)
+					
+					If(ItemsInList(sweep,",") != ItemsInList(fileSweepList,","))
+						archive[f][%Pos_3] = archive[f][%Traces]
+					EndIf
+				Else
+					archive[f][%Traces] = archive[f][%Pos_3]
+				EndIf
+				
+				//Cleanup the index lists
+				If(!stringmatch(archive[f][%Pos_2],"*-*"))
+					archive[f][%Pos_2] = ListToRange(archive[f][%Pos_2],",")
+					archive[f][%Trials] = archive[f][%Pos_2]
+				EndIf
+				
+				If(!stringmatch(archive[f][%Pos_3],"*-*"))
+					String fullTraceList = ResolveListItems(archive[f][%Pos_3],",",noEnding=1)
+					
+					archive[f][%Traces] = "1-" + num2str(ItemsInList(fullTraceList,","))
+					archive[f][%Pos_3] = ListToRange(archive[f][%Pos_3],",")
+				EndIf
+				
+				If(!stringmatch(archive[f][%Pos_4],"*-*"))
+					archive[f][%Pos_4] = ListToRange(archive[f][%Pos_4],",")
+					archive[f][%Channels] = archive[f][%Pos_4]
+				EndIf
+				
+				break
+		endswitch
+	EndFor	
+	
+End
+
+//Creates a new data set archive with the selected rows in the current data archive
+Function NewDataSetWithSelection()
+	DFREF NPD = $DSF
+	DFREF NPC = $CW
+
+	GetWindow kwTopWin activeSW
+	String tableName = S_Value
+
+
+	GetSelection table,tableName,3
+	
+	If(!V_flag)
+		return 0
+	EndIf
+	
+	Wave/T tableWave
+	
+	//only handles text table waves for now
+	If(WaveType(tableWave,1) != 2)
+		return 0
+	EndIf
+	
+	//Index column is showing in data tables, offsets the selection column by 1.
+	V_startCol -= 1
+	V_endCol -= 1
+	
+	//Get the top selected entry in each selected column
+	Variable numRows = V_endRow - V_startRow + 1
+		
+	String dsName = NewDataTable()
+	
+	Wave/T archive = NPD:$("DS_" + dsName + "_archive")
+	
+	Redimension/N=(numRows,-1) archive
+	
+	archive = tableWave[p + V_startRow][q]
+	
+End
+
+
 
 
 //Global references

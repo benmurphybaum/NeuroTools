@@ -2186,9 +2186,83 @@ Function openArchive(dataset)
 	EndFor
 	
 	GetMouse
-	Edit/K=1/W=(V_left-300,V_top - 300,V_left + 500,V_top)/N=archive archive.ld as dataset + " Archive"
+	
+	//If < Igor 9, open the archive with a panel surrounding it to allow for button controls. Igor 9 uses table hooks instead.
+	If(IgorVersion() < 9)
+		Variable w = 800
+		Variable h = 300
+		NewPanel/K=1/W=(V_left - w/2,V_top - h,V_left + w/2,V_top)/N=archivePanel as dataset + " Archive"
+	
+		Edit/HOST=archivePanel/W=(160,0,w + 2000,h + 2000)/N=archive archive.ld as dataset + " Archive"
+		
+		//Control buttons
+		Variable top = 5
+		
+		String buttonList ="Browse File;Get Wave Names;Insert Row;Fill Selection With Top;Increment From Top;"
+		buttonList += "Mark By Folder;Add To Igor Path;Remove Last SubPath;Load Selection;Collapse By Folder;New DS With Selection;"
+		For(i=0;i<ItemsInList(buttonList,";");i+=1)
+			name = StringFromList(i,buttonList,";")
+			String buttonName = StringFromList(0,name,",")
+			
+			String ctrlName = "archive_" + ReplaceString(" ",buttonName,"")
+			Button $ctrlName win=archivePanel,pos={5,top},size={150,20},title=buttonName,proc=archiveButtonProc; top += 25
+		EndFor
+		
+	Else
+		Edit/W=(V_left - w/2,V_top - h,V_left + w/2,V_top)/N=archive archive.ld as dataset + " Archive"
+	EndIf
 	
 End
+
+Function archiveButtonProc(ba) : ButtonControl
+	STRUCT WMButtonAction &ba
+	
+	switch( ba.eventCode )
+		case 2: // mouse up
+			// click code here
+			strswitch(ba.ctrlName)
+				case "archive_BrowseFile":
+					InsertFilePath()
+					break
+				case "archive_GetWaveNames":
+					InsertWaveNames()
+					break
+				case "archive_InsertRow":
+					InsertNewRow()
+					break
+				case "archive_FillSelectionWithTop":
+					FillTableSelection()
+					break
+				case "archive_IncrementFromTop":
+					IncrementFromTop()
+					break
+				case "archive_MarkByFolder":
+					MarkByFolder()
+					break
+				case "archive_AddToIgorPath":
+					AddToIgorPath()
+					break
+				case "archive_RemoveLastSubPath":
+					RemoveLastSubPath()
+					break
+				case "archive_LoadSelection":
+					LoadDataTableSelection()
+					break
+				case "archive_CollapseByFolder":
+					CollapseByFolder()
+					break
+				case "archive_NewDSWithSelection":
+					NewDataSetWithSelection()
+					break
+			endswitch
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
 
 //Is the named data set archived?
 Function isArchive(dataset)

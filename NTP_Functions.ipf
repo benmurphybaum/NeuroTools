@@ -5463,6 +5463,43 @@ Function NT_DefineROISector(DS_BaseImage,CDF_MI,X_Center,Y_Center,menu_Split,men
 	KillWaves/Z left,right
 End
 
+Function NT_DistanceFromSoma(DS_ROI_X,DS_ROI_Y,Soma_X,Soma_Y)
+	String DS_ROI_X,DS_ROI_Y //X and Y coordinate waves for all the ROIs. Should be single waves.
+	Variable Soma_X,Soma_Y //Scaled coordinates of the soma or whatever reference point we're using
+	
+	//SUBMENU=Turning Project
+	//TITLE=Distance From Soma
+	
+	//	Note={
+	//	Calculates the distance (line of sight, not cable distance) of ROIs from a target location,
+	//	usually the soma but could be any coordinate. 
+	//	
+	//	Input two waves, one with all the ROIs X coordinates and the other with the Y coordinates.
+	//	}
+		
+	STRUCT ds ds
+	GetStruct(ds)
+	
+	If(ds.numWaves[%ROI_X] != 1 || ds.numWaves[%ROI_Y] != 1 )
+		DoAlert 0,"Must have single X ROI coordinates wave and a single Y ROI coordinates wave."
+		return 0
+	EndIf
+	
+	//Get the coordinates waves
+	Wave xROI = ds.waves[0][%ROI_X]
+	Wave yROI = ds.waves[0][%ROI_Y]
+	
+	//Make the output distance wave
+	String folder = GetWavesDataFolder(xROI,1)
+	
+	String outPath =  folder + RemoveEnding(NameOfWave(xROI),"x") + "_DistanceToSoma"
+	Make/O/N=(DimSize(xROI,0)) $outPath/Wave=distance
+	
+	//calculate distance from the target coordinate.
+	distance = sqrt((xROI[p] - Soma_X)^2 + (yROI[p] - Soma_Y)^2)
+
+End
+
 Function NT_AverageMasked(DS_Data,DS_DataMask,cb_InvertMask,OutputFolder,cb_replaceSuffix)
 	//SUBMENU=Turning Project
 	//TITLE=Average With Data Mask
