@@ -9,9 +9,5 @@ At its core, NeuroTools is an alternative data browser that allows users to defi
 While NeuroTools provides a suite of built in basic functions, users can easily import their own functions into NeuroTools by placing the .ipf in the :Functions folder within the NeuroTools file structure, allowing them to use Data Sets with their own functions. Many of the data organization concepts in NeuroTools were inspired by previous work by Dr. W. Rowland Taylor and Dr. Rob Smith.
 
 TO INSTALL:
-NeuroTools requires the HDF5 package to be installed in Igor. This is included natively in Igor, and Igor has help instructions on how to do this.
-
-Put the .ipf files in the 'User Procedures' folder, and put the NT_Loader.ipf in the 'Igor Procedures' folder. To open NeuroTools, navigate to the 'Analysis:Packages' menu, and select Load_NeuroTools. 
-
-*To access available functions, click the vertical bar in the center of the GUI to collapse and expand the Parameters panel.
+Open the INSTALL_NEUROTOOLS.pxp file, follow the instructions.
 
