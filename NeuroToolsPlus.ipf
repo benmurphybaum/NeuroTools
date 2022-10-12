@@ -1,6 +1,7 @@
 ﻿#pragma TextEncoding = "UTF-8"
 #pragma rtGlobals=3		// Use modern global access method and strict wave access.
 
+
 //Conditional compilation, depending on Igor version
 #if IgorVersion() >= 9
 	Menu "TablePopup"
@@ -35,16 +36,17 @@
 //Works oppositely to 'Add to Igor Path'
 Function RemoveLastSubPath()
 	
-	GetWindow kwTopWin activeSW
-	String tableName = S_Value
-
-
-	GetSelection table,tableName,1
-	
 	DFREF NPD = $DSF
-	String archivePath = DSF + S_Selection
-	Wave/T archive = $archivePath
 	
+	GetWindow kwTopWin activeSW
+	String panelName = S_Value
+	panelName = RemoveEnding(panelName,"#archive") + "#archive"
+	
+	String info = TableInfo(panelName,0)
+	Wave/T archive = $StringByKey("WAVE",info,":",";")
+
+	GetSelection table,$panelName,1
+
 	If(!WaveExists(archive))
 		return 0
 	EndIf
@@ -60,21 +62,21 @@ End
 
 //Uses the selection in the data table and collapses all data folder into just a single row
 Function CollapseByFolder()
-	GetWindow kwTopWin activeSW
-	String tableName = S_Value
-
-
-	GetSelection table,tableName,1
-	
 	DFREF NPD = $DSF
-	String archivePath = DSF + S_Selection
-	Wave/T archive = $archivePath
 	
+	GetWindow kwTopWin activeSW
+	String panelName = S_Value
+	panelName = RemoveEnding(panelName,"#archive") + "#archive"
+	
+	String info = TableInfo(panelName,0)
+	Wave/T archive = $StringByKey("WAVE",info,":",";")
+
+	GetSelection table,$panelName,1
+
 	If(!WaveExists(archive))
 		return 0
 	EndIf
 
-	DFREF NPD = $DSF
 	NVAR dti = NPD:dataTableIndex
 	
 	If(!NVAR_Exists(dti))
@@ -119,16 +121,17 @@ End
 
 //Same as NT_LoadEphysTable but does it directly from the data table selection
 Function LoadDataTableSelection()
-	GetWindow kwTopWin activeSW
-	String tableName = S_Value
-
-
-	GetSelection table,tableName,1
-	
 	DFREF NPD = $DSF
-	String archivePath = DSF + S_Selection
-	Wave/T archive = $archivePath
 	
+	GetWindow kwTopWin activeSW
+	String panelName = S_Value
+	panelName = RemoveEnding(panelName,"#archive") + "#archive"
+	
+	String info = TableInfo(panelName,0)
+	Wave/T archive = $StringByKey("WAVE",info,":",";")
+
+	GetSelection table,$panelName,1
+
 	If(!WaveExists(archive))
 		return 0
 	EndIf
@@ -146,6 +149,11 @@ Function LoadDataTableSelection()
 
 	DFREF NPD = $DSF
 	NVAR dti = NPD:dataTableIndex
+	
+	//Make sure we didn't select an empty row beyond the data table
+	If(V_startRow > DimSize(archive,0) - 1)
+		return 0
+	EndIf
 	
 	For(dti=V_startRow;dti<V_endRow + 1;dti+=1)	
 		String fileType = 	archive[dti][%Type]
@@ -171,9 +179,11 @@ Function LoadDataTableSelection()
 				EndIf
 				
 				//Fill the trace counts into the correct data table lines
-				Variable traceCol = FindDimLabel(archive,1,"Traces")
-				
-				archive[dti][traceCol] = "1-" + num2str(numTraces)
+				If(numTraces > 1)					
+					archive[dti][%Traces] = "1-" + num2str(numTraces)
+				Else
+					archive[dti][%Traces] = "1"
+				EndIf
 				
 				channelList = archive[dti][%Channels]
 				
@@ -205,6 +215,19 @@ Function LoadDataTableSelection()
 				//Load the files one at a time so we can increment the data table index
 				Load_WaveSurfer(theFile,channels=channelList,table=dataset)
 				break
+			case "TurnTable":
+				theFile = archive[dti][%Path]
+				channelList = archive[dti][%Channels]
+				String seriesList = archive[dti][%Trials]
+				
+				If(!strlen(seriesList))
+					seriesList = archive[dti][%Pos_2]
+				EndIf
+				
+				seriesList = ResolveListItems(seriesList,",")
+				
+				LoadTurnTable(theFile,seriesList,channelList,archive=archive,dti=dti)
+				break
 		endswitch
 	EndFor
 	
@@ -212,16 +235,17 @@ End
 
 //Add the user input string to the end of the igor path in the selected data table rows
 Function AddToIgorPath()
-	GetWindow kwTopWin activeSW
-	String tableName = S_Value
-
-
-	GetSelection table,tableName,1
-	
 	DFREF NPD = $DSF
-	String archivePath = DSF + S_Selection
-	Wave/T archive = $archivePath
 	
+	GetWindow kwTopWin activeSW
+	String panelName = S_Value
+	panelName = RemoveEnding(panelName,"#archive") + "#archive"
+	
+	String info = TableInfo(panelName,0)
+	Wave/T archive = $StringByKey("WAVE",info,":",";")
+
+	GetSelection table,$panelName,1
+
 	If(!WaveExists(archive))
 		return 0
 	EndIf
@@ -243,14 +267,14 @@ End
 
 //Marks the data table according to the folder in the 'Marker' column
 Function MarkByFolder()
-	GetWindow kwTopWin activeSW
-	String tableName = S_Value
-
-
-	GetSelection table,tableName,1
 	DFREF NPD = $DSF
-	String archivePath = DSF + S_Selection
-	Wave/T archive = $archivePath
+	
+	GetWindow kwTopWin activeSW
+	String panelName = S_Value
+	panelName = RemoveEnding(panelName,"#archive") + "#archive"
+	
+	String info = TableInfo(panelName,0)
+	Wave/T archive = $StringByKey("WAVE",info,":",";")
 	
 	If(!WaveExists(archive))
 		return 0
@@ -277,19 +301,20 @@ End
 
 //Inserts a new row onto the data table
 Function InsertNewRow()
-	GetWindow kwTopWin activeSW
-	String tableName = S_Value
-
-
-	GetSelection table,tableName,1
-	
 	DFREF NPD = $DSF
-	String archivePath = DSF + S_Selection
-	Wave/T archive = $archivePath
+	
+	GetWindow kwTopWin activeSW
+	String panelName = S_Value
+	panelName = RemoveEnding(panelName,"#archive") + "#archive"
+	
+	String info = TableInfo(panelName,0)
+	Wave/T archive = $StringByKey("WAVE",info,":",";")
 	
 	If(!WaveExists(archive))
 		return 0
 	EndIf
+	
+	GetSelection table,$panelName,1
 	
 	InsertPoints/M=0 V_startRow,1,archive
 End
@@ -297,24 +322,24 @@ End
 //Fills the selected table rows with whatever is in the top selected row. Only for text waves.
 Function FillTableSelection()
 	GetWindow kwTopWin activeSW
-	String tableName = S_Value
+	String panelName = S_Value
+	panelName = RemoveEnding(panelName,"#archive") + "#archive"
 	
-	GetSelection table,tableName,3
+	String info = TableInfo(panelName,0)
+	Wave/T tableWave = $StringByKey("WAVE",info,":",";")
+	
+	GetSelection table,$panelName,3
 	
 	If(!V_flag)
 		return 0
 	EndIf
-	
-	Wave/T tableWave
 	
 	//only handles text table waves for now
 	If(WaveType(tableWave,1) != 2)
 		return 0
 	EndIf
 	
-	//Index column is showing in data tables, offsets the selection column by 1.
-	V_startCol -= 1
-	V_endCol -= 1
+	V_startCol = (V_startCol < 0) ? 0 : V_startCol
 	
 	Variable row,col
 	For(col=V_startCol;col<V_endCol+1;col+=1)
@@ -327,62 +352,173 @@ Function FillTableSelection()
 	EndFor
 End
 
-//Fills data table rows with incrementing values starting with the value of the top row
-Function IncrementFromTop()
+Function AddRowsToDataTable()
 	GetWindow kwTopWin activeSW
-	String tableName = S_Value
-
-
-	GetSelection table,tableName,3
+	String panelName = S_Value
+	panelName = RemoveEnding(panelName,"#archive") + "#archive"
 	
-	If(!V_flag)
-		return 0
-	EndIf
-	
-	Wave/T tableWave
+	String info = TableInfo(panelName,0)
+	Wave/T tableWave = $StringByKey("WAVE",info,":",";")
 	
 	//only handles text table waves for now
 	If(WaveType(tableWave,1) != 2)
 		return 0
 	EndIf
 	
-	//Index column is showing in data tables, offsets the selection column by 1.
-	V_startCol -= 1
-	V_endCol -= 1
+	Variable lastRow = DimSize(tableWave,0) - 1
 	
+	Variable numRows
+	Prompt numRows,"Add how many rows?"
+	DoPrompt "Add Rows To Data Table",numRows
+	
+	If(!V_flag)
+		InsertPoints/M=0 lastRow+1,numRows,tableWave
+	EndIf
+End
+
+Function CollapseToFirstItem()
+	//Reduces a list input to only the first item in the list
+	GetWindow kwTopWin activeSW
+	String panelName = S_Value
+	panelName = RemoveEnding(panelName,"#archive") + "#archive"
+	
+	String info = TableInfo(panelName,0)
+	Wave/T tableWave = $StringByKey("WAVE",info,":",";")
+	
+	GetSelection table,$panelName,3
+	
+	If(!V_flag)
+		return 0
+	EndIf
+	
+	//only handles text table waves for now
+	If(WaveType(tableWave,1) != 2)
+		return 0
+	EndIf
+
+	Variable row,col
+	For(col=V_startCol;col<V_endCol+1;col+=1)
+		For(row=V_startRow;row<V_endRow+1;row+=1)
+			//Get the top selected entry in each selected column
+			String entry = tableWave[row][col]
+			
+			If(stringmatch(entry,"*;*") )
+				String separator = ";"
+			ElseIf(stringmatch(entry,"*,*") )
+				separator = ","
+			Else
+				separator = ","
+			EndIf
+				
+			String firstItem = ResolveListItems(entry,separator,noEnding=1)
+			firstItem = StringFromList(0,firstItem,separator)
+			tableWave[row][col] = firstItem
+		EndFor
+
+	EndFor
+End
+
+End
+
+//Fills data table rows with incrementing values starting with the value of the top row
+Function IncrementFromTop()
+	GetWindow kwTopWin activeSW
+	String panelName = S_Value
+	panelName = RemoveEnding(panelName,"#archive") + "#archive"
+	
+	String info = TableInfo(panelName,0)
+	Wave/T tableWave = $StringByKey("WAVE",info,":",";")
+	
+	GetSelection table,$panelName,3
+	
+	If(!V_flag)
+		return 0
+	EndIf
+	
+	
+	//only handles text table waves for now
+	If(WaveType(tableWave,1) != 2)
+		return 0
+	EndIf
+
 	Variable row,col
 	For(col=V_startCol;col<V_endCol+1;col+=1)
 		//Get the top selected entry in each selected column
 		String entry = tableWave[V_startRow][col]
 		
-		//Check that its a number in the top row, otherwise return
-		Variable firstNum = str2num(entry)
+		If(!cmpstr(GetDimLabel(tableWave,1,col),"IgorPath"))
+			//For incrementing in the IgorPath column, we need to test the last folder for numeric values within the text and increment those
+			entry = RemoveEnding(entry,":")
+			
+			Variable size = strlen(entry) - 1
+			Variable pos = size
+			
+			String subStr = entry[size]
+			String numStr = ""
+			
+			Do
+				//If the character is a number, keeping pushing the position back to get the full number
+				If(isNum(subStr))
+					numStr = subStr
+					pos -= 1
+					subStr = entry[pos,size]
+				Else
+					//If the first attempt isn't a number, there isn't a number to increment
+					If(pos == size)
+						Variable firstNum = 0	
+					Else
+						firstNum = str2num(numStr)
+					EndIf
+					break
+				EndIf
+				
+				If(pos == -1)
+					firstNum = str2num(numStr)
+					break
+				EndIf
+			While(1)
+			
+			
+			For(row=V_startRow;row<V_endRow+1;row+=1,firstNum+=1)
+				tableWave[row][col] = entry[0,pos] + num2str(firstNum) + ":"
+			EndFor
+		Else
+			//Check that its a number in the top row, otherwise return
+			firstNum = str2num(entry)
+			
+			If(numtype(firstNum == 2))
+				return 0
+			EndIf
+			
+			For(row=V_startRow;row<V_endRow+1;row+=1,firstNum+=1)
+				tableWave[row][col] = num2str(firstNum)
+			EndFor
+		EndIf		
 		
-		If(numtype(firstNum == 2))
-			return 0
-		EndIf
-		
-		For(row=V_startRow;row<V_endRow+1;row+=1,firstNum+=1)
-			tableWave[row][col] = num2str(firstNum)
-		EndFor
 	EndFor
 End
 
 //Browses for a file, and inserts the selection into the data table
 Function InsertFilePath()
 	DFREF NPC = $CW
+	DFREF NPD = $DSF
+	
 	Variable fileID
 	
 	GetWindow kwTopWin activeSW
-	String tableName = S_Value
-
-
-	GetSelection table,tableName,1
+	String panelName = S_Value
 	
-	DFREF NPD = $DSF
-	String archivePath = DSF + S_Selection
-	Wave/T archive = $archivePath
-			
+	//Ensure the subwindow is the one selected
+	panelName = RemoveEnding(panelName,"#archive") + "#archive"
+	
+	String info = TableInfo(panelName,0)
+	Wave/T archive = $StringByKey("WAVE",info,":",";")
+	
+//	GetSelection table,$panelName,1
+	
+	//Instead of replacing the selected cell with the browsed file path, we append the new browse to
+	//the end of the data table, so as to avoid accidental overwrite
+	
 	Open/R/D/MULT=1/F="All Files:.*" fileID
 	
 	If(strlen(S_fileName))
@@ -392,12 +528,16 @@ Function InsertFilePath()
 		return 0
 	EndIf
 	
+	String fileNameList = S_fileName
+	
 	Close/A
 	
-	Variable i,numFiles = ItemsInList(S_fileName,";")
+	Variable i,numFiles = ItemsInList(fileNameList,";")
 	
 	For(i=0;i<numFiles;i+=1)
-		String theFile = StringFromList(i,S_fileName,";")
+		String theFile = StringFromList(i,fileNameList,";")
+		
+		Variable pos = DimSize(archive,0)
 		
 		//is this an .abf file? If so, we need to remove the trace indexing so we can specify that in other parts of the data table
 		If(stringmatch(theFile,"*.abf"))
@@ -412,51 +552,100 @@ Function InsertFilePath()
 			//buffered zeros removed
 			trialNum = num2str(str2num(trialNum))
 			
-			If(V_startRow > DimSize(archive,0) - 1)
-				InsertPoints/M=0 DimSize(archive,0),1,archive
+//			If(V_startRow > DimSize(archive,0) - 1)
+			If(pos == 1)
+				If(strlen(archive[0][%Path])) //only a single row that is empty, don't insert a point
+					InsertPoints/M=0 pos,1,archive
+				EndIf
+			Else
+				InsertPoints/M=0 pos,1,archive
 			EndIf
+//			EndIf
+//			
+//			If(i > 0)
+//				InsertPoints/M=0 V_startRow + i,1,archive
+//			EndIf
 			
-			If(i > 0)
-				InsertPoints/M=0 V_startRow + i,1,archive
-			EndIf
-			
-			archive[V_startRow + i][%Path] = fileBase + newFileName
-			archive[V_startRow + i][%Trials] = trialNum
-			archive[V_startRow + i][%Type] = "pClamp"
+			archive[pos][%Path] = fileBase + newFileName
+			archive[pos][%Trials] = trialNum
+			archive[pos][%Type] = "pClamp"
+			String type = "pClamp"
 		ElseIf(stringmatch(theFile,"*.h5"))
-			If(V_startRow > DimSize(archive,0) - 1)
-				InsertPoints/M=0 DimSize(archive,0),1,archive
-			EndIf
+			HDF5OpenFile fileID as theFile
+			//Check for file type attribute, for turntable files.
+			Make/O/N=1/T :fileType /Wave=fileType
+			HDF5LoadData/A="FileType"/TYPE=1/Z/Q/O/N=fileType fileID,"/"
+			type = fileType[0]
 			
-			If(i > 0)
-				InsertPoints/M=0 V_startRow + i,1,archive
+			KillWaves/Z fileType
+			HDF5CloseFile fileID
+			
+			strswitch(type)
+				case "turntable":
+					type = "TurnTable"
+					break
+				default:
+					type = "WaveSurfer"
+					break
+			endswitch
+			
+//			If(V_startRow > DimSize(archive,0) - 1)
+			If(pos == 1)
+				If(strlen(archive[0][%Path])) //only a single row that is empty, don't insert a point
+					InsertPoints/M=0 pos,1,archive
+				Else
+					pos -= 1
+				EndIf
+			Else
+				InsertPoints/M=0 pos,1,archive
 			EndIf
-			archive[V_startRow + i][%Path] = theFile
-			archive[V_startRow + i][%Type] = "WaveSurfer"
+//			EndIf
+			
+//			If(i > 0)
+//			InsertPoints/M=0 V_startRow + i,1,archive
+//			EndIf
+			archive[pos][%Path] = theFile
+			archive[pos][%Type] = type
+				
 		EndIf
 	EndFor		
+	
+	return numFiles
 End
 
-Function InsertWaveNames()
+Function InsertWaveNames([nFiles])
+	Variable nFiles //This indicates to load the wave names for nFile - 1 rows beyond the last selected row.
+	
+	nFiles = (ParamIsDefault(nFiles)) ? 0 : nFiles
+	
 	DFREF NPC = $CW
+	DFREF NPD = $DSF
+	
 	Variable fileID
 	
 	GetWindow kwTopWin activeSW
-	String tableName = S_Value
-
-
-	GetSelection table,tableName,1
+	String panelName = S_Value
+	panelName = RemoveEnding(panelName,"#archive") + "#archive"
 	
-	DFREF NPD = $DSF
-	String archivePath = DSF + S_Selection
-	Wave/T archive = $archivePath
+	String info = TableInfo(panelName,0)
+	Wave/T archive = $StringByKey("WAVE",info,":",";")
+	
+	GetSelection table,$panelName,1
 	
 	If(!WaveExists(archive))
 		return 0
 	EndIf
 	
 	Variable f
-	For(f=V_startRow;f<V_endRow+1;f+=1)
+	
+	nFiles = (!nFiles) ? 1 : nFiles
+	V_endRow += nFiles - 1
+	
+	Variable size = DimSize(archive,0)
+	Variable startRow = size - nFiles
+	Variable endRow = size
+	
+	For(f=startRow;f<endRow;f+=1)
 		String filePathStr = archive[f][%Path]
 		String type = archive[f][%Type]
 		
@@ -549,11 +738,11 @@ Function InsertWaveNames()
 				
 				channelList = RemoveEnding(channelList,",")
 									
-				archive[f][0] = channelList //position 0
-				archive[f][1] = "1" //position 1
-				archive[f][2] = sweepList//"1-" + num2str(numSweeps) //sweeps
-				archive[f][3] = "1" //position 3
-				archive[f][4] = "1" //position 4
+				archive[f][%Pos_0] = channelList //position 0
+				archive[f][%Pos_1] = "1" //position 1
+				archive[f][%Pos_2] = sweepList//"1-" + num2str(numSweeps) //sweeps
+				archive[f][%Pos_3] = "1" //position 3
+				archive[f][%Pos_4] = "1" //position 4
 				archive[f][%Comment] = protocol //position 4
 				
 				//Close file
@@ -561,6 +750,88 @@ Function InsertWaveNames()
 				
 				//Cleanup
 				KillWaves/Z unit,prot
+				break
+			case "TurnTable":
+				HDF5OpenFile/Z/R fileID as filePathStr
+				If(V_flag)
+					Abort "Couldn't load the file: " + filePathStr
+				EndIf
+				
+				//Channels indicated on the data table
+				channels = archive[f][%Channels]
+				channels = ResolveListItems(channels,";",noEnding=1)
+				
+				
+				//Finds the data sweep groups
+				//Get the groups in the file
+				HDF5ListGroup/F/R=0/TYPE=1 fileID,"/Data"
+				String seriesList = ListMatch(S_HDF5ListGroup,"/Data*",";")
+				seriesList = SortList(seriesList,";",16)
+					
+				Variable i,nSeries = ItemsInList(seriesList,";")		
+				
+				Make/O/N=(nSeries,7)/T NPD:dataBrowse/Wave=dataBrowse
+				
+				String labels = "Path;Pos_0;Pos_1;Pos_2;Pos_3;Pos_4;Protocol;"
+				For(i=0;i<ItemsInList(labels,";");i+=1)
+					SetDimLabel 1,i,$StringFromList(i,labels,";"),dataBrowse
+				EndFor
+				
+				For(i=0;i<nSeries;i+=1)
+					String seriesAddress = StringFromList(i,seriesList,";")
+					
+					//Number channels recorded
+					HDF5ListGroup/F/R=0/TYPE=1 fileID,seriesAddress
+					channelList = ListMatch(S_HDF5ListGroup,seriesAddress + "/Ch*",";")
+					Variable nChannels = ItemsInList(channelList,";")
+					
+					//Number of sweeps recorded
+					String channelAddress = StringFromList(0,channelList,";")
+					HDF5ListGroup/F/R=0/TYPE=2 fileID,channelAddress
+					sweepList = S_HDF5ListGroup
+					Variable nSweeps = ItemsInList(sweepList,";")
+					
+					//Wave units
+					String sweepAddress = channelAddress + "/1"
+					HDF5LoadData/Q/O/IGOR=-1/A="IGORWaveUnits"/N=units/TYPE=2 fileID,sweepAddress
+					Wave/T units
+					
+					strswitch(units[0])
+						case "A":
+							prefix = "Im"
+							break
+						case "V":
+							prefix = "Vm"
+							break
+					endswitch
+					
+					
+					//Protocol name
+					Make/T/N=1/O :Protocol/Wave=prot
+					
+					HDF5LoadData/Q/A="Protocol"/N=Protocol/O/TYPE=1 fileID,seriesAddress
+					protocol = prot[0]
+					
+					
+					KillWaves/Z prot,units
+					
+					dataBrowse[i][%Pos_0] = prefix
+					dataBrowse[i][%Pos_1] = "1"
+					dataBrowse[i][%Pos_2] = StringFromList(2,seriesAddress,"/") //series number
+					dataBrowse[i][%Pos_3] = "1-" + num2str(nSweeps) //sweep range
+					dataBrowse[i][%Pos_4] = "1"
+					dataBrowse[i][%Protocol] = protocol
+					dataBrowse[i][%Path] = filePathStr
+				EndFor
+				
+				HDF5CloseFile fileID
+				
+				//Display the finished data table
+				String fileName = RemoveEnding(ParseFilePath(0,filePathStr,":",1,0),".h5")
+				String tableName = UniqueName("DataBrowser",7,0)
+				Edit/K=1/W=(100,100,800,400)/N=$tableName dataBrowse as fileName
+				ModifyTable/W=$tableName horizontalIndex=2,alignment=1
+				
 				break
 			case "pClamp":
 				//NEED TO CODE
@@ -599,7 +870,6 @@ Function InsertWaveNames()
 
 				If(!strlen(firstTrace))
 					sweepList = ""
-					Variable i
 					For(i=0;i<ItemsInList(fileList,";");i+=1)
 						String fileStr = StringFromlist(i,fileList,";")
 						fileStr = ParseFilePath(0,fileStr,":",1,0)
@@ -722,6 +992,17 @@ Function InsertWaveNames()
 				//Reset the trace section
 				archive[f][%Pos_4] = ""
 				
+				
+				sweepList = ResolveListItems(archive[f][%Pos_3],",",noEnding=1)
+				
+				If(!strlen(sweepList))
+					Variable autoSweepName = 1
+				Else
+					autoSweepName = 0
+				EndIf
+				
+				
+				
 				For(i=0;i<a.nSweeps;i+=1)
 										
 					//Figure out the wave names for each of the channels in each sweep
@@ -746,10 +1027,12 @@ Function InsertWaveNames()
 					series = ParseFilePath(0,series,".",0,0)
 					series = num2str(str2num(series))
 					
-					String sweep = archive[f][%Pos_3]
-					If(!strlen(sweep))
-						sweep = num2str(i+1)
+					If(autoSweepName)
+						String sweep = num2str(i+1)
+					Else
+						sweep = StringFromList(i,sweepList,",")
 					EndIf
+					
 					
 					
 					String trace = "1"
@@ -766,7 +1049,7 @@ Function InsertWaveNames()
 					EndIf
 					
 					archive[f][%Pos_1] = group
-					archive[f][%Pos_3] = sweep
+					archive[f][%Pos_3] += sweep + ","
 					
 					//Insert the channels, but only for initial loop
 					If(i == 0)
@@ -825,33 +1108,34 @@ End
 //Creates a new data set archive with the selected rows in the current data archive
 Function NewDataSetWithSelection()
 	DFREF NPD = $DSF
-	DFREF NPC = $CW
-
-	GetWindow kwTopWin activeSW
-	String tableName = S_Value
-
-
-	GetSelection table,tableName,3
 	
-	If(!V_flag)
+	GetWindow kwTopWin activeSW
+	String panelName = S_Value
+	panelName = RemoveEnding(panelName,"#archive") + "#archive"
+	
+	String info = TableInfo(panelName,0)
+	Wave/T tableWave = $StringByKey("WAVE",info,":",";")
+
+	GetSelection table,$panelName,1
+
+	If(!WaveExists(tableWave))
 		return 0
 	EndIf
-	
-	Wave/T tableWave
-	
+		
 	//only handles text table waves for now
 	If(WaveType(tableWave,1) != 2)
 		return 0
 	EndIf
-	
-	//Index column is showing in data tables, offsets the selection column by 1.
-	V_startCol -= 1
-	V_endCol -= 1
-	
+
 	//Get the top selected entry in each selected column
 	Variable numRows = V_endRow - V_startRow + 1
 		
 	String dsName = NewDataTable()
+	
+	If(!strlen(dsName))
+		DoAlert/T="New Data Set" 0,"Data set already exists. Choose a different name."
+		return 0
+	EndIf
 	
 	Wave/T archive = NPD:$("DS_" + dsName + "_archive")
 	
@@ -860,9 +1144,6 @@ Function NewDataSetWithSelection()
 	archive = tableWave[p + V_startRow][q]
 	
 End
-
-
-
 
 //Global references
 StrConstant CW = "root:Packages:NeuroToolsPlus:ControlWaves"
@@ -1105,17 +1386,236 @@ Function DisplayWave1vsWave2(int reverse)
 End
 
 
-Menu "NeuroTools+"
-	"Image Browser/1",OpenImageBrowser()
-	SubMenu "Procedures"
-		"NeuroToolsPlus_Loader;NeuroToolsPlus;NTP_DataSets;NTP_Common;NTP_Controls;NTP_Functions;NTP_Structures;NTP_ABF_Loader;NTP_Presentinator;NTP_ExternalFunctions;NTP_ScanImage_Package;NTP_ScanImageTiffReader;",GotoProc()
-	End
+//Menu "NeuroTools+"
+//	"Image Browser/1",OpenImageBrowser()
+//	"-"
+//	
+//	SubMenu "Analysis Packages"
+//		NTP#GetUserPackages(fullIPFList=1,includesOnly=1),GotoProc()
+//	End
+//	
+////	SubMenu "Data Sets"
+////		"New Data Table",NewDataTable()
+////	End
+//	
+//	"Manage Packages",ManagePackages()
+//	
+//	"-"
+//	
+//	"Report a bug",ReportBug()
+//	
+//	NTP#MenuSwitch("Check for updates...",1),NTP#CheckForUpdates()
+//	NTP#MenuSwitch("About...",1),NTP#DisplayVersion()
+//End
+
+
+Function ManagePackages()
+	//Opens the package manager
+	String packageList = NTP#GetUserPackages()
+	Variable nPackages = ItemsInList(packageList,";")
 	
-	SubMenu "Data Sets"
-		"New Data Table",NewDataTable()
-	End
+	DoWindow/F PackageManager
+	
+	If(!V_flag)
+		NewPanel/K=1/N=PackageManager/W=(300,100,500,100 + nPackages * 25 + 30) as "Package Manager"
+	EndIf
+	
+	DFREF NPC = $CW
+	SVAR HideUserPackages =  NPC:HideUserPackages
+	If(SVAR_Exists(HideUserPackages))
+		String hideList = HideUserPackages
+	Else
+		hideList = ""
+	EndIf
+	
+	Variable i,yPos = 20
+	For(i=0;i<nPackages;i+=1)
+		String package = RemoveEnding(StringFromList(i,packageList,";"),".ipf")
+		
+		Variable isHidden = WhichListItem(package,hideList,";")
+		isHidden = (isHidden != -1) ? 0 : 1
+
+		String ctrlName = "Package_" + num2str(i)
+		Checkbox $ctrlName win=PackageManager,pos={20,yPos},size={100,20},value=isHidden,disable=0,title=package
+		
+		yPos += 22
+	EndFor
+	
+	Button SetPackages win=PackageManager,pos={20,yPos},size={150,20},title="Update Packages",proc=PackageManagerProc
 End
 
+Function UpdatePackages(HideUserPackages,[init])
+	//adjusts the function menu list to include specified packages 
+	String HideUserPackages
+	Variable init //indicates this is an initial loading operation, so here we won't overwrite the preferences file
+	
+	init = (ParamIsDefault(init)) ? 0 : 1
+	
+	DFREF NPC = $CW
+	
+	//Path to a possible package preferences text wave
+	String prefPath = SpecialDirPath("Igor Pro User Files",0,0,0)	
+	prefPath += "User Procedures:NeuroTools+:PackagePreferences.txt"
+		
+	//Get use installed package files
+	String userFunctionPath = SpecialDirPath("Igor Pro User Files",0,0,0)	
+	userFunctionPath += "User Procedures:NeuroTools+:Functions"
+	String fileList = ""
+	
+	GetFileFolderInfo/Q/Z userFunctionPath
+	If(!V_flag)
+		NewPath/O/Q userPath,userFunctionPath
+		If(V_isFolder)
+			String userFileList = IndexedFile(userPath,-1,".ipf")
+			fileList += userFileList
+		EndIf
+	Else
+		return 0
+	EndIf
+	
+	//Create an additional param table to save the package parameters in case the packages are added back in again
+	Wave/T param = NPC:ExtFunc_Parameters
+	Wave/Z/T copy = NPC:ExtFunc_Parameters_copy
+	
+	If(WaveExists(copy))
+		//If this isn't the first time, we need to recover the original parameters from the copy table
+		Redimension/N=(DimSize(copy,0),DimSize(copy,1)) param
+		param = copy
+		CopyDimLabels copy,param
+	Else
+		//If this is the first time packages are being managed, make a copy of the parameters table
+		Make/O/T/N=(DimSize(param,0),DimSize(param,1)) NPC:ExtFunc_Parameters_copy
+		Wave/T copy = NPC:ExtFunc_Parameters_copy
+		copy = param
+		CopyDimLabels param,copy
+	EndIf
+	
+	Variable i,j
+	For(i=0;i<ItemsInList(HideUserPackages,";");i+=1)
+		String package = StringFromList(i,HideUserPackages,";")
+		Variable whichipf = WhichListItem(package + ".ipf",fileList,";")
+		
+		//found the ipf, now lets remove all functions within that ipf from the parameters table
+		If(whichipf != -1)
+			package += ".ipf"
+			String packageFunctions = FunctionList("*NT_*",";","WIN:" + package)
+			
+			For(j=0;j<ItemsInList(packageFunctions,";");j+=1)
+				String fn = StringFromList(j,packageFunctions,";")
+				Variable whichCol = FindDimLabel(param,1,fn)
+				
+				If(whichCol != -1)
+					DeletePoints/M=1 whichCol,1,param
+				EndIf
+			EndFor
+		Else
+			//didn't find the ipf, lets check if its a folder
+			//Find any package folders within the Functions folder
+			String UserPackageFolders = IndexedDir(userPath,-1,0)
+			Variable whichfolder = WhichListItem(package,UserPackageFolders,";")
+			
+			If(whichFolder != -1)
+				//found the package folder, lets now get the ipfs inside
+				String packageFolderPath = userFunctionPath + ":" + package
+				NewPath/O/Q/Z packagePath,packageFolderPath
+				
+				userFileList = IndexedFile(packagePath,-1,".ipf")				
+				
+				//now get a list of all the 'NT_' functions within these ipfs
+				packageFunctions = ""
+				For(j=0;j<ItemsInlist(userFileList,";");j+=1)
+					String packageFile = StringFromList(j,userFileList,";")
+					packageFunctions += FunctionList("*NT_*",";","WIN:" + packageFile)
+				EndFor
+				
+				//exclude the identified functions from the function menu
+				For(j=0;j<ItemsInList(packageFunctions,";");j+=1)
+					fn = StringFromList(j,packageFunctions,";")
+					whichCol = FindDimLabel(param,1,fn)
+					
+					If(whichCol != -1)
+						DeletePoints/M=1 whichCol,1,param
+					EndIf
+				EndFor
+			EndIf
+		EndIf
+	EndFor
+	
+	//Rebuild the functions menu
+	BuildMenu "FunctionMenu"	
+	
+	If(!init)
+		//Save the preferences as a global preferences text file called PackagePreferences.txt
+		Make/T/FREE packagePreferenceWave
+		Wave/T packagePreferenceWave = StringListToTextWave(HideUserPackages,";")
+			
+		Save/O/G/M="\n"/W packagePreferenceWave as prefPath
+	EndIf	
+End
+
+Function PackageManagerProc(ba) : ButtonControl
+	STRUCT WMButtonAction &ba
+
+	switch( ba.eventCode )
+		case 2: // mouse up
+			// click code here
+			
+			DFREF NPC = $CW
+			
+			//Save packages list for possible reloads
+			String/G NPC:UserPackages
+			SVAR UserPackages =  NPC:UserPackages
+			UserPackages = ""
+			
+			//Save packages list for possible reloads
+			String/G NPC:HideUserPackages
+			SVAR HideUserPackages =  NPC:HideUserPackages
+			HideUserPackages = ""
+			
+			Variable i = 0
+			Do
+				String ctrlName = "Package_" + num2str(i)
+				ControlInfo/W=PackageManager $ctrlName
+				
+				If(!V_flag)
+					break
+				EndIf
+				
+				If(V_Value)
+					UserPackages += S_Title + ";"
+				Else
+					HideUserPackages += S_Title + ";"
+				EndIf
+							
+				i += 1
+			While(V_flag != 0)
+			
+			UpdatePackages(HideUserPackages)
+			
+			//Change button color briefly to indicate update
+			Button SetPackages win=PackageManager,fColor=(500,0x2000,500,0x4000)
+			ControlUpdate/W=PackageManager SetPackages
+			Variable dur,t = ticks
+			Do
+				dur = ticks - t
+			While(dur < 20)
+			
+			Button SetPackages win=PackageManager,fColor=(0,0,0)
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+Menu "ColorMenu",contextualMenu,dynamic
+	"Custom"
+	
+	Submenu "Color Tables"
+		"*COLORTABLEPOP*(0,0,0,0)"
+	End
+End
 
 Menu "FunctionMenu",contextualMenu,dynamic
 	
@@ -1164,6 +1664,39 @@ Menu "FunctionMenu",contextualMenu,dynamic
 	SubMenu GetSubMenuName(9)
 		GetSubMenuItems(9)
 	End
+	
+	SubMenu GetSubMenuName(10)
+		GetSubMenuItems(10)
+	End
+	
+	SubMenu GetSubMenuName(11)
+		GetSubMenuItems(11)
+	End
+	
+	SubMenu GetSubMenuName(12)
+		GetSubMenuItems(12)
+	End
+	
+	SubMenu GetSubMenuName(13)
+		GetSubMenuItems(13)
+	End
+	
+	SubMenu GetSubMenuName(14)
+		GetSubMenuItems(14)
+	End
+	
+	SubMenu GetSubMenuName(15)
+		GetSubMenuItems(15)
+	End
+	
+	SubMenu GetSubMenuName(16)
+		GetSubMenuItems(16)
+	End
+	
+	SubMenu GetSubMenuName(17)
+		GetSubMenuItems(17)
+	End
+	
 End
 
 //contextual menu for the data set waves pop ups, supports up to 15 data groups as sub menus
@@ -1302,7 +1835,7 @@ End
 
 Function GoToProc()
 	GetLastUserMenuInfo
-	DisplayProcedure/W=$(S_Value + ".ipf")
+	DisplayProcedure/W=$(S_Value)
 End
 
 //Returns the indexed submenu name. Supports up to 10
@@ -1336,6 +1869,9 @@ Function/S GetSubMenuName(index)
 	//remove all duplicate entries
 	submenuList = removeduplicateList(submenuList,";")
 	
+	//Sort the list alphanumerically, case-insensitive
+	submenuList = SortList(submenuList,";",16)
+	
 	String name = StringFromList(index,submenuList,";")
 	If(strlen(name))
 		return name
@@ -1343,6 +1879,7 @@ Function/S GetSubMenuName(index)
 		return "-"
 	EndIf
 End
+
 
 //Returns the items for the indexed submenu
 Function/S GetSubMenuItems(index)
@@ -1356,10 +1893,11 @@ Function/S GetSubMenuItems(index)
 	
 	Wave/T param = NPC:ExtFunc_Parameters
 	SVAR submenuList = NPC:submenuList
-	String func="",itemList = ""
+	String func="",itemList = "",groupList = ""
 	
 	Variable row = FindDimLabel(param,0,"SUBMENU")
 	Variable titleRow = FindDimLabel(param,0,"TITLE")
+	Variable groupRow = FindDimLabel(param,0,"SUBGROUP")
 	
 	If(index != -1)
 		//Testing for submenu assignments
@@ -1376,22 +1914,76 @@ Function/S GetSubMenuItems(index)
 		Variable i
 		For(i=0;i<DimSize(param,1);i+=1)
 			String assignment = param[row][i]
-
+			
+			If(groupRow == -2)
+				String subGroup = ""
+			Else
+				subGroup = param[groupRow][i]
+			EndIf
+					
 			If(!cmpstr(assignment,submenuName))
 				If(titleRow < 0) //no title in param file
 					func = GetDimLabel(param,1,i)
 					itemList += func + ";"
+					groupList += subGroup + ";"
 				Else
 					func = param[titleRow][i]
 					itemList += func + ";"
+					groupList += subGroup + ";"
 				EndIf
 			EndIf
 		EndFor
 		
-		return itemList
+		//Sort the submenu into its groupings
+		Wave/T groupWave = StringListToTextWave(groupList,";")
+		Wave/T itemWave = StringListToTextWave(itemList,";")
+		SortColumns keyWaves={groupWave},sortWaves={itemWave,groupWave}
+		
+		itemList = TextWaveToStringList(itemWave,";")
+		groupList = TextWaveToStringList(groupWave,";")
+		
+		String groupedItemList = "" //will hold all the final submenu item list
+		String accumulateGroup = "" //will hold all subgroup items and alpha sort them before adding to groupitemlist
+		String lastGroup = StringFromList(0,groupList,";") //start with the first item in the list
+		Variable singleGroup = 1
+		
+		For(i=0;i<ItemsInList(itemList,";");i+=1)
+			String currentGroup = StringFromList(i,groupList,";")
+			If(cmpstr(lastGroup,currentGroup))
+				accumulateGroup = SortList(accumulateGroup,";",16)
+				groupedItemList += accumulateGroup + "-;" //insert break in the submenu list
+				accumulateGroup = StringFromList(i,itemList,";") + ";"
+				singleGroup = 0
+				
+				If(i == ItemsInList(itemList,";") - 1)
+					//last item
+					accumulateGroup = SortList(accumulateGroup,";",16)
+					groupedItemList += accumulateGroup
+				EndIf
+				
+			Else
+				accumulateGroup += StringFromList(i,itemList,";") + ";"
+				
+				If(i == ItemsInList(itemList,";") - 1)
+					//last item
+					accumulateGroup = SortList(accumulateGroup,";",16)
+					groupedItemList += accumulateGroup
+				EndIf
+			EndIf
+			
+			lastGroup = currentGroup
+		EndFor
+		
+		If(singleGroup)
+			accumulateGroup = SortList(accumulateGroup,";",16)
+			groupedItemList = accumulateGroup
+		EndIf
+		
+//		itemList = SortList(itemList,";",16)
+		return groupedItemList
 	Else
 
-		//Find the functions that are assigned to the named submenu
+		//Find the functions that are not assigned to any submenu
 		For(i=0;i<DimSize(param,1);i+=1)
 			assignment = param[row][i]
 			
@@ -1406,9 +1998,12 @@ Function/S GetSubMenuItems(index)
 			EndIf
 		EndFor
 		
+		itemList = SortList(itemList,";",16)
 		return itemList
 	EndIf
 End
+
+
 
 Menu "DSGroupListMenu",contextualMenu,dynamic
 	GetDSMenuItems() 
@@ -1510,7 +2105,9 @@ Function LoadNeuroPlus()
 
 	Variable left,right,top,bottom
 	left = 0;top = 0;right = str2num(StringFromList(2,info,","));bottom = str2num(StringFromList(3,info,","))
-	NewPanel/N=NTP/W=(left,top,right,bottom)/K=1 as "NeuroTools+"
+	
+	String text = ProcedureText("",30,"NeuroToolsPlus_Loader")
+	NewPanel/N=NTP/W=(left,top,right,bottom)/K=1 as "NeuroTools+ v" + NTP#Version()
 	
 	screenLeft = left;screenRight=right;screenTop=top;screenBottom=bottom
 	
@@ -1560,7 +2157,7 @@ Function LoadNeuroPlus()
 	Button clearViewer win=NTP#Nav,pos={viewerControlLeft + 3,displayTop + 220},size={40,20},title="C",fsize=12,font=$LIGHT,proc=NTPButtonProc
 	
 	//Data Set Definition panel
-	NewPanel/HOST=NTP/FG=(dataPanel_L,FT,FR,FB)/N=Data
+	NewPanel/HOST=NTP/FG=(dataPanel_L,FT,funcPanel_L,FB)/N=Data
 	ModifyPanel/W=NTP#Data,fixedSize=1,frameStyle=0
 	GroupBox dataPanel win=NTP#Data,align=0,pos={0,5},size={dataPanelWidth,bottom-300}
 	GroupBox dataSetPanel win=NTP#Data,align=0,pos={0,bottom-290},size={dataPanelWidth,280}
@@ -1569,12 +2166,22 @@ Function LoadNeuroPlus()
 	//Right side panel
 	NewPanel/HOST=NTP/FG=(funcPanel_L,FT,FR,FB)/N=Func
 	ModifyPanel/W=NTP#Func,fixedSize=1,frameStyle=0
-//	GroupBox funcPanel win=NTP#Func,align=0,pos={0,0},size={funcPanelWidth,bottom}
+	GroupBox funcPanel win=NTP#Func,align=0,pos={0,5},size={funcPanelWidth - 5,bottom - 300}
 	
+	//Find position of previously built panels
+	ControlInfo/W=NTP#Data dataSetPanel
+	Variable topPos = V_top
+	Variable height = V_height
 	
-	//Corner panel to hide the guide lines and to give mouse focus to all other panels. Kind of weird bug with subpanels maybe.
-	NewPanel/HOST=NTP/FG=(FR,FB,FR,FB)/N=Corner
-	ModifyPanel/W=NTP#Corner,fixedSize=1,frameStyle=0
+	//Groupbox for holding the data set and function notebook
+	GroupBox DSNotesBox win=NTP#Func,pos={0,topPos},size={funcPanelWidth - 5,height},disable=0
+	
+	//Data set notebook
+	NewNotebook/HOST=NTP#Func/W=(5,bottom-260,funcPanelWidth-10,bottom - 10)/N=DSNotebook/F=1/ENCG=1/OPTS=3
+	Notebook NTP#Func#DSNotebook frameStyle=0,frameInset=0,backRGB=(59000,59000,59000,0),fSize=12,fStyle=0,font="Helvetica Light"
+	
+	//Doesn't draw the active subwindow frame
+	SetWindow NTP,activeChildFrame=0
 	
 	//Data Browser emulation
 	
@@ -1586,19 +2193,6 @@ Function LoadNeuroPlus()
 	DrawText/W=NTP#Nav 350,20,"WAVES"
 	SetDrawEnv/W=NTP#Nav gstop
 	
-	SetDrawEnv/W=NTP#Data gstart,gname=dataSetLabels
-	SetDrawEnv/W=NTP#Data xcoord= abs,ycoord= abs, fsize=16, textxjust= 1,textyjust= 1,fname=$LIGHT
-	DrawText/W=NTP#Data dataPanelWidth/2,20,"DATA SET BUILDER"
-	SetDrawEnv/W=NTP#Data xcoord= abs,ycoord= abs, fsize=14, textxjust= 1,textyjust= 1,fname=$LIGHT
-	DrawText/W=NTP#Data 115,139,"MATCHED WAVES"
-	SetDrawEnv/W=NTP#Data xcoord= abs,ycoord= abs, fsize=14, textxjust= 1,textyjust= 1,fname=$LIGHT
-	DrawText/W=NTP#Data 355,139,"DATA SET WAVES"
-//	SetDrawEnv/W=NTP#Data xcoord= abs,ycoord= abs, fsize=14, textxjust= 1,textyjust= 1,fname=$LIGHT
-//	DrawText/W=NTP#Data 540,135,"DATA SETS"
-	SetDrawEnv/W=NTP#Data gstop
-	
-	
-	
 	//Wave Matching Controls
 	Variable waveMatchPosition = 40
 	Variable fontSize = 10
@@ -1608,11 +2202,12 @@ Function LoadNeuroPlus()
 	
 	Wave/T FolderLB_ListWave = NPC:FolderLB_ListWave
 	Wave FolderLB_SelWave = NPC:FolderLB_SelWave
-	ListBox folderListBox win=NTP#Nav,size={navPanelWidth/2 - 20,folderBoxHeight},pos={10,folderBoxTop},mode=9,fsize=11,frame=0,font=$REG,listWave=FolderLB_ListWave,selWave=FolderLB_SelWave,disable=0,proc=NTPListBoxProc
+	ListBox folderListBox win=NTP#Nav,size={navPanelWidth/2 - 20,folderBoxHeight},widths={300},pos={10,folderBoxTop},mode=9,fsize=11,frame=0,font=$REG,listWave=FolderLB_ListWave,selWave=FolderLB_SelWave,disable=0,proc=NTPListBoxProc
 	
 	Wave/T WavesLB_ListWave = NPC:WavesLB_ListWave
 	Wave WavesLB_SelWave = NPC:WavesLB_SelWave
-	ListBox waveListBox win=NTP#Nav,size={navPanelWidth/2 - 20,folderBoxHeight},pos={navPanelWidth/2 + 5,folderBoxTop},mode=9,fsize=11,frame=0,font=$REG,listWave=WavesLB_ListWave,selWave=WavesLB_SelWave,disable=0,proc=NTPListBoxProc
+	ListBox waveListBox win=NTP#Nav,size={navPanelWidth/2 - 20,folderBoxHeight},widths={300},pos={navPanelWidth/2 + 5,folderBoxTop},mode=9,fsize=11,frame=0,font=$REG,listWave=WavesLB_ListWave,selWave=WavesLB_SelWave,disable=0,proc=NTPListBoxProc
+	
 	
 	//Back Button
 	Button Back win=NTP#Nav,size={30,20},pos={10,10},font=$REG,fsize=9,title="Back",proc=NTPButtonProc,disable=0
@@ -1623,6 +2218,8 @@ Function LoadNeuroPlus()
 	cdf = "root:"
 	updateFolders()
 	updateFolderWaves()
+	
+	fontSize = 12
 	
 	SetVariable waveMatch win=NTP#Data,font=$LIGHT,pos={30,waveMatchPosition},focusRing=0,size={180,20},bodyWidth = 160, fsize=fontSize,title="Match",value=_STR:"*",help={"Matches waves in the selected folder.\rLogical 'OR' can be used via '||'"},disable=0,proc=ntSetVarProc
 	SetVariable waveNotMatch win=NTP#Data,font=$LIGHT,pos={30,waveMatchPosition + 20},focusRing=0,size={180,20},bodyWidth = 160,fsize=fontSize,title="Not",value=_STR:"",help={"Excludes matched waves in the selected folder.\rLogical 'OR' can be used via '||'"},disable=0,proc=ntSetVarProc
@@ -1644,13 +2241,24 @@ Function LoadNeuroPlus()
 	Wave/T WavesLB_ListWave = NPC:WavesLB_ListWave //waves list box
 	
 	
-	ListBox MatchListBox win=NTP#Data,pos={10,boxTop},size={dataPanelWidth/2 - 20,boxHeight},mode=9,frame=0,fsize=11,font=$REG,listWave=MatchLB_ListWave,selWave=MatchLB_SelWave,disable=0,proc=ntListBoxProc
+	ListBox MatchListBox win=NTP#Data,pos={10,boxTop},size={dataPanelWidth/2 - 20,boxHeight},widths={300},mode=9,frame=0,fsize=11,font=$REG,listWave=MatchLB_ListWave,selWave=MatchLB_SelWave,disable=0,proc=ntListBoxProc
 	
 	//List box that holds data set wave lists
-	ListBox DataSetWavesListBox win=NTP#Data,pos={5 + dataPanelWidth/2,boxTop},size={dataPanelWidth/2 - 20,boxHeight},fsize=11,font=$REG,mode=9,frame=0,listWave=DataSetLB_ListWave,selWave=DataSetLB_SelWave,disable=0,proc=ntListBoxProc
+	ListBox DataSetWavesListBox win=NTP#Data,pos={5 + dataPanelWidth/2,boxTop},size={dataPanelWidth/2 - 20,boxHeight},widths={300},fsize=11,font=$REG,mode=9,frame=0,listWave=DataSetLB_ListWave,selWave=DataSetLB_SelWave,disable=0,proc=ntListBoxProc
 	
 	//List box to hold names of data sets 
-	ListBox DataSetNamesListBox win=NTP#Data,mode=2,pos={470 + 10,boxTop},size={125,boxHeight},fsize=11,font=$REG,frame=0,listWave=DSNamesLB_ListWave,selWave=DSNamesLB_SelWave,disable=3,proc=ntListBoxProc
+	ListBox DataSetNamesListBox win=NTP#Data,mode=2,pos={470 + 10,boxTop},size={125,boxHeight},fsize=11,font=$REG,widths={300},frame=0,listWave=DSNamesLB_ListWave,selWave=DSNamesLB_SelWave,disable=3,proc=ntListBoxProc
+	
+	SetDrawEnv/W=NTP#Data gstart,gname=dataSetLabels
+	SetDrawEnv/W=NTP#Data xcoord= abs,ycoord= abs, fsize=16, textxjust= 1,textyjust= 1,fname=$LIGHT,fstyle=0
+	DrawText/W=NTP#Data dataPanelWidth/2,20,"DATA SET BUILDER"
+	SetDrawEnv/W=NTP#Data xcoord= abs,ycoord= abs, fsize=14, textxjust= 1,textyjust= 1,fname=$LIGHT,fstyle=0
+	DrawText/W=NTP#Data 115,boxTop - 25,"MATCHED WAVES"
+	SetDrawEnv/W=NTP#Data xcoord= abs,ycoord= abs, fsize=14, textxjust= 1,textyjust= 1,fname=$LIGHT,fstyle=0
+	DrawText/W=NTP#Data 355,boxTop - 25,"DATA SET WAVES"
+//	SetDrawEnv/W=NTP#Data xcoord= abs,ycoord= abs, fsize=14, textxjust= 1,textyjust= 1,fname=$LIGHT
+//	DrawText/W=NTP#Data 540,135,"DATA SETS"
+	SetDrawEnv/W=NTP#Data gstop
 	
 	//Display number of wave sets and waves
 //	SetVariable waveMatchNumWS win=NTP#Data,noedit=1,frame=0,fstyle=1,fsize=11,font=$LIGHT,pos={10,boxTop},size={225,boxHeight},title=" ",value=root:Packages:NeuroToolsPlus:ControlWaves:numWaveSets_WM
@@ -1684,7 +2292,8 @@ Function LoadNeuroPlus()
 	Button waveGroupingHelp win=NTP#Data,pos={452,77},size={20,20},title="?",disable=0,font=$LIGHT,fsize=fontSize,proc=NTPButtonProc
 	
 	//Data Set controls
-	Button DSMenu win=NTP#Data,fsize=fontSize,pos={190,127},size={35,20},fsize=fontSize,font=$LIGHT,title="→DS",proc=NTPButtonProc
+	Button DSMenu win=NTP#Data,fsize=fontSize,pos={190,boxTop - 35},size={35,20},fsize=fontSize,font=$LIGHT,title="→DS",proc=NTPButtonProc
+	
 //	Button DSGroupMenu win=NTP#Data,pos={584,124},size={20,20},fsize=12,fstyle=1,font=$MED,title=U+22EE,proc=NTPButtonProc
 
 
@@ -1704,10 +2313,23 @@ Function LoadNeuroPlus()
 		currentFunc = ""
 	EndIf
 	
-	Button functionPopUp win=NTP#Func,pos={20,40},size={200,20},fsize=12,font=$LIGHT,proc=ntButtonProc,title="\\JL▼   " + currentFunc,disable=0
+	//Ensures correct control displays if measure function is initialized
+	If(!cmpstr(currentFunc,"Measure"))
+		STRUCT WMPopupAction pa
+		pa.eventCode = 2
+		pa.ctrlName = "param_1"
+		pa.popStr = "Peak"
+		pa.popNum = 1
+		measureProc(pa)
+	EndIf
+	
+	Button refreshMenu win=NTP#func,pos={10,40},size={20,20},fsize=12,font=$LIGHT,proc=ntButtonProc,disable=0,title="⟳"
+	Button functionPopUp win=NTP#Func,pos={35,40},size={185,20},fsize=12,font=$LIGHT,proc=ntButtonProc,title="\\JL▼   " + currentFunc,disable=0
 	Button gotoFunc win=NTP#Func,pos={230,40},size={50,20},font=$LIGHT,title="GoTo",disable=0,proc=ntButtonProc
 	Button funcNotes win=NTP#Func,pos={285,40},size={20,20},font=$LIGHT,title="?",disable=0,proc=ntButtonProc
 	Button runFunc win=NTP#Func,pos={330,40},size={60,20},font=$LIGHT,title="RUN",disable=0,proc=ntButtonProc
+	Button hideNTP win=NTP#Func,pos={funcPanelWidth - 48,7},size={40,20},title="Hide",disable=0,proc=ntButtonProc
+	
 //	SetVariable dsNameInput win=NTP#Data,pos={345,468},size={90,20},disable=1,focusRing=0,frame=0,value=_STR:"",proc=ntSetVarProc
 //	GroupBox dsNameGroupBox win=NTP#Data,pos={340,463},size={100,26},disable=1
 	
@@ -1715,11 +2337,24 @@ Function LoadNeuroPlus()
 	SetDrawLayer/W=NTP#Func Overlay
 	DrawAction/W=NTP#Func getgroup=dsNotesText,delete
 	
+		
+	//Reset the All group visibility and make sure the data set lists are valid
+	CheckBox HideAllGroup win=NTP#Data,value=0
+	Wave/T DSGroupListWave =  NPD:DSGroupListWave
+	Wave DSGroupSelWave = NPD:DSGroupSelWave
+	Wave/T DSGroupContents = NPD:DSGroupContents
+	
+	Redimension/N=(DimSize(DSGroupContents,1)) DSGroupListWave,DSGroupSelWave
+	Variable i
+	For(i=0;i<DimSize(DSGroupContents,1);i+=1)
+		DSGroupListWave[i] = GetDimLabel(DSGroupContents,1,i)
+	EndFor
+	
 	SetDSGroup(group="All")
 	
 	Wave/T ds = NPD:DSNamesLB_ListWave
 	If(DimSize(ds,0) > 0)
-		String dsName = ds[0]
+		String dsName = ds[0][0][0]
 	Else
 		dsName = ""
 	EndIf
@@ -1728,7 +2363,7 @@ Function LoadNeuroPlus()
 	SetupDSGroupForm(dsName)
 
 	//ScanImage package
-	SI_CreatePackage()
+//	SI_CreatePackage()
 	
 	//Initiate the function menu
 	SVAR selectedCmd = NPC:selectedCmd
@@ -1748,6 +2383,47 @@ Function LoadNeuroPlus()
 	listFocus = "DataSet"
 	changeFocus("WaveMatch",1)
 	
+	
+	//Check for package manager and update the available packages in the functions menu
+	SVAR HideUserPackages =  NPC:HideUserPackages
+	If(SVAR_Exists(HideUserPackages))
+		UpdatePackages(HideUserPackages,init=1)
+	Else
+		//If there are no preferences for the current experiment file, let's check for a global package preferences file
+		//in the User Procedures folder
+		String PackagePreferences = SpecialDirPath("Igor Pro User Files",0,0,0)	
+		PackagePreferences += "User Procedures:NeuroTools+:PackagePreferences.txt"
+		
+		GetFileFolderInfo/Q/Z PackagePreferences
+		
+		If(V_isFile)
+			LoadWave/Q/J/K=2/N=packageList PackagePreferences
+			
+			Wave/T packageList = :packageList0
+			String/G NPC:HideUserPackages
+			SVAR HideUserPackages = NPC:HideUserPackages
+			HideUserPackages  = ""
+			
+			DeletePoints/M=0 0,1,packageList //deletes the column label
+			
+			For(i=0;i<DimSize(packageList,0);i+=1)
+				String package = packageList[i]
+				
+				HideUserPackages += package + ";"
+			EndFor
+			KillWaves/Z packageList
+		EndIf
+		
+		
+		DoWindow/F PackageManager
+		If(V_flag)
+			ManagePackages()
+		EndIf
+		
+		UpdatePackages(HideUserPackages)
+	EndIf
+	
+	
 End
 
 Function CreatePackageFolders()
@@ -1759,6 +2435,11 @@ End
 Function CreatePackageWaves()
 	DFREF NPC = $CW
 	DFREF NPD = $DSF
+	
+	//Create variable checking if NeuroTools is loaded or not
+	Variable/G NPC:isLoaded
+	NVAR isLoaded = NPC:isLoaded
+	isLoaded = 1
 	
 	Make/O/T/N=1 NPC:FolderLB_ListWave
 	
@@ -1888,6 +2569,10 @@ Function CreatePackageWaves()
 	NVAR EditingNotes = NPD:EditingNotes
 	EditingNotes = 0
 	
+	Variable/G NTSI:isInverted
+	NVAR isInverted = NTSI:isInverted
+	isInverted = 0
+	
 	//Strings
 	String/G NPC:cdf
 	String/G NPC:listFocus
@@ -1919,6 +2604,11 @@ Function CreatePackageWaves()
 	String/G NPC:currentFunc
 	
 	String/G NPC:notificationEntry
+	
+	//Save this for possible reloads
+	String/G NPC:UserPackages
+	SVAR UserPackages =  NPC:UserPackages
+	UserPackages = ""
 	
 	//ScanImage package strings
 	String/G NPC:loadedPackages
@@ -1980,11 +2670,11 @@ End
 
 //Creates a new data folder along the specified location
 //Creates the entire path if need be
-Function CreateFolder(path)
+Function/DF CreateFolder(path)
 	String path
 	 
 	If(!strlen(path))
-		return 0
+		return $""
 	EndIf
 	
 	Variable i,numel = ItemsInList(path,":")
@@ -2002,6 +2692,10 @@ Function CreateFolder(path)
 		path = RemoveEnding(path,":")
 		NewDataFolder $path
 	EndIf
+	
+	DFREF dfr = $path
+	
+	return dfr
 End
 
 //Uses the selection from the Grouping menu to append the appropriate flag to the grouping SetVariable box
@@ -2113,6 +2807,11 @@ Function switchFolderContents(selection)
 	
 	//Change the current data folder
 	SVAR cdf = NPC:cdf
+	
+	If(stringmatch(selection,"* *"))
+		selection = "'" + selection + "'"
+	EndIf
+	
 	SetDataFolder cdf + selection
 	
 	//Refresh the folder and waves list boxes
@@ -2169,7 +2868,10 @@ Function NTPListBoxProc(lba) : ListBoxControl
 	
 	Variable hookResult = 0
 	
+	Variable/G NPC:isDoubleClick
+	NVAR isDoubleClick = NPC:isDoubleClick
 	
+		
 	switch( lba.eventCode )
 		case -1: // control being killed
 			break
@@ -2181,15 +2883,15 @@ Function NTPListBoxProc(lba) : ListBoxControl
 				case "waveListBox":
 					AppendToViewer(listWave,selWave)
 					break
+				
 			endswitch
 			break
 		case 3: // double click
 			strswitch(lba.ctrlName)
-				case "matchListBox": //wave matches
-					break
-				case "dataSetWavesListBox": //data set waves
-					break
-				case "dataSetNamesListBox": //data set names
+				case "DSGroupContents": //data set names
+					//select all
+					isDoubleClick = 1
+					
 					break
 				case "folderListBox":  //folder navigation
 					Wave/T FolderLB_ListWave = NPC:FolderLB_ListWave
@@ -2199,10 +2901,12 @@ Function NTPListBoxProc(lba) : ListBoxControl
 					break
 				case "waveListBox":	//waves navigation
 					break
-			endswitch 
+			endswitch
+			
+			 break
 		case 4: //selection
 		case 5: // cell selection plus shift key
-		
+			
 			///Arrow key selection
 			If(lba.eventMod == 0)	
 				strswitch(lba.ctrlName)
@@ -2226,6 +2930,13 @@ Function NTPListBoxProc(lba) : ListBoxControl
 						changeDataSet(listWave[row])
 					EndIf
 					
+					If(isDoubleClick)
+						Wave selWave = NPD:DataSetLB_SelWave
+						selWave = 1
+						
+						Wave/T listWave = NPD:DataSetLB_ListWave
+						AppendToViewer(listWave,selWave)
+					EndIf
 					break
 			endswitch
 			
@@ -2267,7 +2978,7 @@ Function NTPListBoxProc(lba) : ListBoxControl
 						PopUpContextualMenu/C=(lba.mouseLoc.h,lba.mouseLoc.v) "GoTo;Edit;Delete;Display;"
 						break
 					case "folderListBox":
-						return 0
+						PopUpContextualMenu/C=(lba.mouseLoc.h,lba.mouseLoc.v) "Copy Path;"
 				endswitch
 
 				//Handle the user's right click menu selection
@@ -2336,10 +3047,23 @@ Function NTPListBoxProc(lba) : ListBoxControl
 							HandleRightClick("waveListBox",V_flag,row=row)
 						EndIf
 						break
+					case "Copy Path":
+						If(V_flag)
+							Wave/T FolderLB_ListWave = NPC:FolderLB_ListWave
+							Wave/T FolderLB_SelWave = NPC:FolderLB_SelWave
+							SVAR cdf = NPC:cdf
+							
+							//Get the first wave in the data folder
+							String path = cdf + FolderLB_ListWave[row] + ":"
+							PutScrapText path
+						EndIf
+						break
 				endswitch
 
 			EndIf
-
+			
+			isDoubleClick = 0
+			
 			break
 		case 12:
 			
@@ -2406,13 +3130,69 @@ Function DataSetButtonProc(ba) : ButtonControl
 					break
 				EndIf
 				
-				SetDSGroup(group="All",dataset=dataset)
+				String dsGroup = ""
+				Wave/T DSGroupContents = NPD:DSGroupContents
+				
+				//attempt to find a group that the data set belongs to
+				Variable i
+				For(i=1;i<DimSize(DSGroupContents,1);i+=1)
+					Variable row = tableMatch(dataset,DSGroupContents,whichCol=i)
+					
+					If(row != -1)
+						dsGroup = GetDimLabel(DSGroupContents,1,i)
+					EndIf
+				EndFor
+				
+				//no group assignments, so we'll switch to the 'All' group
+				If(!strlen(dsGroup))
+					dsGroup = "All"
+				EndIf
+				
+				ControlInfo/W=NTP#Data HideAllGroup
+				If(V_Value && !cmpstr(dsGroup,"All"))
+					Checkbox HideAllGroup win=NTP#Data,value=0 //uncheck the hide 'all' group
+					STRUCT WMCheckboxAction cba //rebuild the data group waves accordingly
+					cba.checked = 0
+					cba.eventCode = 2
+					cba.ctrlName = "HideAllGroup"
+					NTPCheckProc(cba) //trigger the checkbox code
+				EndIf
+				
+				SetDSGroup(group=dsGroup,dataset=dataset)
 				break
 			ElseIf(stringmatch(ba.ctrlName,"*goto"))
 				parentCtrl = StringFromList(0,ba.ctrlName,"_")
 				ControlInfo/W=NTP#Func $parentCtrl
 				String func = "NT_" + S_Value
 				DisplayProcedure/W=NTP_ExternalFunctions func
+				break
+			ElseIf(stringmatch(ba.ctrlName,"*Nav"))
+				parentCtrl = StringFromList(0,ba.ctrlName,"_")
+//				String selection = GetBrowserSelection(0)
+				Wave/T NavListWave = NPC:WavesLB_ListWave
+				Wave NavSelWave = NPC:WavesLB_SelWave
+				
+				String selection = ""
+				
+				//Get the first selection item in the list
+				SVAR cdf = NPC:cdf
+				For(i=0;i<DimSIze(NavListWave,0);i+=1)
+					If(NavSelWave[i] > 0)
+						selection = cdf + NavListWave[i]
+						break
+					EndIf
+				EndFor
+				
+				SetVariable $parentCtrl win=NTP#Func,value=_STR:selection
+				
+				validWaveText("",0,deleteText=1,parentCtrl=parentCtrl)
+				ControlInfo/W=NTP#Func $parentCtrl
+				validWaveText(selection,V_top+13,parentCtrl=parentCtrl)
+				
+				func = CurrentExtFunc()
+				Variable index = ExtFuncParamIndex(ba.ctrlName)
+				setParam("PARAM_" + num2str(index) + "_VALUE",func,selection)
+				
 				break
 			EndIf
 			
@@ -2432,7 +3212,7 @@ Function DataSetButtonProc(ba) : ButtonControl
 			Wave/T param = NPC:ExtFunc_Parameters
 			
 			func = CurrentExtFunc()
-			Variable index = ExtFuncParamIndex(ba.ctrlName)
+			index = ExtFuncParamIndex(ba.ctrlName)
 			
 			setParam("PARAM_" + num2str(index) + "_VALUE",func,S_Selection)
 			
@@ -2445,6 +3225,48 @@ Function DataSetButtonProc(ba) : ButtonControl
 	return errorCode
 	
 End
+
+Function NTPCheckProc(cba) : CheckBoxControl
+	STRUCT WMCheckboxAction &cba
+
+	switch( cba.eventCode )
+		case 2: // mouse up
+			Variable checked = cba.checked
+			
+			DFREF NPD = $DSF
+			Wave/T DSGroupListWave =  NPD:DSGroupListWave
+			Wave DSGroupSelWave = NPD:DSGroupSelWave
+			
+			strswitch(cba.ctrlName)
+				case "HideAllGroup":
+					If(checked)
+						//Break if the only group is the 'All' group
+						If(DimSize(DSGroupListWave,0) == 1)
+							CheckBox HideAllGroup win=NTP#Data,value=0
+							break
+						EndIf
+						DeletePoints/M=0 0,1,DSGroupListWave,DSGroupSelWave
+						DSGroupSelWave = 0
+						ListBox DSGroups win=NTP#Data,selRow=0
+					Else
+						InsertPoints/M=0 0,1,DSGroupListWave,DSGroupSelWave
+						DSGroupListWave[0] = "All"
+						DSGroupSelWave[0] = 0
+					EndIf
+					break
+			endswitch
+			
+			//Update the data set group display
+			SetDSGroup()
+			
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
 
 Function NTPButtonProc(ba) : ButtonControl
 	STRUCT WMButtonAction &ba
@@ -2589,11 +3411,18 @@ Function NTPButtonProc(ba) : ButtonControl
 					Wave/T DSGroupContentsListWave = NPD:DSGroupContentsListWave
 					Wave DSGroupContentsSelWave = NPD:DSGroupContentsSelWave
 					
-					Variable numGroups = DimSize(DSGroupListWave,0) //stored as depth
-					Redimension/N=(numGroups+1) DSGroupListWave,DSGroupSelWave
-					Redimension/N=(-1,numGroups+1) DSGroupContents
+					ControlInfo/W=NTP#Data hideAllGroup
+					If(V_Value)
+						Variable numGroups = DimSize(DSGroupListWave,0) + 1 //stored as depth
+						Redimension/N=(numGroups) DSGroupListWave,DSGroupSelWave
+						DSGroupListWave[numGroups-1] = dsGroupName
+					Else
+						numGroups = DimSize(DSGroupListWave,0)
+						Redimension/N=(numGroups+1) DSGroupListWave,DSGroupSelWave
+						DSGroupListWave[numGroups] = dsGroupName
+					EndIf
 					
-					DSGroupListWave[numGroups] = dsGroupName
+					Redimension/N=(-1,numGroups+1) DSGroupContents
 					SetDimLabel 1,numGroups,$dsGroupName,DSGroupContents
 					
 					//refresh the contents wave
@@ -2618,7 +3447,7 @@ Function NTPButtonProc(ba) : ButtonControl
 //					Redimension/N=(DimSize(DSGroupContentsListWave,0)) DSGroupContentsSelWave
 				
 					
-					OpenDSNotesEntry()
+					OpenDSNotesEntry2()
 					
 					notificationEntry = "New Data Group: \f01" + dsGroupName
 					SendNotification()
@@ -2669,6 +3498,9 @@ Function NTPButtonProc(ba) : ButtonControl
 						print "ADD DATA SET ERROR"
 					EndIf
 					
+					break
+				case "NewDSTable":
+					NewDataTable()
 					break
 				case "deleteDS":
 					//delete selected data set
@@ -2784,6 +3616,11 @@ Function NTPButtonProc(ba) : ButtonControl
 					SetVariable strEditor win=noteEditor,pos={10,10},size={180,180},value=NPD:$("DS_" + notesName + "_notes"),styledText=1,title=" "
 					
 					break
+				case "SaveNotes":
+					//Get selected data set name	
+					dsName = GetDSName()
+					SaveDataSetNotes(dsName)
+					break
 				case "autoscale":
 					autoscaleViewer()
 					break
@@ -2886,8 +3723,8 @@ Function NTPButtonProc(ba) : ButtonControl
 			case "displayViewerContents":
 				Button $ba.ctrlName win=NTP#Nav,fColor=(0xffff,0xffff,0xffff) //sets to focus grey (0xffff isn't white here, but as light as the button allows).
 				break
-			case "EditNotes":
-			case "OpenNotes":
+			case "SaveNotes":
+				Button $ba.ctrlName win=NTP#Func,fColor=(0xffff,0xffff,0xffff) //sets to focus grey (0xffff isn't white here, but as light as the button allows).
 				break
 			default:
 				Button $ba.ctrlName win=NTP#Data,fColor=(0xffff,0xffff,0xffff) //sets to focus grey (0xffff isn't white here, but as light as the button allows).
@@ -2908,8 +3745,8 @@ Function NTPButtonProc(ba) : ButtonControl
 			case "displayViewerContents":
 				Button $ba.ctrlName win=NTP#Nav,fColor=(0,0,0) //sets to standard color
 				break
-			case "EditNotes":
-			case "OpenNotes":
+			case "SaveNotes":
+				Button $ba.ctrlName win=NTP#Func,fColor=(0,0,0) //sets to focus grey (0xffff isn't white here, but as light as the button allows).
 				break
 			default:
 				Button $ba.ctrlName win=NTP#Data,fColor=(0,0,0) //sets to standard color
@@ -3159,57 +3996,69 @@ Function SetupDSGroupForm(dsName)
 //	SetDrawEnv/W=NTP#Data xcoord= abs,ycoord= abs, fsize=16, textxjust= 1,textyjust= 1,fname=$LIGHT
 //	DrawText/W=NTP#Data funcPanelWidth/2,15,"DATA SET EDITOR"
 	
-	SetDrawEnv/W=NTP#Data xcoord= abs,ycoord= abs, fsize=16, textxjust= 1,textyjust= 1,fname=$LIGHT
+	SetDrawEnv/W=NTP#Data xcoord= abs,ycoord= abs, fsize=16, textxjust= 1,textyjust= 1,fname=$LIGHT,fStyle=0
 	DrawText/W=NTP#Data left + 70,dsPanelTop + 20,"DATA GROUPS"	
-	SetDrawEnv/W=NTP#Data xcoord= abs,ycoord= abs, fsize=16, textxjust= 1,textyjust= 1,fname=$LIGHT
+	SetDrawEnv/W=NTP#Data xcoord= abs,ycoord= abs, fsize=16, textxjust= 1,textyjust= 1,fname=$LIGHT,fStyle=0
 	DrawText/W=NTP#Data left + 225,dsPanelTop + 20,"DATA SETS"
 	SetDrawEnv/W=NTP#Data gstop
 	
 	Variable topPos = dsPanelTop + 40
+	Variable buttonWidth = 130
+	
 	ListBox DSGroups win=NTP#Data,pos={left,topPos},size={150,dsPanelHeight - 50},fsize=11,font=$REG,frame=0,listWave=DSGroupListWave,selWave=DSGroupSelWave,disable=0,mode=2,proc=NTPListBoxProc
 	ListBox DSGroupContents win=NTP#Data,pos={left + 160,topPos},size={150,dsPanelHeight - 50},fsize=11,frame=0,font=$REG,listWave=DSGroupContentsListWave,selWave=DSGroupContentsSelWave,disable=0,mode=2,proc=NTPListBoxProc
 	
+	Checkbox hideAllGroup win=NTP#Data,pos={left + 330,topPos - 15},size={buttonWidth,20},title="Hide 'All' Group",fsize=fontSize,font=$LIGHT,disable=0,proc=NTPCheckProc
 	topPos += 10
-	Button CreateDSGroup win=NTP#Data,pos={left + 325,topPos},size={120,20},title="New Group",font=$LIGHT,fsize=fontSize,disable=0,proc=NTPButtonProc
+	Button NewDS win=NTP#Data,pos={left + 325,topPos},size={80,20},title="New Data Set",font=$LIGHT,fsize=fontSize,disable=0,proc=NTPButtonProc
+	Button NewDSTable win=NTP#Data,pos={left + 325 + 85,topPos},size={45,20},title="Table",font=$LIGHT,fsize=fontSize,disable=0,proc=NTPButtonProc
 	topPos += 25
-	Button DeleteDSGroup win=NTP#Data,pos={left + 325,topPos},size={120,20},title="Delete Group",font=$LIGHT,fsize=fontSize,disable=0,proc=NTPButtonProc
+	Button DeleteDS win=NTP#Data,pos={left + 325,topPos},size={buttonWidth,20},title="Delete Data Set",font=$LIGHT,fsize=fontSize,disable=0,proc=NTPButtonProc	
 	topPos += 30
 	
 	SetDrawEnv/W=NTP#Data linefgc=(0,0,0,0x4000),linethick=1
 	DrawLine/W=NTP#Data  left + 325,topPos-5,left + 325 + 120,topPos-5
 	
-	Button AddToDSGroup win=NTP#Data,pos={left + 325,topPos},size={120,20},title="Add To Group",font=$LIGHT,fsize=fontSize,disable=0,proc=NTPButtonProc
+	Button UpdateDS win=NTP#Data,pos={left + 325,topPos},size={buttonWidth,20},title="Update Data Set",font=$LIGHT,fsize=fontSize,disable=0,proc=NTPButtonProc
 	topPos += 25
-	Button RemoveFromDSGroup win=NTP#Data,pos={left + 325,topPos},size={120,20},title="Remove From Group",font=$LIGHT,fsize=fontSize,disable=0,proc=NTPButtonProc
+	Button RecallDS win=NTP#Data,pos={left + 325,topPos},size={buttonWidth,20},title="Recall Data Set",font=$LIGHT,fsize=fontSize,disable=0,proc=NTPButtonProc		
 	topPos += 30
 	
 	SetDrawEnv/W=NTP#Data linefgc=(0,0,0,0x4000),linethick=1
 	DrawLine/W=NTP#Data  left + 325,topPos-5,left + 325 + 120,topPos-5
 	
-	Button NewDS win=NTP#Data,pos={left + 325,topPos},size={120,20},title="New Data Set",font=$LIGHT,fsize=fontSize,disable=0,proc=NTPButtonProc
+	Button CreateDSGroup win=NTP#Data,pos={left + 325,topPos},size={buttonWidth,20},title="New Group",font=$LIGHT,fsize=fontSize,disable=0,proc=NTPButtonProc
 	topPos += 25
-	Button DeleteDS win=NTP#Data,pos={left + 325,topPos},size={120,20},title="Delete Data Set",font=$LIGHT,fsize=fontSize,disable=0,proc=NTPButtonProc	
+	Button DeleteDSGroup win=NTP#Data,pos={left + 325,topPos},size={buttonWidth,20},title="Delete Group",font=$LIGHT,fsize=fontSize,disable=0,proc=NTPButtonProc
 	topPos += 30
 	
 	SetDrawEnv/W=NTP#Data linefgc=(0,0,0,0x4000),linethick=1
-	DrawLine/W=NTP#Data  left + 325,topPos-5,left + 325 + 120,topPos-5
+	DrawLine/W=NTP#Data  left + 325,topPos-5,left + 325 + buttonWidth,topPos-5
 	
-	Button UpdateDS win=NTP#Data,pos={left + 325,topPos},size={120,20},title="Update Data Set",font=$LIGHT,fsize=fontSize,disable=0,proc=NTPButtonProc
+	Button AddToDSGroup win=NTP#Data,pos={left + 325,topPos},size={buttonWidth,20},title="Add To Group",font=$LIGHT,fsize=fontSize,disable=0,proc=NTPButtonProc
 	topPos += 25
-	Button RecallDS win=NTP#Data,pos={left + 325,topPos},size={120,20},title="Recall Data Set",font=$LIGHT,fsize=fontSize,disable=0,proc=NTPButtonProc		
+	Button RemoveFromDSGroup win=NTP#Data,pos={left + 325,topPos},size={buttonWidth,20},title="Remove From Group",font=$LIGHT,fsize=fontSize,disable=0,proc=NTPButtonProc
+	topPos += 30
+	
+	
+	
+	
 	
 	//Find position of previously built panels
 	ControlInfo/W=NTP#Data dataSetPanel
 	
 	//Data Set Notes
-	Button EditNotes win=NTP#Func,pos={V_right - 70,V_top},size={50,19},font=$LIGHT,fsize=fontSize,title="Edit",disable=0,proc=NTPButtonProc
-	Button OpenNotes win=NTP#Func,pos={V_right - 70,V_top + 20},size={50,19},font=$LIGHT,fsize=fontSize,title="Open",disable=0,proc=NTPButtonProc
+//	Button EditNotes win=NTP#Func,pos={V_right - 70,V_top},size={50,19},font=$LIGHT,fsize=fontSize,title="Edit",disable=0,proc=NTPButtonProc
+//	Button OpenNotes win=NTP#Func,pos={V_right - 70,V_top + 20},size={50,19},font=$LIGHT,fsize=fontSize,title="Open",disable=0,proc=NTPButtonProc
+//	
+////	Button OpenNotes win=NTP#Func,pos={left+346,613},size={50,19},font=$LIGHT,fsize=fontSize,title="Open",disable=0,proc=NTPButtonProc
+//	SetDrawLayer/W=NTP#Func Overlay
+//	DrawAction/W=NTP#Func getgroup=dsNotesText,delete
 	
-//	Button OpenNotes win=NTP#Func,pos={left+346,613},size={50,19},font=$LIGHT,fsize=fontSize,title="Open",disable=0,proc=NTPButtonProc
-	SetDrawLayer/W=NTP#Func Overlay
-	DrawAction/W=NTP#Func getgroup=dsNotesText,delete
-	
-	OpenDSNotesEntry(dataset=dsName)
+	//Create a new notebook panel that will hold the notes page for all data sets
+
+
+	OpenDSNotesEntry2(dataset=dsName)
 End
 
 //Handles the data set add/delete/update pop up menu

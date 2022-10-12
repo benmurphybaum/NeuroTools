@@ -28,7 +28,6 @@ Function ntListBoxProc(lba) : ListBoxControl
 			break
 		case 1: // mouse down
 			//set a potential drag variable
-			
 			If(!cmpstr(lba.ctrlName,"waveListBox"))
 				dragging = 1
 				//freeze selection
@@ -38,7 +37,6 @@ Function ntListBoxProc(lba) : ListBoxControl
 			break
 		case 2: // mouse up
 			//display the full path to the wave in a text box
-			
 			//reset the drag and drop variable on a mouse up
 			dragging = 0
 			
@@ -294,7 +292,7 @@ Function HandleLBSelection(ctrlName,listWave,row,mouseHor,mouseVert,eventMod)
 			
 //			NVAR viewerOpen = NPC:viewerOpen
 			If(eventMod == 0)
-				AppendToViewer(MatchLB_ListWave,MatchLB_SelWave)
+				AppendToViewer(DataSetLB_ListWave,DataSetLB_SelWave)
 			EndIf
 
 			
@@ -500,21 +498,7 @@ Function HandleRightClick(controlName,command,[row])
 			EndIf
 			
 			break
-		case "folderListBox":  //folder navigation
-			Wave/T FolderLB_ListWave = NPC:FolderLB_ListWave
-			Wave/T FolderLB_SelWave = NPC:FolderLB_SelWave
-			SVAR cdf = NPC:cdf
-			
-			//Get the first wave in the data folder
-			SetDataFolder $(cdf + FolderLB_ListWave[row])
-			
-			String theWaveList = DataFolderDir(2)
-			theWaveList = StringByKey("WAVES",theWaveList,":",";") //waves in the data folder
-			theWaveList = SortList(theWaveList,",",16) //alphabetical order
-			list = cdf + FolderLB_ListWave[row] + ":" + StringFromList(0,theWaveList,",") + ";"
-			doRightClickAction(command,list)
-			SetDataFolder $cdf
-			break
+
 		case "matchListBox":
 		case "waveListBox":	//waves navigation
 			
@@ -716,15 +700,22 @@ Function HandleButtonClick(ba)
 					changeDataSet(popStr)
 			endswitch
 			break
+		case "refreshMenu":
+			Wave/T param = NPC:ExtFunc_Parameters
+			GetExternalFunctionData(param)
+			BuildMenu "FunctionMenu"
+		
+			BuildExtFuncControls(CurrentExtFunc())
+			break
 		case "functionPopUp":
 			//external functions drop down menu selection
 			Wave/T param = NPC:ExtFunc_Parameters
-			GetExternalFunctionData(param)
+//			GetExternalFunctionData(param)
 			
 			BuildMenu "FunctionMenu"
 			
 			SVAR selectedCmd = NPC:selectedCmd
-			PopUpContextualMenu/C=(20,62)/W=NTP#Func/N "FunctionMenu"
+			PopUpContextualMenu/C=(40,62)/W=NTP#Func/N "FunctionMenu"
 			
 			popStr = S_Selection
 			popNum = V_flag
@@ -777,6 +768,7 @@ Function HandleButtonClick(ba)
 			
 			break
 		case "runFunc":
+			//Starts the series of wrapper functions that will run the specified user function.
 			RunCmd(selectedCmd)
 			break
 		case "scaleFactorUpdate":
@@ -799,6 +791,10 @@ Function HandleButtonClick(ba)
 			break
 		case "Back":
 			folderBack()
+			break
+		case "hideNTP":
+			//hide the GUI
+			SetWindow NTP,hide=1
 			break
 		case "NT_Settings":
 //			openSettingsPanel()
@@ -920,64 +916,6 @@ Function HandleButtonClick(ba)
 			String fileType = S_Value
 			
 			BrowseEphys(fileType)
-			
-//			strswitch(fileType)
-//				case "Load WaveSurfer":
-//					HDF5OpenFile/I/R fileID as "theWave"
-//					
-//					If(V_flag == -1) //cancelled
-//						return 0
-//					EndIf
-//					
-//					wsFilePath = S_path
-//					wsFileName = S_fileName
-//			
-//					UpdateWaveSurferLists(fileID,wsFilePath,wsFileName)
-//					
-//					HDF5CloseFile/A fileID
-//					break
-//					
-//				case "Load pClamp":	
-//					Variable refnum
-//					String message = "Select the data folder to index"
-//					String fileFilters = "All Files:.*;"
-//					Open/D/R/F=fileFilters/M=message refnum
-//					
-//					wsFilePath = ParseFilePath(1,S_fileName,":",1,0)
-//					wsFileName = ParseFilePath(0,S_fileName,":",1,0)
-//					Close/A
-//					
-//					String fullPath = wsFilePath
-//					NewPath/O/Q/Z ABFpath,fullpath
-//					String fileList = IndexedFile(ABFpath,-1,".abf")
-//					fileList = SortList(fileList,";",16)
-//					
-//					fileList = ReplaceString(".abf",fileList,"")
-//					
-//					Wave/T wsFileListWave = NPC:wsFileListWave
-//					Wave wsFileSelWave = NPC:wsFileSelWave
-//					
-//					Wave/T textWave = StringListToTextWave(fileList,";")
-//					Redimension/N=(DimSize(textWave,0) - 1) wsFileListWave,wsFileSelWave
-//					wsFileListWave = textWave
-//					wsFileSelWave[0] = 1
-//					
-//					//What channels are available for the selected file
-//					
-//					fullPath = wsFilePath + wsFileName
-//					ABFLoader(fullPath,"1",0)
-//					
-//					Wave/T dTable_Values = root:ABFvar:dTable_Values
-//					
-//					String chList = dTable_Values[4]
-//					
-//					String quote = "\""
-//					String channelList = quote + "All;" + ResolveListItems(chList,";") + quote
-//	
-//					PopUpMenu ChannelSelector win=NT,value=#channelList
-//					
-//					break
-//			endswitch
 			
 			break
 		case "copyToClipboard":
@@ -1127,14 +1065,19 @@ Function ntExtParamProc(sva) : SetVariableControl
 					setParam("PARAM_" + num2str(paramIndex) + "_VALUE",func,num2str(dval))
 					break
 				case "8192"://string
-					setParam("PARAM_" + num2str(paramIndex) + "_VALUE",func,sval)
+					If(stringmatch(name,"*_args"))
+						setParam("PARAM_" + num2str(paramIndex) + "_ARGS",func,sval)
+					Else
+						setParam("PARAM_" + num2str(paramIndex) + "_VALUE",func,sval)
+					EndIf
 					break
 				case "16386"://wave
 					setParam("PARAM_" + num2str(paramIndex) + "_VALUE",func,sval)
+					String ctrlName = sva.ctrlName
 					//confirm validity of the wave reference
-					validWaveText("",0,deleteText=1)
-					ControlInfo/W=NTP $sva.ctrlName
-					validWaveText(sval,V_top+13)
+					validWaveText("",0,deleteText=1,parentCtrl=ctrlName)
+					ControlInfo/W=NTP#Func $sva.ctrlName
+					validWaveText(sval,V_top+13,parentCtrl=ctrlName)
 					break
 			endswitch
 		case 3: // Live update
@@ -1214,6 +1157,53 @@ Function ntExtParamPopProc(pa) : PopupMenuControl
 	return 0
 End
 
+//CONTEXTUAL MENUS (initiated through button clicks)
+Function ntContextualMenuProc(ba) : ButtonControl
+	STRUCT WMButtonAction &ba
+	
+	DFREF NPC = $CW
+	DFREF NPD = $DSF
+	
+	DFREF NPC = $CW
+	Wave/T param = NPC:ExtFunc_Parameters
+			
+	Variable errorCode = 0
+	switch(ba.eventCode)
+		case 2: // mouse up
+			Variable index = ExtFuncParamIndex(ba.ctrlName)
+			
+			String funcLabel = CurrentExtFunc()
+			String paramLabel = "PARAM_" + num2str(index) + "_ITEMS"
+			
+			String contextualMenu = param[%$paramLabel][%$funcLabel]
+			
+			If(!strlen(contextualMenu))
+				break
+			EndIf
+			
+			ControlInfo/W=NTP#Func $ba.ctrlName
+			Variable left = V_left
+			Variable top = V_top + 22
+			Variable width = V_width
+			
+			PopUpContextualMenu/W=NTP#Func/C=(left,top)/N contextualMenu
+			
+			If(V_flag == -1) 
+				return 0
+			EndIf
+			
+			//Set the value of the selection to the param table
+			setParam("PARAM_" + num2str(index) + "_VALUE",funcLabel,S_Selection)
+			
+			String spacedStr = getSpacer(S_Selection,18)
+			
+			Button $ba.ctrlName win=NTP#Func,title = spacedStr
+			
+			break
+	endswitch
+	
+	return 0
+End
 
 //CHECK BOXES -----------------------------
 
@@ -1292,6 +1282,7 @@ Function MouseClickHooks(s)
 	Variable hookResult = 0
 	Variable r = ScreenResolution / 72
 	
+	
 	switch(s.eventCode)
 		case 0:
 			//handle activate
@@ -1301,7 +1292,7 @@ Function MouseClickHooks(s)
 			break
 		case 3:
 			//handle mouse down
-			
+
 			//List box resizes and WaveMatch/DataSet List box positions
 //			NVAR WM_Position = NPC:WM_Position
 //			NVAR DSW_Position = NPC:DSW_Position
@@ -1372,6 +1363,7 @@ Function MouseClickHooks(s)
 //					SetWindow NT, hook(viewerHook)=$""
 //				EndIf		
 			EndIf
+			
 			
 			
 			//Resizing list boxes
@@ -1479,10 +1471,15 @@ Function MouseClickHooks(s)
 				ListBox waveListBox win=NT#navigatorPanel,pos={V_left + xExpand,V_top},size={V_width - xExpand,V_height}	
 				
 			EndIf
-			
+
 			break
 		case 5:
 			//mouse up
+			
+			GetWindow/Z NTP activeSW
+			If(!cmpstr(S_Value,"NTP#Func#DSNotebook"))
+				DoWindow/W=NTP#Corner NTP
+			EndIf
 			
 			NVAR WM_Position = NPC:WM_Position
 			NVAR DSW_Position = NPC:DSW_Position
@@ -1507,7 +1504,6 @@ Function MouseClickHooks(s)
 				WM_Resize = 0
 				hookResult = 1
 			EndIf
-			
 			
 			break
 	endswitch
@@ -2049,7 +2045,7 @@ Function SendNotificationTask(s)		// This is the function that will be called pe
 	NVAR funcPanelWidth = NPC:funcPanelWidth
 	NVAR screenBottom = NPC:screenBottom
 	NVAR notificationSize = NPC:notificationSize
-	notificationSize += 20
+	notificationSize += 50
 	
 	If(notificationSize > 1000)
 		//end the notification after some additional time
@@ -2072,26 +2068,34 @@ End
 
 Function SendNotification([maxSize])
 	Variable maxSize //max width of the notification box to accomodate longer text
+//	
+//	DFREF NPC = $CW
+//	Variable/G NPC:maxNotificationSize
+//	NVAR maxNotificationSize = NPC:maxNotificationSize
+//	
+//	maxNotificationSize = (ParamIsDefault(maxSize)) ? 300 : maxSize
+//	
+//	Variable/G NPC:notificationSize
+//	NVAR notificationSize = NPC:notificationSize
+//	notificationSize = 0
+//	
+//	NVAR funcPanelWidth = NPC:funcPanelWidth
+//	NVAR screenBottom = NPC:screenBottom
+//	
+//	//Initialize the notification
+//	GroupBox notificationBox win=NTP#Func,pos={funcPanelWidth - 10,screenBottom-60},align=1,size={notificationSize,50},disable=0,labelBack=(0,0xb000,0,0x4000)
+//	
+//	Variable numTicks = 1		
+//	CtrlNamedBackground sendNotification, period=numTicks, proc=SendNotificationTask
+//	CtrlNamedBackground sendNotification, start
 	
 	DFREF NPC = $CW
-	Variable/G NPC:maxNotificationSize
+	
 	NVAR maxNotificationSize = NPC:maxNotificationSize
+	SVAR notificationEntry = NPC:notificationEntry
 	
-	maxNotificationSize = (ParamIsDefault(maxSize)) ? 300 : maxSize
-	
-	Variable/G NPC:notificationSize
-	NVAR notificationSize = NPC:notificationSize
-	notificationSize = 0
-	
-	NVAR funcPanelWidth = NPC:funcPanelWidth
-	NVAR screenBottom = NPC:screenBottom
-	
-	//Initialize the notifiaction
-	GroupBox notificationBox win=NTP#Func,pos={funcPanelWidth - 10,screenBottom-60},align=1,size={notificationSize,50},disable=0,labelBack=(0,0xb000,0,0x4000)
-	
-	Variable numTicks = 1		// Run every two seconds (120 ticks)
-	CtrlNamedBackground sendNotification, period=numTicks, proc=SendNotificationTask
-	CtrlNamedBackground sendNotification, start
+	Notebook NTP#Func#DSNotebook,selection={startOfFile,endOfFile},getData=1
+	Notebook NTP#Func#DSNotebook,selection={startOfFile,endOfFile},setData=notificationEntry
 End
 
 Function StopNotificationTask()
@@ -2171,11 +2175,3 @@ End
 	EndIf
 
 End
-
-
-
-////Igor open hook
-//Function AfterFileOpenHook(refnum,fileNameStr,pathNameStr,fileTypeStr,fileCreatorStr,fileKind)
-//
-//End
-

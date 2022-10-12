@@ -633,13 +633,29 @@ Function NT_LoadPClamp(fileList[,channels,table])
 			FSetPos refnum,selectedSegStartInPts[i] //set position to start of each sweep.
 			FBInRead/B=3/F=(bitFormat) refnum,tempd	 //load data for all channels recorded for that sweep
 			
+			If(strlen(table))
+				String ChannelList = dataTable[dti][%Channels]
+				ChannelList = ResolveListItems(ChannelList,",",noEnding=1)
+			
+			//Compare channel names with the actually loaded channels
+//			String ChannelNameList = dataTable[dti][%Pos_4]
+//			ChannelNameList = ResolveListItems(ChannelNameList,",",noEnding=1)
+//			
+//			If(ItemsInList(ChannelList,",") != ItemsInList(ChannelNameList,","))
+				dataTable[dti][%Pos_4] = ChannelList
+//			EndIf
+
+			EndIf
+			
 			String traceList = ""
+			
 			
 			//Figure out the wave names for each of the channels in each sweep
 			For(c=0;c<a.nChannels;c+=1)
 				
 				String unitBase = StringFromList(c,a.channelBase,";")
 				
+				String trace = num2str(a.ChannelIndex[c])
 				
 				If(strlen(table))
 					String prefix = dataTable[dti][%Pos_0]
@@ -654,7 +670,7 @@ Function NT_LoadPClamp(fileList[,channels,table])
 					String sweep = ResolveListItems(dataTable[dti][%Pos_3],";",noEnding=1)
 					sweep = StringFromList(i,sweep,";")
 					
-					String trace = dataTable[dti][%Pos_4]
+//					String trace = StringFromList(c,ChannelList,",")
 				Else
 				
 					//Prefix
@@ -675,7 +691,7 @@ Function NT_LoadPClamp(fileList[,channels,table])
 					series = num2str(str2num(series))
 					
 					sweep = num2str(i+1)
-					trace = "1"
+//					trace = "1"
 				EndIf
 								
 				String traceName = prefix + "_" + group + "_" + series + "_" + sweep + "_" + trace

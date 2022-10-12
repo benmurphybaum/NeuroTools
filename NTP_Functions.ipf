@@ -3,8 +3,9 @@
 
 //Command functions that are built into NeuroTools
 
-//RUN COMMAND MASTER FUNCTION
+
 Function RunCmd(cmd)
+//RUN COMMAND MASTER FUNCTION
 	String cmd
 	DFREF NPC = $CW
 	
@@ -17,170 +18,70 @@ Function RunCmd(cmd)
 	//Save data folder
 	DFREF saveDF = $GetDataFolder(1)
 	
-	//Special treatment for some functions that may not use any data sets
-	strswitch(cmd)
-		case "Run Cmd Line":
-//			NT_RunCmdLine()
-			
-			//Check that the contents exist, if not, grey them out
-			CheckDataSetWaves()
-			return 0
-		case "New Data Folder":
-//			NT_NewDataFolder()
-//			return 0
-		case "Kill Data Folder":	
-//			NT_KillDataFolder()
-//			return 0
-		case "External Function":
-			//Get the data set info
-			Variable error = GetDataSetInfo(ds)
-			break
-		case "Max Project":
-			error = GetDataSetInfo(ds)
-			break
-		case "Load Ephys":
-//			NT_LoadEphys()
-			
-			return 0
-			break
-		case "Load WaveSurfer":
-//			SVAR wsFilePath = NPC:wsFilePath
-//			SVAR wsFileName = NPC:wsFileName
-//			ControlInfo/W=NTP ChannelSelector
-//			
-//			Wave/T wsFileListWave = NPC:wsFileListWave
-//			Wave wsFileSelWave = NPC:wsFileSelWave
-//			
-//			Variable i
-//			String filePathList = ""
-//
-//			//Get the selected files
-//			For(i=0;i<DimSize(wsFileListWave,0);i+=1)
-//				If(wsFileSelWave[i] ==1)
-//					filePathList += wsFilePath + wsFileListWave[i] + ";"
-//				EndIf
-//			EndFor
-//			
-//			//no selection, load all of them
-//			If(sum(wsFileSelWave) == 0)
-//				filePathList = ""
-//				For(i=0;i<DimSize(wsFileListWave,0);i+=1)
-//					filePathList += wsFilePath + wsFileListWave[i] + ";"
-//				EndFor
-//			EndIf
-//			
-//			NT_Load_WaveSurfer(filePathList,channels=S_Value)
-//			return 0
-			break
-		case "Load pClamp":
-			SVAR wsFilePath = NPC:wsFilePath
-			SVAR wsFileName = NPC:wsFileName
-			ControlInfo/W=NTP ChannelSelector
-			
-			Wave/T wsFileListWave = NPC:wsFileListWave
-			Wave wsFileSelWave = NPC:wsFileSelWave
-			
-			String filePathList = ""
-			Variable i
-			
-			//Get the selected files
-			For(i=0;i<DimSize(wsFileListWave,0);i+=1)
-				If(wsFileSelWave[i] ==1)
-					filePathList += wsFilePath + wsFileListWave[i] + ";"
-				EndIf
-			EndFor
-			
-			//no selection, load all of them
-			If(sum(wsFileSelWave) == 0)
-				filePathList = ""
-				For(i=0;i<DimSize(wsFileListWave,0);i+=1)
-					filePathList += wsFilePath + wsFileListWave[i] + ";"
-				EndFor
-			EndIf
-			
-			For(i=0;i<ItemsInList(filePathList,";");i+=1)
-				String theFile = StringFromList(i,filePathList,";") + ".abf"
-				ABFLoader(theFile,S_Value,1)
-			EndFor
-			return 0
-			break
-		//Imaging package commands
-		case "Load Scans":
-		case "Population Vector Sum":
-		case "Load Suite2P":
-//		case "Max Project":
-			//Executes this middle-man function from the command line to escape the .ipf,
-			//allowing me to reference potentially uncompiled functions in other packages.
-			Execute/Q/Z "RunCmd_ScanImagePackage(\"" + cmd + "\"" + ")"
-			return 0	
-		default:
-			//Get the data set info
-//			error = GetDataSetInfo(ds,extFunc=1)
-			error = GetDataSetInfo(ds)
-	endswitch
+	//Retrieve the data set information into the main data set Structure, called ds
+	//The definition of STRUCTURE ds lives in NTP_Structures.ipf
 	
-	
+//	Wave/T listWave 		---listwave being used by the data set (Wave Match, Navigator, or a Data Set)
+//	Wave/T name 				---holds data set names
+//	Wave/T paths 			---string list of the waves in the wsn
+//	Wave/WAVE output 		---holds the wave references for any output waves
+//	Wave/WAVE waves 		---wave of wave references for the wsn
+//	Wave numWaveSets 		---number of wave sets
+//	int16 wsi 				---current wave set index
+//	int16 wsn 				---current wave set number
+//	Wave numWaves 			---number of waves in the current wsn for each data set
+//	int16 numDataSets 		---number of datasets defined
+	Variable i,j,error = GetDataSetInfo(ds)
 	
 	If(error == -1)
 		//reserved, doesn't break bc data sets aren't required necessarily
 		return 0
 	EndIf
 	
-	//Get the workflow structure
-//	STRUCT workflow wf
-//	GetWorkFlow(wf)
-	
-	//Start a timer
+	//Start a timer to time the function execution
 	Variable ref = StartMSTimer
 	
 	//Reset the output waveset wave
 	Redimension/N=0 ds.output
 	
-	//WSN loop
+	//WSN (Wave Set Number) loop
+		//Each data set is comprised of potentially multiple wave sets, each referenced by their wave set number
 	Do
-		//Get the waves in the current WSN
+		//Get the waves in each wave set using the ds structure
 		Wave/WAVE ds.waves = GetWaveSetRefs(ds.listWave,ds.wsn,ds.name)
+		
+		//Resize the text wave that holds the full paths to the waves
 		Redimension/N=(DimSize(ds.Waves,0),DimSize(ds.Waves,1)) ds.paths
 		
+		//A function may reference multiple data sets.
+		//Wave sets and waves must be retrieved from each of them
 		For(i=0;i<ds.numDataSets;i+=1)
-		
+			
+			//Retrieve the full paths to the waves in each wave set
 			String fullPaths = GetWaveSetList(ds.listWave,ds.wsn,1,dsNum=i)
 			
 			//Remove any potential empty positions that might be at the end of the list wave if the two data sets have different numbers of waves
 			fullPaths = RemoveEmptyItems(fullPaths,";")
 			
-			Wave/T tempPaths = StringListToTextWave(fullPaths,";")
-			
-			Redimension/N=(DimSize(ds.paths,0)) tempPaths
-			If(DimSize(tempPaths,0) > 0)
-				ds.paths[][i] = tempPaths[p][0]		
-			EndIf
+			//Put the full paths to the waves into the ds structure as ds.paths
+			ds.paths[][i] = StringFromList(p,fullPaths,";")
+
+			//Number of waves for each data set
 			ds.numWaves[i] = ItemsInList(fullPaths,";")
 		EndFor
-	
 		
-		//Execute the function returns optional output waves
-//		Do
-			//Run the next command in the workflow
-//			Wave/WAVE out = ExecuteCommand(ds,wf.cmds[wf.i])
-		
-		//Make sure we start at the same point every call to the function in case of current data folder wave references
+		//Make sure we start at the same point every call to the function in case of 'current data folder' wave references
 		SetDataFolder saveDF
 		
+		//Execute the function with the resolved data set structure
 		Wave/WAVE out = ExecuteCommand(ds,cmd)
-		
-			
-			//Re-build the ds structure according to the output from the previous command
-			
-//			wf.i += 1
-//		While(wf.i < wf.numCmds)
 		
 		//Increment to the next WSN
 		ds.wsn += 1
 		
 		//Reset the WSI
 		ds.wsi = 0
-	While(ds.wsn < ds.numWaveSets[0])
+	While(ds.wsn < ds.numWaveSets[0]) //This may be a bug for situations where each data sets have different numbers of wave sets.
 	
 	//If output waves were assigned in the function, make a new data set
 	If(DimSize(ds.output,0))
@@ -191,10 +92,7 @@ Function RunCmd(cmd)
 		CreateOutputDataSet(ds)
 	EndIf
 	
-	//Make progress bar invisible
-//	ValDisplay progress win=NT,disable=1
-	
-	//End the timer
+	//End the timer, print the result
 	print cmd + ":",StopMSTimer(ref)/(1e6),"s"
 	
 	//Return to original data folder
@@ -203,10 +101,9 @@ Function RunCmd(cmd)
 	//Check data set wave existence in case waves were deleted or renamed during execution
 	CheckDataSetWaves()
 	
-	//Update the folders and wave listWaves
+	//Update the folders and wave list waves for the GUI
 	updateFolders()
 	updateFolderWaves()
-	
 	
 	//animate a notification that the function ran
 	String/G NPC:notificationEntry
@@ -315,12 +212,12 @@ Function/WAVE ExecuteCommand(ds,cmd)
 End
 
 //Performs various measurements on the data set and puts the result in an output wave
-Function NT_Measure(DS_Waves,menu_Type,StartTime,EndTime,BaselineStart,BaselineEnd,Threshold,Width,cb_SubtractBaseline,menu_SortOutput,AngleWave,menu_ReturnType,menu_OSReturnType)
+Function NT_Measure(DS_Waves,menu_Type,StartTime,EndTime,BaselineStart,BaselineEnd,Threshold,Width,cb_SubtractBaseline,cb_SaveToParentFolder,menu_SortOutput,OutputName,AngleWave,menu_ReturnType,menu_OSReturnType)
 	String DS_Waves,menu_Type
-	Variable StartTime,EndTime,BaselineStart,BaselineEnd,Threshold,Width,cb_SubtractBaseline
-	String menu_SortOutput,AngleWave,menu_ReturnType,menu_OSReturnType
+	Variable StartTime,EndTime,BaselineStart,BaselineEnd,Threshold,Width,cb_SubtractBaseline,cb_SaveToParentFolder
+	String menu_SortOutput,OutputName,AngleWave,menu_ReturnType,menu_OSReturnType
 	
-	String menu_Type_List = "Peak;Peak Location;Area;Mean;Median;Std. Dev.;Std. Error;# Spikes;Orientation Vector Sum;Vector Sum;"
+	String menu_Type_List = "Peak;Peak Location;Minimum;Area;Mean;Median;Std. Dev.;Std. Error;# Spikes;Orientation Vector Sum;Vector Sum;"
 	String menu_Type_Proc = "measureProc" //this identifies a trigger procedure based on the menu selection
 	String menu_ReturnType_List = "All;Angle;DSI;Resultant;"
 	String menu_OSReturnType_List = "Angle;OSI;Resultant;"
@@ -328,6 +225,20 @@ Function NT_Measure(DS_Waves,menu_Type,StartTime,EndTime,BaselineStart,BaselineE
 	String Threshold_Assign = "root:Packages:NeuroToolsPlus:ControlWaves:threshold" //assigns the threshold variable to the Viewer Graph threshold bar
 	String StartTime_Assign = "root:Packages:NeuroToolsPlus:ControlWaves:rangeLeft"
 	String EndTime_Assign = "root:Packages:NeuroToolsPlus:ControlWaves:rangeRight"
+	
+	
+	//title designations
+	String menu_ReturnType_Title = "Return Type"
+	String menu_OSReturnType_Title = "OS Return Type"
+	String menu_SortOutput_Title = "Sort Output"
+	String StartTime_Title = "Start Time (s)"
+	String EndTime_Title = "End Time (s)"
+	String BaselineStart_Title = "Baseline Start (s)"
+	String BaselineEnd_Title = "Baseline End (s)"
+	String cb_SubtractBaseline_Title = "Subtract Baseline"
+	String AngleWave_Title = "Angle Wave"
+	String OutputName_Title = "Output Name"
+	String cb_SaveToParentFolder_Title = "Save To Parent"
 	
 	STRUCT ds ds
 	GetStruct(ds)
@@ -364,6 +275,10 @@ Function NT_Measure(DS_Waves,menu_Type,StartTime,EndTime,BaselineStart,BaselineE
 		case "Peak Location":
 			suffix = "_pkLoc"
 			theNote = "Peak Location:\n"
+			break
+		case "Minimum":
+			suffix = "_min"
+			theNote = "Minimum:\n"
 			break
 		case "Area":
 			suffix = "_area"
@@ -434,13 +349,19 @@ Function NT_Measure(DS_Waves,menu_Type,StartTime,EndTime,BaselineStart,BaselineE
 	
 	//Saves original value of the EndTime in case it needs adjusting to put into valid range
 	Variable origEndTm = EndTime 	
-
-	//Make the output wave
-	String outName = ds.paths[0][0] + suffix
-	Make/O/N=(ds.numWaves[0]) $outName /Wave = outWave
 	
-	//Add to the output data set
-	AddOutput(outWave,ds)
+	//Make the output wave
+	If(!strlen(OutputName))
+		OutputName = NameOfWave(ds.waves[0][%Waves]) + suffix
+	EndIf
+	
+	If(cb_SaveToParentFolder)
+		SetDataFolder $ParseFilePath(1,GetWavesDataFolder(ds.waves[0][%Waves],1),":",1,0)
+	Else
+		SetDataFolder GetWavesDataFolderDFR(ds.waves[0][%Waves])
+	EndIf
+	
+	Make/O/N=(ds.numWaves[0]) $OutputName /Wave = outWave
 	
 	//Make the measurement
 	ds.wsi = 0
@@ -457,8 +378,12 @@ Function NT_Measure(DS_Waves,menu_Type,StartTime,EndTime,BaselineStart,BaselineE
 		
 		strswitch(menu_Type)
 			case "Peak": //peak
-				outWave[ds.wsi] = V_max
-				
+				If(Width > 0)
+					outWave[ds.wsi] = mean(theWave,V_maxloc - 0.5*Width,V_maxloc + 0.5*Width)
+				Else
+					outWave[ds.wsi] = V_max
+				EndIf
+											
 				If(cb_subtractBaseline)
 					If(BaselineEnd == 0)
 						BaselineStart = pnt2x(theWave,0)
@@ -470,13 +395,39 @@ Function NT_Measure(DS_Waves,menu_Type,StartTime,EndTime,BaselineStart,BaselineE
 						return 0
 					EndIf
 					
-					Variable bgnd = mean(theWave,2,4)
+					Variable bgnd = median(theWave,BaselineStart,BaselineEnd)
 					outWave[ds.wsi] -= bgnd
 				EndIf
 				
 				break
 			case "Peak Location": //peak x location
 				outWave[ds.wsi] = V_maxLoc
+				break
+			case "Minimum": //minimum value (negative peak)
+				
+				If(Width > 0)
+					outWave[ds.wsi] = mean(theWave,V_minloc - 0.5*Width,V_minloc + 0.5*Width)
+				Else
+					outWave[ds.wsi] = V_min
+				EndIf
+				
+				If(cb_subtractBaseline)
+					If(BaselineEnd == 0)
+						BaselineStart = pnt2x(theWave,0)
+						BaselineEnd = pnt2x(theWave,DimSize(theWave,0) - 1)
+					EndIf
+						
+					If(BaselineEnd < BaselineStart)
+						DoAlert 0,"Baseline End must be after Baseline Start"
+						return 0
+					EndIf
+					
+					WaveStats/M=1/Q/R=(BaselineStart,BaselineEnd) theWave
+					
+					bgnd = median(theWave,BaselineStart,BaselineEnd)
+					outWave[ds.wsi] -= bgnd
+				EndIf
+				
 				break
 			case "Area": //area
 				If(cb_subtractBaseline)
@@ -810,12 +761,16 @@ Function/WAVE NT_Average(DS_Waves,outFolder,cb_ReplaceSuffix,cb_isCircular,[free
 	Variable cb_isCircular //is this circular data
 	Variable free
 	
+	//title designation for the control
+	String outFolder_Title = "Output Folder"
+	String cb_ReplaceSuffix_Title = "Replace Suffix"
+	String cb_isCircular_Title = "Circular Data?"
+
 //	Note={
 //	Averages the waves in each wave set
 //	
 //	\f01outFolder\f00 : Folder to put the averaged wave.
-//	\f01ReplaceSuffix\f00 : End of the wave name is replaced with '_avg'. Otherwise '_avg'
-//      is added to the end of the wave name.
+//	\f01ReplaceSuffix\f00 : End of the wave name is replaced with '_avg'. Otherwise '_avg' is added to the end of the wave name.
 //	\f01isCircular\f00 : Check if the data is angular.
 //	}
 	
@@ -876,12 +831,19 @@ Function/WAVE NT_Average(DS_Waves,outFolder,cb_ReplaceSuffix,cb_isCircular,[free
 	EndIf
 	
 	//Add outwave to the output data set
-	If(!free)
-		AddOutput(outWave,ds)
-	EndIf
+//	If(!free)
+//		AddOutput(outWave,ds)
+//	EndIf
+	
+	//How many dimensions in the wave
+	Variable nDims = WaveDims(ds.waves[0])
 	
 	//Reset outWave in case of overwrite
-	outWave = 0
+	If(nDims > 2)
+		Multithread outWave = 0
+	Else
+		outWave = 0
+	EndIf
 	
 	//Set the scale of the output wave
 	String xDim = WaveUnits(ds.waves[0],0)
@@ -941,31 +903,46 @@ Function/WAVE NT_Average(DS_Waves,outFolder,cb_ReplaceSuffix,cb_isCircular,[free
 		
 		//accounts for any nans in the data
 		Duplicate/FREE ds.waves[0],pnts
-		pnts = 0
-			
+		
+		If(nDims > 2)
+			Multithread pnts = 0
+		Else
+			pnts = 0
+		EndIf
+				
 		Do
 			Wave theWave = ds.waves[ds.wsi]
 			
 			//keeps track of nans so division is done properly later on
 			If(DimSize(theWave,1) == 0)
 				Duplicate/FREE theWave,temp
-			
+				
+							
 				pnts += 1
 				pnts = (numtype(temp[p]) == 2) ? pnts - 1 : pnts
 			
 				//replace nans with 0
 				temp = (numtype(temp[p]) == 2) ? 0 : temp[p]
-			
+				
 				Multithread outWave += temp
 			Else
+				
 				Duplicate/FREE theWave,temp
-			
-				pnts += 1
-				pnts = (numtype(temp[p][q]) == 2) ? pnts - 1 : pnts
-			
-				//replace nans with 0
-				temp = (numtype(temp[p][q]) == 2) ? 0 : temp[p][q]
-			
+				
+				If(nDims > 2)
+					Multithread pnts += 1
+					Multithread pnts = (numtype(temp[p][q][r]) == 2) ? pnts - 1 : pnts
+				
+					//replace nans with 0
+					Multithread temp = (numtype(temp[p][q][r]) == 2) ? 0 : temp[p][q][r]
+				Else					
+					pnts += 1
+					pnts = (numtype(temp[p][q]) == 2) ? pnts - 1 : pnts
+				
+					//replace nans with 0
+					temp = (numtype(temp[p][q]) == 2) ? 0 : temp[p][q]
+				EndIf
+				
 				Multithread outWave += temp
 			EndIf
 			
@@ -985,8 +962,8 @@ Function/WAVE NT_Average(DS_Waves,outFolder,cb_ReplaceSuffix,cb_isCircular,[free
 		Multithread outWave /= pnts
 	EndIf
 	
-	Redimension/Y=(type) outWave
-		
+//	Redimension/Y=(type) outWave
+//		
 	//Set the wave note
 	Note/K outWave,noteStr
 	
@@ -1011,6 +988,12 @@ Function/WAVE NT_Error(DS_Waves,menu_errorType,outFolder,cb_ReplaceSuffix,cb_isC
 	Variable cb_ReplaceSuffix,cb_isCircular
 	
 	String menu_errorType_List = "sem;sdev;"
+	
+	//title designation for the control
+	String menu_errorType_Title = "Type"
+	String outFolder_Title = "Output Folder"
+	String cb_ReplaceSuffix_Title = "Replace Suffix"
+	String cb_isCircular_Title = "Circular Data?"
 	
 	//	Note={
 //	Measures the error (sem or sdev) of the waves in each wave set
@@ -1201,12 +1184,17 @@ End
 End
 
 //Makes a histogram of the input waves
-Function NT_Histogram(DS_Waves,StartX,EndX,BinSize,cb_Centered,Suffix)
+Function NT_Histogram(DS_Waves,StartY,EndY,BinSize,cb_Centered,Suffix)
 	
 	String DS_Waves
-	Variable StartX,EndX //these are scaled values, not indexes
+	Variable StartY,EndY
 	Variable BinSize,cb_Centered
 	String Suffix
+	
+	//Title designations
+	String StartY_Title = "Y Start"
+	String EndY_Title = "Y End"
+	String BinSize_Title = "Bin Size"
 	
 //	Note={
 //	Makes a histogram of the input waves.
@@ -1228,27 +1216,128 @@ Function NT_Histogram(DS_Waves,StartX,EndX,BinSize,cb_Centered,Suffix)
 		//Output histogram name
 		String outName = NameOfWave(theWave) + "_" + Suffix
 		
-		If(StartX == 0 && EndX == 0)
-			EndX = pnt2x(theWave,DimSize(theWave,0) - 1)
+		If(StartY == 0 && EndY == 0)
+			EndY = WaveMax(theWave)
+			StartY = WaveMin(theWave)
 		EndIf
 		
-		Variable numBins = ceil((EndX - StartX) / BinSize)
+		Variable numBins = ceil((EndY - StartY) / BinSize)
 				
 		//Make the histogram wave
 		Make/O/N=(numBins) $outName/Wave=hist
 		
 		//Get the histogram
 		If(cb_Centered)
-			Histogram/B={StartX,binSize,numBins}/C theWave,hist
+			Histogram/B={StartY,binSize,numBins}/C theWave,hist
 		Else
-			Histogram/B={StartX,binSize,numBins} theWave,hist
+			Histogram/B={StartY,binSize,numBins} theWave,hist
 		EndIf
 		
 		ds.wsi += 1
 	While(ds.wsi < ds.numWaves[0])
 End
 
+Function GetTopGraphProc(ba) : ButtonControl
+	//Called from NT_AppendErrorShading and NT_ReconstructNeuron in the ScanImage package
+	STRUCT WMButtonAction &ba
+	
+	DFREF NPC = $CW
+	Wave/T param = NPC:ExtFunc_Parameters
+	SVAR currentFunc = NPC:currentFunc
+	
+	switch( ba.eventCode )
+		case 2: // mouse up
+			// click code here
+			
+			//Retrieve the name of the top graph window
+			String list = WinList("*",";","WIN:1")
+			list = RemoveFromList("NTP",list,";")
+			
+			String name = StringFromList(0,list,";")
+			
+			//Get the 'Graph' control
+			String ctrlName = getParam2("Graph","CTRL",currentFunc)
+			
+			//Insert the graph name into the Graph control
+			SetVariable/Z $ctrlName win=NTP#Func,value=_STR:name	
+			
+			//Insert into the parameters wave
+			String key = "PARAM_" + GetParam2("Graph","INDEX",currentFunc) + "_VALUE"
+			setParam(key,currentFunc,name)
+			
+			break	
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+Function NT_AppendErrors(Graph,bt_GraphName,Suffix,menu_Type)
+	//TITLE=Append Errors
+	//SUBMENU=Graphing
+	
+	String Graph
+	String bt_GraphName //button
+	String Suffix
+	String menu_Type
+	
+	String bt_GraphName_Title = "Get Top Graph"
+	String bt_GraphName_Proc = "GetTopGraphProc"
+	String bt_GraphName_Pos = "105;-27;100;20;"
+	String menu_Type_List = "Shading;Bars;"
+	
+	String Suffix_Pos = "0;-25;"
+	String menu_Type_Pos = "0;-25;"
+//	Note={
+//	Appends error shading to traces in the top graph.
+//	Error waves must already exist, probably generated using the 'Errors' function.
+//	The name of the error wave must be the same as the trace on the graph except
+//	for the specified suffix.
+//
+//	e.g. If suffix = 'stdev':
+//	     \f01trace\f00 : 'data_control_1_avg'
+//	     \f01error wave\f00 : 'data_control_1_stdev'
+//	}
+
+	STRUCT ds ds
+	GetStruct(ds)
+		
+	String traceList = TraceNameList(Graph,";",1)
+	Variable i,numTraces = ItemsInList(traceList,";")
+	
+	For(i=0;i<numTraces;i+=1)
+		String trace = StringFromList(i,traceList,";")
+		Wave t = TraceNameToWaveRef(Graph,trace)
+		
+		If(!WaveExists(t))
+			continue
+		EndIf
+		
+		SetDataFolder GetWavesDataFolderDFR(t)
+		
+		String errorName = ReplaceListItem(ItemsInList(trace,"_") - 1,trace,"_",Suffix,noEnding=1)
+		
+		Wave errorWave = $errorName
+		
+		If(!WaveExists(errorWave))
+			continue
+		EndIf
+		
+		strswitch(menu_Type)
+			case "Shading":
+				ErrorBars/W=$Graph $NameOfWave(t) SHADE= {0,0,(0,0,0,0),(0,0,0,0)},wave=(errorWave,errorWave)
+				break
+			case "Bars":
+				ErrorBars/W=$Graph/T=0.5/L=0.5 $NameOfWave(t) Y,wave=(errorWave,errorWave)
+				break
+		endswitch
+	EndFor
+End
+
 Function NT_Display(DS_Waves,menu_AxisSeparation)
+	//SUBMENU=Graphing
+	
 	String DS_Waves,menu_AxisSeparation
 	
 	String menu_AxisSeparation_List = "None;Horizontal;Vertical;Grid;"
@@ -1256,9 +1345,11 @@ Function NT_Display(DS_Waves,menu_AxisSeparation)
 	DFREF NPC = $CW
 	
 	STRUCT ds ds
-	GetStruct(ds)
-
-	If(strlen(DS_Waves))
+	
+	//By checking, this allows a user to run this using a wave list as well
+	Wave/Z dsWave = GetDataSetWave(DS_Waves,"BASE")
+	
+	If(!WaveExists(dsWave))
 		GetStruct(ds,waves=DS_Waves)
 	Else
 		GetStruct(ds)
@@ -1281,7 +1372,7 @@ Function NT_Display(DS_Waves,menu_AxisSeparation)
 	
 	Do
 		
-		Wave theWave = ds.waves[ds.wsi]
+		Wave theWave = ds.waves[ds.wsi][%Waves]
 		
 		//First display of the graphs if its not Grid format
 		strswitch(menu_AxisSeparation)
@@ -1347,7 +1438,7 @@ Function NT_Display(DS_Waves,menu_AxisSeparation)
 				break
 		endswitch
 		ds.wsi += 1
-	While(ds.wsi < ds.numWaves[0])
+	While(ds.wsi < ds.numWaves[%Waves])
 
 End
 
@@ -1355,7 +1446,7 @@ End
 Function NT_SetWaveNote(DS_Waves,noteStr,cb_overwrite)
 	//SUBMENU=Waves and Folders
 	//TITLE=Set Wave Note
-	
+	//SUBGROUP=Waves
 	String DS_Waves,noteStr
 	Variable cb_overwrite
 	
@@ -1425,6 +1516,7 @@ End
 Function NT_DuplicateRename(DS_Waves,cb_KillOriginals,Position,SubName)
 	//SUBMENU=Waves and Folders
 	//TITLE=Duplicate Rename
+	//SUBGROUP=Renaming
 	
 	String DS_Waves
 	Variable cb_KillOriginals,Position
@@ -1661,11 +1753,21 @@ Function NT_FilterDataTable(menu_InputSet,menu_OutputSet,FilterTerms)
 	out = outTemp
 End
 
-//Requires 2 archived data sets. The first data set will be renamed as defined in the second data set
+
 Function NT_RenameData(DS_InputWaves,DS_OutputWaves)
 	String DS_InputWaves,DS_OutputWaves
-	
 	//TITLE=Rename Data
+	//SUBMENU=Waves and Folders
+	//SUBGROUP=Renaming
+	
+//	Note={
+//	Requires 2 archived data sets. The first data set will be renamed
+//	as defined in the second data set
+//	}
+	
+	//Title designations
+	String DS_InputWaves_Title = "Input Waves"
+	String DS_OutputWaves_Title = "Output Waves"
 	
 	//Check that the second data set is archived. This is how the rename is accomplished, since an archived set allows us to define a data set with waves that don't exist yet.
 	If(!isArchive(DS_OutputWaves))
@@ -1713,16 +1815,25 @@ Function NT_RenameData(DS_InputWaves,DS_OutputWaves)
 	While(ds.wsi < ds.numWaves[0])
 End
 
-//Moves waves to the indicated folder within the current data folder
-//Use the relative depth to back out of the current data folder.
+
 Function NT_MoveToFolder(DS_Waves,MoveToFolder,RelativeFolder)
 	//SUBMENU=Waves and Folders
 	//TITLE=Move Waves
+	//SUBGROUP=Waves
 	
+//	Note={
+//	Moves waves to the indicated folder within the current data folder
+//	Use the relative folder depth to back out of the current data folder.
+//
+//	i.e. Relative Folder = -1 will move the waves into the parent folder.
+//	}
+
 	String DS_Waves
 	String MoveToFolder
 	Variable RelativeFolder
 	
+	String MoveToFolder_Title = "Move To Folder"
+	String RelativeFolder_Title = "Relative Folder"
 	STRUCT ds ds
 	GetStruct(ds)
 	
@@ -2053,6 +2164,7 @@ End
 Function NT_NewDataFolder(FolderName,RelativeFolder)
 	//SUBMENU=Waves and Folders
 	//TITLE=New Data Folder
+	//SUBGROUP=Folders
 	
 	String FolderName,RelativeFolder
 	
@@ -2094,7 +2206,7 @@ End
 Function NT_KillDataFolder(FolderName,RelativeFolder)
 	//SUBMENU=Waves and Folders
 	//TITLE=Kill Data Folder
-	
+	//SUBGROUP=Folders
 	String RelativeFolder,FolderName
 	STRUCT filters filters
 	
@@ -2200,7 +2312,7 @@ Function LoadEphysListBoxProc(lba) : ListBoxControl
 			
 			strswitch(fileType)
 				case "WaveSurfer":
-					HDF5OpenFile/R fileID as fullPath
+					HDF5OpenFile/Q/R fileID as fullPath
 			
 					If(V_flag == -1) //cancelled
 						break
@@ -2217,7 +2329,7 @@ Function LoadEphysListBoxProc(lba) : ListBoxControl
 					HDF5CloseFile/A fileID
 					break
 				case "TurnTable":
-					HDF5OpenFile/R fileID as fullPath
+					HDF5OpenFile/Q/R fileID as fullPath
 			
 					If(V_flag == -1) //cancelled
 						break
@@ -2227,20 +2339,20 @@ Function LoadEphysListBoxProc(lba) : ListBoxControl
 					wsFilePath = S_path
 					wsFileName = S_fileName
 					
-					String seriesList = TT_GetSeriesList(fileID)
+					String seriesList = TT_GetSeriesList(fileID,",")
 					String protList = TT_GetProtocolList(fileID)
 //					String stimList = TT_GetStimList(fileID)
 					
 					Wave/T wsSweepListWave = $getParam2("lb_SweepList","LISTWAVE","NT_LoadEphys")
 					Wave/T wsSweepSelWave = $getParam2("lb_SweepList","SELWAVE","NT_LoadEphys")
 					
-					Redimension/N=(ItemsInList(seriesList,";")) wsSweepListWave
+					Redimension/N=(ItemsInList(seriesList,",")) wsSweepListWave
 					
 					If(WaveExists(wsSweepSelWave))
-						Redimension/N=(ItemsInList(seriesList,";")) wsSweepSelWave
+						Redimension/N=(ItemsInList(seriesList,",")) wsSweepSelWave
 					EndIf
 					
-					wsSweepListWave = StringFromList(p,seriesList,";") + "/" + StringFromList(p,protList,";")
+					wsSweepListWave = StringFromList(p,seriesList,",") + "/" + StringFromList(p,protList,";")
 					
 					HDF5CloseFile/A fileID
 					break
@@ -2288,12 +2400,8 @@ Function LoadScanImageButtonProc(ba) : ButtonControl
 	switch( ba.eventCode )
 		case 2: // mouse up
 			// click code here
-			//browse files on disk for wavesurfer loading
-			
-			//What file type are we opening?
-			String fileType = getParam2("menu_FileType","VALUE","NT_LoadScanImage")
-			
-			ScanLoadPath = BrowseScanImage(fileType)
+		
+			ScanLoadPath = BrowseScanImage()
 			
 			break	
 		case -1: // control being killed
@@ -2354,22 +2462,25 @@ Function/S setupMeasureControls(selection)
 	
 	strswitch(selection)
 		case "Vector Sum":
-			visibleList += "AngleWave;menu_ReturnType;"
+			visibleList += "AngleWave;menu_ReturnType;cb_SaveToParentFolder;"
 			break
 		case "Orientation Vector Sum":
-			visibleList += "AngleWave;menu_OSReturnType;"
+			visibleList += "AngleWave;menu_OSReturnType;cb_SaveToParentFolder;"
 			break
 		case "Peak":
-			visibleList += "StartTime;EndTime;BaselineStart;BaselineEnd;cb_SubtractBaseline;Width;menu_SortOutput;"
+			visibleList += "StartTime;EndTime;BaselineStart;BaselineEnd;cb_SubtractBaseline;Width;menu_SortOutput;OutputName;cb_SaveToParentFolder;"
+			break
+		case "Minimum":
+			visibleList += "StartTime;EndTime;BaselineStart;BaselineEnd;cb_SubtractBaseline;Width;menu_SortOutput;OutputName;cb_SaveToParentFolder;"
 			break
 		case "Area":
-			visibleList += "StartTime;EndTime;BaselineStart;BaselineEnd;cb_SubtractBaseline;menu_SortOutput;"
+			visibleList += "StartTime;EndTime;BaselineStart;BaselineEnd;cb_SubtractBaseline;menu_SortOutput;cb_SaveToParentFolder;"
 			break
 		case "# Spikes":
-			visibleList += "StartTime;EndTime;Threshold;menu_SortOutput;"
+			visibleList += "StartTime;EndTime;Threshold;menu_SortOutput;cb_SaveToParentFolder;"
 			break
 		default:
-			visibleList += "StartTime;EndTime;menu_SortOutput;"
+			visibleList += "StartTime;EndTime;menu_SortOutput;cb_SaveToParentFolder;"
 			break	
 	endswitch
 	
@@ -2400,7 +2511,8 @@ Function/S setupMeasureControls(selection)
 		String ctrlName = "param" + whichParam
 		String items = getParam("PARAM_" + whichParam + "_ITEMS",theFunction)
 		String paramType = getParam("PARAM_" + whichParam + "_TYPE",theFunction)
-
+		String title = getParam("PARAM_" + whichParam + "_TITLE",theFunction)
+		
 		//Check if the control is a pop up menu or not
 		Variable isMenu = 0
 		
@@ -2420,9 +2532,9 @@ Function/S setupMeasureControls(selection)
 					valueNum = (valueNum > 0) ? 1 : 0
 					SetParam("PARAM_" + whichParam + "_VALUE",theFunction,num2str(valueNum))
 					
-					CheckBox/Z $ctrlName win=NTP#Func,pos={left+65,top},align=1,size={90,20},bodywidth=50,fsize=fontSize,font=$LIGHT,side=1,title=name,value=valueNum,disable=0,proc=ntExtParamCheckProc
+					CheckBox/Z $ctrlName win=NTP#Func,pos={left+65,top},align=1,size={90,20},bodywidth=50,fsize=fontSize,font=$LIGHT,side=1,title=title,value=valueNum,disable=0,proc=ntExtParamCheckProc
 				Else
-					SetVariable/Z $ctrlName win=NTP#Func,pos={left+125,top-2},align=1,size={90,20},fsize=fontSize,font=$LIGHT,bodywidth=75,title=name,value=_NUM:valueNum,disable=0,proc=ntExtParamProc
+					SetVariable/Z $ctrlName win=NTP#Func,pos={left+125,top-2},align=1,size={90,20},fsize=fontSize,font=$LIGHT,bodywidth=75,title=title,value=_NUM:valueNum,disable=0,proc=ntExtParamProc
 					
 					//Is there an assignment with this variable?
 					String controlAssignment = getParam("PARAM_" + whichParam + "_ASSIGN",theFunction)
@@ -2452,7 +2564,7 @@ Function/S setupMeasureControls(selection)
 					If(!strlen(theProc))
 						theProc = "ntExtParamPopProc"//default procedure
 					EndIf
-					PopUpMenu/Z $ctrlName win=NTP#Func,pos={left+200,top},align=1,size={185,20},fsize=fontSize,font=$LIGHT,bodywidth=150,title=name,value=#itemStr,disable=0,proc=$theProc	
+					PopUpMenu/Z $ctrlName win=NTP#Func,pos={left+200,top},align=1,size={185,20},fsize=fontSize,font=$LIGHT,bodywidth=150,title=title,value=#itemStr,disable=0,proc=$theProc	
 					PopUpMenu/Z $ctrlName win=NTP#Func,popmatch=valueStr
 					break
 				Else
@@ -2485,7 +2597,7 @@ Function/S setupMeasureControls(selection)
 					DrawAction/W=NTP#Func getGroup=$("DSNameLabel" + whichParam),delete
 					SetDrawEnv/W=NTP#Func gname=$("DSNameLabel" + whichParam),gstart
 					SetDrawEnv/W=NTP#Func xcoord= abs,ycoord= abs, fsize=fontSize, textxjust= 2,textyjust= 1,fname=$LIGHT //right aligned
-					DrawText/W=NTP#Func V_left - 5,V_top + 10,StringFromList(1,name,"_") 
+					DrawText/W=NTP#Func V_left - 5,V_top + 10,title
 					SetDrawEnv/W=NTP#Func gname=$("DSNameLabel" + whichParam),gstop
 				
 				ElseIf(stringmatch(name,"CDF_*"))
@@ -2497,21 +2609,21 @@ Function/S setupMeasureControls(selection)
 						selectionIndex = 0
 					EndIf
 					
-					PopUpMenu/Z $ctrlName win=NTP#Func,pos={left,top},size={185,20},font=$LIGHT,fsize=fontSize,bodywidth=150,title=StringFromList(1,name,"_"),value=WaveList("*",";",""),disable=0,mode=1,popValue=selection,proc=ntExtParamPopProc
+					PopUpMenu/Z $ctrlName win=NTP#Func,pos={left,top},size={185,20},font=$LIGHT,fsize=fontSize,bodywidth=150,title=title,value=WaveList("*",";",""),disable=0,mode=1,popValue=selection,proc=ntExtParamPopProc
 				Else
-					SetVariable/Z $ctrlName win=NTP#Func,pos={left+200,top},align=1,size={190,20},fsize=fontSize,font=$LIGHT,bodywidth=150,title=name,value=_STR:valueStr,disable=0,proc=ntExtParamProc
+					SetVariable/Z $ctrlName win=NTP#Func,pos={left+200,top},align=1,size={190,20},fsize=fontSize,font=$LIGHT,bodywidth=150,title=title,value=_STR:valueStr,disable=0,proc=ntExtParamProc
 				EndIf
 				
 				break
 			case "16386"://wave
 				valueStr = getParam("PARAM_" + whichParam + "_VALUE",theFunction)
 				//this will convert a wave path to a wave reference pointer
-				SetVariable/Z $ctrlName win=NTP#Func,pos={left,top},size={140,20},fsize=fontSize,font=$LIGHT,bodywidth=100,title=name,value=_STR:valueStr,disable=0,proc=ntExtParamProc
+				SetVariable/Z $ctrlName win=NTP#Func,pos={left,top},size={140,20},fsize=fontSize,font=$LIGHT,bodywidth=100,title=title,value=_STR:valueStr,disable=0,proc=ntExtParamProc
 				
 				//confirm validity of the wave reference
-				validWaveText("",0,deleteText=1)
+				validWaveText("",0,deleteText=1,parentCtrl=ctrlName)
 				ControlInfo/W=NTP#Func $ctrlName
-				validWaveText(valueStr,V_top+13)
+				validWaveText(valueStr,V_top+13,parentCtrl=ctrlName)
 				
 				break
 			case "4608"://structure
@@ -2524,6 +2636,42 @@ Function/S setupMeasureControls(selection)
 	
 	
 End
+
+
+Function LoadTimeStampsButtonProc(ba) : ButtonControl
+	STRUCT WMButtonAction &ba
+
+	DFREF NPD = $DSF
+	DFREF NPC = $CW
+	
+	switch( ba.eventCode )
+		case 2: // mouse up
+			// click code here
+			
+			//Get the name of the parameter
+			ControlInfo/W=NTP#Func $ba.ctrlName
+			String ctrlName = S_Title
+			
+			strswitch(ctrlName)
+				case "Browse Files":
+					//browse files on disk for wavesurfer loading
+				
+					//What file type are we opening?
+					String fileType = getParam2("menu_FileType","VALUE","NT_LoadStimulusTimeStamps")
+					
+					BrowseEphys(fileType)
+					break
+			endswitch
+			
+			break	
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+	
+End
+
 
 //Special button trigger function for the Load Ephys command to browse files
 Function LoadEphysButtonProc(ba) : ButtonControl
@@ -2543,7 +2691,7 @@ Function LoadEphysButtonProc(ba) : ButtonControl
 			String ctrlName = S_Title
 			
 			strswitch(ctrlName)
-				case "BrowseFiles":
+				case "Browse Files":
 					//browse files on disk for wavesurfer loading
 				
 					//What file type are we opening?
@@ -2572,7 +2720,7 @@ Function LoadEphysButtonProc(ba) : ButtonControl
 End
 
 //Fills the channels row of a data table with that data files channel information
-Function NT_GetDataTableChannels(menu_DataTable,menu_Rows,StartRow,EndRow,bt_Open)
+//Function NT_GetDataTableChannels(menu_DataTable,menu_Rows,StartRow,EndRow,bt_Open)
 	//TITLE=Get Channel Info
 	//SUBMENU=Load Data
 	String menu_DataTable
@@ -2638,7 +2786,7 @@ Function NT_GetDataTableChannels(menu_DataTable,menu_Rows,StartRow,EndRow,bt_Ope
 	
 End
 
-Function NT_LoadEphysTable(menu_DataTable,menu_Rows,StartRow,EndRow,bt_Open)
+//Function NT_LoadEphysTable(menu_DataTable,menu_Rows,StartRow,EndRow,bt_Open)
 	//TITLE=Load From Data Table
 	//SUBMENU=Load Data
 	String menu_DataTable
@@ -2874,7 +3022,151 @@ Function/S GetABFTrialList(theFile,table,dti)
 	return fileList
 End
 
-Function NT_LoadEphys(menu_FileType,bt_BrowseFiles,menu_Channels,lb_FileList,lb_SweepList,menu_NameByStimulus)
+Function NT_LoadStimulusTimeStamps(menu_FileType,bt_BrowseFiles,lb_FileList,lb_SweepList)
+	//TITLE=Load TimeStamps
+	//SUBMENU=Load Data
+	
+//	Note={
+//	Loads time stamp data
+//	}
+	String menu_FileType,bt_BrowseFiles,lb_FileList,lb_SweepList
+	
+	//title designations
+	String menu_FileType_Title = "File Type"
+	String bt_BrowseFiles_Title = "Browse Files"
+	
+	String menu_FileType_List = "ScanImage;WaveSurfer;TurnTable;"//;Presentinator;
+	String bt_BrowseFiles_Proc = "LoadTimeStampsButtonProc"
+	
+	String lb_FileList_Pos = "-20;10;200;350" //left,top,width,height
+	String lb_FileList_ListWave = "root:Packages:NeuroToolsPlus:ControlWaves:wsFileListWave"
+	String lb_FileList_SelWave = "root:Packages:NeuroToolsPlus:ControlWaves:wsFileSelWave"
+	String lb_FileList_Proc = "LoadEphysListBoxProc"
+	
+	String lb_SweepList_Pos = "190;10;200;350"
+	String lb_SweepList_ListWave = "root:Packages:NeuroToolsPlus:ControlWaves:sweepListWave"
+	String lb_SweepList_SelWave = "root:Packages:NeuroToolsPlus:ControlWaves:sweepSelWave"
+	
+	DFREF NPC = $CW
+	SVAR wsFilePath = NPC:wsFilePath
+	SVAR wsFileName = NPC:wsFileName
+	
+	
+	Wave/T wsFileListWave = NPC:wsFileListWave
+	Wave wsFileSelWave = NPC:wsFileSelWave
+	
+	Wave/T sweepListWave = NPC:sweepListWave
+	Wave/Z sweepSelWave = NPC:sweepSelWave
+	
+	
+	Variable i
+	String filePathList = ""
+
+	//Get the selected files
+	For(i=0;i<DimSize(wsFileListWave,0);i+=1)
+		If(wsFileSelWave[i] > 0)
+			filePathList += wsFilePath + wsFileListWave[i] + ";"
+		EndIf
+	EndFor
+	
+	//no selection, load all of them
+	If(sum(wsFileSelWave) == 0)
+		filePathList = ""
+		For(i=0;i<DimSize(wsFileListWave,0);i+=1)
+			filePathList += wsFilePath + wsFileListWave[i] + ";"
+		EndFor
+	EndIf
+
+	NewPath/O/Q/Z filePath,wsFilePath
+	
+	strswitch(menu_FileType)
+		case "ScanImage":
+			print filePathList
+			break
+		case "WaveSurfer":
+			break
+		case "TurnTable":
+			//Get the selected series
+			String seriesList = ""
+			For(i=0;i<DimSize(sweepListWave,0);i+=1)
+				If(sweepSelWave[i] > 0)
+					seriesList += StringFromList(0,sweepListWave[i],"/") + ";"
+				EndIf
+			EndFor
+			
+			//no selection, load all of them
+			If(sum(sweepSelWave) == 0)
+				seriesList = ""
+				For(i=0;i<DimSize(sweepListWave,0);i+=1)
+					seriesList += StringFromList(0,sweepListWave[i],"/") + ";"
+				EndFor
+			EndIf
+			print seriesList
+			break
+	endswitch
+	
+End
+
+
+Function LoadEphys2()
+	//Press Run to initialize the loader control table
+	String EL = "EphysLoader"
+	
+	//Control waves folder in the NeuroTools package
+	DFREF NTF = $CW
+	
+	//Browse a folder
+	NewPath/O/Q/Z ephysPath
+	
+	//Operation cancelled or failed
+	If(V_flag)
+		return 0
+	EndIf
+	
+	//Get the files in the path if they are of the accepted types:
+		//PClamp (.abf)
+		//WaveSurfer (.h5)
+		//Turntable (.h5)
+	String extensionList = ".abf;.h5;"
+	String fileList = ""
+	
+	Variable i
+	For(i=0;i<ItemsInList(extensionList,";");i+=1)
+		String ext = StringFromList(i,extensionList,";")
+		String list = IndexedFile(ephysPath,-1,ext)
+		fileList += list //add to master list
+	EndFor
+	
+	//Create a text wave to hold the file names
+//	Make/O/T/N=(
+	
+	//Open the control panel
+	KillWindow/Z $EL
+	NewPanel/N=$EL/W=(0,0,600,400)/K=1 as "Electrophysiology Loader"
+	
+	//Define guide lines for the control area and table area
+	DefineGuide/W=$EL controlGuide = {FT,30}
+	DefineGuide/W=$EL leftGuide = {FL,120}
+	
+	//Create a table to hold the ephys file information
+	Make/O/N=(4,9)/T NTF:EphysLoaderTable/Wave=ELTable
+	
+	//Append the table to the panel
+	NewPanel/HOST=$EL/N=Data/FG=(leftGuide,controlGuide,FR,FB)
+	Edit/HOST=$EL#Data/W=(0,0,1,1)/N=Table ELTable
+	
+	//Set the dimension labels on the table
+	String dimList = "Path;Pos_0;Pos_1;Pos_2;Pos_3;Pos_4;Pos_5;Channels;Type;"
+	For(i=0;i<ItemsInList(dimList,";");i+=1)
+		SetDimLabel 1,i,$StringFromList(i,dimList,";"),ELTable
+	EndFor
+	
+	//Show only the horizontal dimension labels
+	ModifyTable/W=$EL#Data#Table horizontalIndex=2
+	
+End
+
+Function NT_LoadEphys(menu_FileType,bt_BrowseFiles,menu_Channels,lb_FileList,lb_SweepList)
 	//TITLE=Load Ephys
 	//SUBMENU=Load Data
 	
@@ -2883,9 +3175,14 @@ Function NT_LoadEphys(menu_FileType,bt_BrowseFiles,menu_Channels,lb_FileList,lb_
 //	browse to the folder that contains the data. Select and load.  
 //	}
 	
-	String menu_FileType,bt_BrowseFiles,menu_Channels,lb_FileList,lb_SweepList,menu_NameByStimulus
+	String menu_FileType,bt_BrowseFiles,menu_Channels,lb_FileList,lb_SweepList//,menu_NameByStimulus
 	
-	String menu_FileType_List = "WaveSurfer;PClamp;TurnTable;Presentinator;"
+	//title designations
+	String menu_FileType_Title = "File Type"
+	String bt_BrowseFiles_Title = "Browse Files"
+//	String menu_NameByStimulus_Title = "Name By Stimulus"
+	
+	String menu_FileType_List = "WaveSurfer;PClamp;TurnTable"//;Presentinator;
 	String bt_BrowseFiles_Proc = "LoadEphysButtonProc"
 	
 	String menu_Channels_List = "1;2;All;"
@@ -2899,8 +3196,8 @@ Function NT_LoadEphys(menu_FileType,bt_BrowseFiles,menu_Channels,lb_FileList,lb_
 	String lb_SweepList_ListWave = "root:Packages:NeuroToolsPlus:ControlWaves:sweepListWave"
 	String lb_SweepList_SelWave = "root:Packages:NeuroToolsPlus:ControlWaves:sweepSelWave"
 	
-	String menu_NameByStimulus_List = "None;angle;speed;driftFreq;trajectory;diameter;length;width;orientation;spatialFreq;spatialPhase;modulationFreq;contrast;xPos;yPos;"
-	String menu_NameByStimulus_Pos = "80;530;"
+//	String menu_NameByStimulus_List = "None;angle;speed;driftFreq;trajectory;diameter;length;width;orientation;spatialFreq;spatialPhase;modulationFreq;contrast;xPos;yPos;"
+//	String menu_NameByStimulus_Pos = "80;530;"
 	
 	DFREF NPC = $CW
 	SVAR wsFilePath = NPC:wsFilePath
@@ -2939,17 +3236,17 @@ Function NT_LoadEphys(menu_FileType,bt_BrowseFiles,menu_Channels,lb_FileList,lb_
 			NT_LoadPClamp(filePathList,channels=menu_Channels)
 			break
 		case "WaveSurfer":
-			Load_WaveSurfer(filePathList,channels=menu_Channels,NameByStimulus=menu_NameByStimulus)
+			Load_WaveSurfer(filePathList,channels=menu_Channels)
 			break
 		case "Presentinator":
-			LoadPresentinator(filePathList)
+//			LoadPresentinator(filePathList)
 			break
 		case "TurnTable":
 			//Get the selected series
 			String seriesList = ""
 			For(i=0;i<DimSize(sweepListWave,0);i+=1)
 				If(sweepSelWave[i] > 0)
-					seriesList += StringFromList(0,sweepListWave[i],"/") + ";"
+					seriesList += StringFromList(0,sweepListWave[i],"/") + ","
 				EndIf
 			EndFor
 			
@@ -2957,22 +3254,25 @@ Function NT_LoadEphys(menu_FileType,bt_BrowseFiles,menu_Channels,lb_FileList,lb_
 			If(sum(sweepSelWave) == 0)
 				seriesList = ""
 				For(i=0;i<DimSize(sweepListWave,0);i+=1)
-					seriesList += StringFromList(0,sweepListWave[i],"/") + ";"
+					seriesList += StringFromList(0,sweepListWave[i],"/") + ","
 				EndFor
 			EndIf
 			
-			LoadTurnTable(filePathList,seriesList)
+			LoadTurnTable(filePathList,seriesList,"")
 			break
 	endswitch
 	
 End
 
-Function LoadTurnTable(filePathList,seriesList)
-	String filePathList,seriesList
+Function LoadTurnTable(filePathList,seriesList,channelList,[archive,dti])
+	String filePathList,seriesList,channelList
+	Wave/T archive //possible data table archive
+	Variable dti //dti must be provided if archive is given, otherwise archive will be ignored
+	
 	
 	DFREF saveDF = GetDataFolderDFR()
 	
-	Variable i,j,fileID,numSeries = ItemsInList(seriesList,";")
+	Variable i,j,fileID,numSeries = ItemsInList(seriesList,",")
 	
 	String file = StringFromList(0,filePathList,";")
 	
@@ -3006,16 +3306,118 @@ Function LoadTurnTable(filePathList,seriesList)
 	
 	SetDataFolder $destFolder
 	
+	//If no series are specified, load all of them.
+	If(numSeries == 0)
+		seriesList = TT_GetSeriesList(fileID,",")
+		numSeries = ItemsInList(seriesList,",")
+		
+		DoAlert/T="Loading Data" 1,"Are you sure you want to load all of the data in the file?"
+		
+		If(V_flag == 2)
+			return 0
+		EndIf
+		
+	EndIf
+	
+	seriesList = ResolveListItems(seriesList,",")
+	
+	//If its a data archive, make sure each series number has the same number of sweeps
+	//Otherwise the data table line is invalid, bc we can't define a data set with different sweep numbers.
+	If(WaveExists(archive))
+		String sweepNumList = TT_GetSweepNumbers(fileID,seriesList)
+		
+		String baseNum = StringFromList(0,sweepNumList,";")
+		For(i=1;i<ItemsInList(sweepNumList,";");i+=1)
+			
+			If(cmpstr(baseNum,StringFromList(i,sweepNumList,";")))
+				DoAlert/T="Data Table Error" 0,"Cannot have series numbers with different numbers of sweeps. Please define each series on a different data table line."
+				return 0
+			EndIf
+		EndFor
+	EndIf
+	
+	String protocolList = TT_GetProtocolList(fileID)
+	
 	//load each channel in the selected series
 	For(i=0;i<numSeries;i+=1)
-		String series = StringFromList(i,seriesList,";")
-		String sweepList = TT_GetSweepList(fileID,series)
+		String series = StringFromList(i,seriesList,",")
+		String sweepList = TT_GetSweepList(fileID,series,",")
 		String unitsList = TT_GetSeriesUnits(fileID,series)
 		String scaleList = TT_GetSeriesScale(fileID,series)
+		String channels = TT_GetChannelList(fileID,series)
 		
-		Variable nSweeps = ItemsInList(sweepList,";")
+		String protocol = StringFromList(str2num(series) - 1,protocolList,";")
+		
+		
+//		
+		
+		//RESOLVE WAVE NAMES FROM OPTIONAL DATA TABLE
+		If(WaveExists(archive) && !numtype(dti))
+			//Resolve the SWEEP names being used for the loaded data.
+			String archiveSweepList = archive[dti][%Pos_3]
+			String sweepListTemp = ResolveListItems(sweepList,",")
+			String archiveSweepListTemp = ResolveListItems(archiveSweepList,",")
+			
+			If(ItemsInList(sweepListTemp,",") == ItemsInList(archiveSweepListTemp,","))
+				//Use the archive tables sweep list for naming the input waves if they have the same number of sweeps
+				String sweepListNames = archiveSweepListTemp 
+			Else
+				//if invalid entry, use the files actual sweep list and insert it into the archive table
+				archive[dti][%Pos_3] = ListToRange(sweepList,",") 
+				sweepListNames = sweepList
+			EndIf		
+			
+			archive[dti][%Comment] = protocol
+			//SERIES
+			
+			//from the optional 'Trials' input, which is used if you want to auto rename the loaded data waves from Pos_2 input
+			seriesList = archive[dti][%Trials]
+			String seriesListNames = seriesList
+
+			If(!strlen(seriesList))
+				seriesList = archive[dti][%Pos_2]
+				seriesList = ResolveListItems(seriesList,",")
+				seriesListNames = seriesList
+			Else
+				String seriesListTemp = ResolveListItems(seriesList,",")
+				seriesList = seriesListTemp
+				seriesListNames = seriesList
+				
+				String archiveSeriesList = archive[dti][%Pos_2]
+				archiveSeriesList = ResolveListItems(archiveSeriesList,",")
+
+				//Trials input, but no rename in the Pos_2 input
+				If(!strlen(archiveSeriesList))
+					archiveSeriesList = seriesListTemp
+					archive[dti][%Pos_2] = archive[dti][%Trials]
+					
+				Else
+					//Rename input in Pos_2
+					
+					//Ensure same number of items, else abort the rename
+					String archiveSeriesListTemp = ResolveListItems(archiveSeriesList,",")
+					If(ItemsInList(seriesList,",") == ItemsInList(archiveSeriesListTemp,","))
+						//Use the archive tables sweep list for naming the input waves if they have the same number of sweeps
+						seriesListNames = archiveSeriesListTemp 
+					Else
+						//invalid rename items, abort the rename, use the series numbers from the file
+						archive[dti][%Pos_2] = ListToRange(seriesList,",") 
+					 	seriesListNames = archive[dti][%Pos_2]
+					 	seriesListNames = ResolveListItems(seriesListNames,",")
+					EndIf
+				EndIf
+				
+			EndIf
+		Else
+			sweepListNames = sweepList	
+			seriesListNames = 	seriesList		
+		EndIf
+		
+		Variable nSweeps = ItemsInList(sweepList,",")
 		For(j=0;j<nSweeps;j+=1)
-			String sweep = StringFromList(j,sweepList,";")
+			String sweep = StringFromList(j,sweepList,",")
+			String sweepName = StringFromList(j,sweepListNames,",")
+			String seriesName = StringFromList(i,seriesListNames,",")
 			String unit = StringFromList(j,unitsList,";")
 			String scale = StringFromList(j,scaleList,";")
 			
@@ -3030,15 +3432,90 @@ Function LoadTurnTable(filePathList,seriesList)
 					break
 			endswitch
 			
-			String dataName = prefix + "_1_" + series + "_" + sweep + "_1"
+			//Possible rename on the prefix
+			If(WaveExists(archive) && !numtype(dti))
+				If(!strlen(archive[dti][%Pos_0]))
+					archive[dti][%Pos_0] = prefix
+				Else
+					prefix = archive[dti][%Pos_0]
+				EndIf
+			EndIf
 			
-			HDF5LoadData/O/TYPE=2/Q/N=$dataName fileID,"/Data/" + series + "/Ch1/" + sweep
-			Wave d = $dataName
+			//GROUP
+			If(WaveExists(archive) && !numtype(dti))
+				//Possible rename on the prefix
+				String group = archive[dti][%Pos_1]
+				
+				If(!strlen(group))
+					group = "1"
+					archive[dti][%Pos_1] = group
+				EndIf
+			Else
+				group = "1"
+			EndIf
 			
-			//Scale the data
-			SetScale/P x,0,str2num(scale),"s",d
-			SetScale/P y,0,1,unit,d
+			Variable c,nChannels
+			
+			//Ensure valid channel list
+			If(!strlen(channelList))
+				channelList = channels
+			Else
+			
+				If(WaveExists(archive) && numtype(dti) == 0 && j == 0 && i == 0)
+					archive[dti][%Channels] = "" //reset this, will refill after loading
+				EndIf
+				
+				//make sure channelList has valid recorded channels in it
+				For(c=0;c<ItemsInList(channelList,";");c+=1)
+					If(WhichListItem(StringFromList(c,channelList,";"),channels,";") == -1)
+						channelList = RemoveListItem(c,channelList,";")
+						print StringFromList(c,channelList,";") + " is not a valid channel for series number " + series
+					EndIf
+				EndFor
+			EndIf
+						
+			//Generate the wave name for the channel and load the data into a wave
+			For(c=0;c<ItemsInList(channelList,";");c+=1)
+				String ch = StringFromList(c,channelList,";")
+				
+				
+				//Insert the recorded channels back into the data table archive, if it was provided as an input
+				If(WaveExists(archive) && numtype(dti) == 0 && j == 0 && i == 0) //only on first sweep of first series in the list
+					archive[dti][%Channels] += ch	 + ","
+					archive[dti][%IgorPath] = RemoveEnding(destFolder,":") + ":"
+					
+					If(!strlen(archive[dti][%Pos_4]))
+						archive[dti][%Pos_4] = ch
+						String chName = ch
+					Else
+						chName = archive[dti][%Pos_4]
+					EndIf
+				Else
+					chName = ch
+				EndIf
+				
+				String dataName = prefix + "_" + group + "_" + seriesName + "_" + sweepName + "_" + chName
+				
+				HDF5LoadData/O/TYPE=2/Q/N=$dataName fileID,"/Data/" + series + "/Ch" + ch + "/" + sweep
+				
+				Wave d = $dataName
+			
+				//Scale the data
+				SetScale/P x,0,str2num(scale),"s",d
+				SetScale/P y,0,1,unit,d
+				
+				Note/K d,"FILE: " + file
+				Note d,"PROTOCOL: " + protocol
+				Note d,"SERIES: " + series
+				Note d,"SWEEP: " + sweep
+				Note d,"CHANNEL: " + ch
+			EndFor
 		EndFor
+		
+		//Clean up the channels column in the data archive
+		If(WaveExists(archive) && numtype(dti) == 0)
+			archive[dti][%Channels] = ListToRange(archive[dti][%Channels],",")	
+		EndIf
 		
 	EndFor
 	
@@ -3662,6 +4139,8 @@ Function/S ResolveStimulusNaming(fileID,stimData,NameByStimulus)
 	return stimList
 End
 
+
+
 //Counts the number of spikes in the wave
 //This is for other functions to use, operates on a single wave
 Function GetSpikeCount(theWave,StartTime,EndTime,Threshold)
@@ -3675,11 +4154,11 @@ Function GetSpikeCount(theWave,StartTime,EndTime,Threshold)
 	DFREF saveDF = GetDataFolderDFR()
 	SetDataFolder GetWavesDataFolder(theWave,1)
 	
-	Duplicate/FREE theWave,temp
+//	Duplicate/FREE theWave,temp
 	
-	FlattenWave(temp)
+//	FlattenWave(temp)
 	
-	FindLevels/Q/D=spktm/R=(StartTime,EndTime)/M=0.002/T=0.0005 temp,threshold
+	FindLevels/Q/D=spktm/R=(StartTime,EndTime)/M=0.002/T=0.0005 theWave,threshold
 
 	Variable spkct = V_LevelsFound
 	KillWaves/Z W_FindLevels,spktm
@@ -3810,13 +4289,114 @@ Function VectorSum(theWave,angles,returnItem)
 	endswitch
 End
 
-//Returns the vector sum angle or dsi of the input wave
-Function [Variable PD,Variable DSI,Variable Radius] VectorSum2(Wave theWave,String angles)
+Function/Wave OrientationVectorSum(Tuning,Angles,[separator])
+	//Returns the vector sum of the input tuning curve and associated statistics
+	//180° orientation data only
+	
+	Wave Tuning
+	String Angles
+	String separator
+	
+	If(ParamIsDefault(separator))
+		separator = ";"
+	EndIf
+	
+	Variable i,size = DimSize(Tuning,0)
+	
+	If(ItemsInList(Angles,separator) != size)
+		return $"" //angle list must be the same length as the input wave
+	EndIf
+		
+	Variable vSumX,vSumY,totalSignal
+	
+	vSumX = 0
+	vSumY = 0
+	totalSignal = 0
+	
+	For(i=0;i<size;i+=1)
+		If(numtype(Tuning[i]) == 2) //protects against NaNs, returns -9999, invalid
+			return $""
+		EndIf
+		
+		Variable theAngle = str2num(StringFromList(i,angles,separator))
+		
+		vSumX += Tuning[i]*cos(theAngle*pi/90)
+		
+		vSumY += Tuning[i]*sin(theAngle*pi/90)
+		totalSignal += Tuning[i] //double contribution, one for each 180° pair of angles
+	EndFor
+	
+	Variable vRadius = sqrt(vSumX^2 + vSumY^2)
+	Variable vAngle = atan2(vSumY,vSumX)*90/pi
+	Variable OSI = vRadius/totalSignal
+	Variable SNR = vRadius
+	
+	If(vAngle < 0)
+		vAngle +=360
+	Endif
+	
+	//Turn off the debugger in case it's on, so the try-catch doesn't trigger an interupt
+	DebuggerOptions debugOnError = 0
+	
+	//Fit a gaussian to the tuning curve to get the FWHM
+	try
+		CurveFit/Q gauss, Tuning/D ;AbortOnRTE
+		Wave coef = :W_coef
+		Variable FWHM = coef[3]
+	catch
+		//Fitting error
+		Variable error = GetRTError(1)
+		FWHM = nan
+	endtry
+	
+	//von mises distribution kappa parameter is useful as a tuning width measurement, probably better than FWHM from a gaussian fit
+	//because it takes into account the baseline minimum of the tuning curve
+	//Fit a von mises distribution to the tuning curve to get the kappa value
+	try
+		Wave coef = :W_coef
+		Redimension/N=3 coef
+		coef[0] = {-500,1,WaveMax(Tuning)} //initial guesses for the fit (mu, kappa, peak)
+		FuncFit/Q NT_vonMises coef Tuning/D ;AbortOnRTE
+		
+		Variable kappa = coef[1]
+	catch
+		//Fitting error
+		error = GetRTError(1)
+		kappa = nan
+	endtry
+	
+	Make/N=5/O $(GetWavesDataFolder(Tuning,2) + "_VectorSum")  /Wave=VSData
+	
+	VSData[0] = vAngle
+	VSData[1] = OSI
+	VSData[2] = vRadius
+	VSData[3] = FWHM
+	VSData[4] = Kappa 
+	
+	//Sets dimension labels
+	SetDimLabel 0,0,Angle,VSData
+	SetDimLabel 0,1,OSI,VSData
+	SetDimLabel 0,2,Resultant,VSData
+	SetDimLabel 0,3,FWHM,VSData
+	SetDimLabel 0,4,Kappa,VSData
+	
+	return VSData
+	
+End
+
+
+Function/Wave VectorSum2(Wave theWave,String angles,[String separator])
+	//Returns the vector sum of the input tuning curve and associated statistics
+	//360° directional data only
+	
+	If(ParamIsDefault(separator))
+		separator = ";"
+	EndIf
 	
 	Variable i,size = DimSize(theWave,0)
 	
-	If(ItemsInList(angles,";") != size)
-		return [-1,-1,-1] //angle list must be the same length as the input wave
+	If(ItemsInList(angles,separator) != size)
+		return $"" //angle list must be the same length as the input wave
 	EndIf
 	
 	Variable vSumX,vSumY,totalSignal
@@ -3827,10 +4407,10 @@ Function [Variable PD,Variable DSI,Variable Radius] VectorSum2(Wave theWave,Stri
 
 	For(i=0;i<size;i+=1)
 		If(numtype(theWave[i]) == 2) //protects against NaNs, returns -9999, invalid
-			return [-9999,-9999,-9999]
+			return $""
 		EndIf
 		
-		Variable theAngle = str2num(StringFromList(i,angles,";"))
+		Variable theAngle = str2num(StringFromList(i,angles,separator))
 		
 		vSumX += theWave[i]*cos(theAngle*pi/180)
 		vSumY += theWave[i]*sin(theAngle*pi/180)
@@ -3839,26 +4419,59 @@ Function [Variable PD,Variable DSI,Variable Radius] VectorSum2(Wave theWave,Stri
 	
 	Variable vRadius = sqrt(vSumX^2 + vSumY^2)
 	Variable vAngle = atan2(vSumY,vSumX)*180/pi
-	DSI = vRadius/totalSignal
+	Variable DSI = vRadius/totalSignal
 	Variable SNR = vRadius
 	
 	If(vAngle < 0)
 		vAngle +=360
 	Endif
-
-	Make/N=3/O $(GetWavesDataFolder(theWave,2) + "_VectorSum")  /Wave=VSData
+	
+	//Turn off the debugger in case it's on, so the try-catch doesn't trigger an interupt
+	DebuggerOptions debugOnError = 0
+	
+	//Fit a gaussian to the tuning curve to get the FWHM
+	try
+		CurveFit/Q gauss, theWave/D ;AbortOnRTE
+		Wave coef = :W_coef
+		Variable FWHM = coef[3]
+	catch
+		//Fitting error
+		Variable error = GetRTError(1)
+		FWHM = nan
+	endtry
+	
+	//von mises distribution kappa parameter is useful as a tuning width measurement, probably better than FWHM from a gaussian fit
+	//because it takes into account the baseline minimum of the tuning curve
+	//Fit a von mises distribution to the tuning curve to get the kappa value
+	try
+		Wave coef = :W_coef
+		Redimension/N=3 coef
+		coef[0] = {-500,1,WaveMax(theWave)} //initial guesses for the fit (mu, kappa, peak)
+		FuncFit/Q NT_vonMises coef theWave/D ;AbortOnRTE
+		
+		Variable kappa = coef[1]
+	catch
+		//Fitting error
+		error = GetRTError(1)
+		kappa = nan
+	endtry
+	
+	Make/N=5/O $(GetWavesDataFolder(theWave,2) + "_VectorSum")  /Wave=VSData
+	
 	VSData[0] = vAngle
 	VSData[1] = DSI
 	VSData[2] = vRadius
+	VSData[3] = FWHM
+	VSData[4] = Kappa 
 	
+	//Sets dimension labels
 	SetDimLabel 0,0,Angle,VSData
 	SetDimLabel 0,1,DSI,VSData
-	SetDimLabel 0,2,Radius,VSData
+	SetDimLabel 0,2,Resultant,VSData
+	SetDimLabel 0,3,FWHM,VSData
+	SetDimLabel 0,4,Kappa,VSData
 	
-	PD = vAngle
-	Radius = vRadius
-	
-	return [PD,DSI,Radius]
+	return VSData
 End
 
 //Same as SaveGraphCopy, but does it iteratively for an entire layout page
@@ -3895,7 +4508,7 @@ End
 Function NT_MakeWaves(menu_Type,Rows,Columns,Layers,Chunks,NumberWaves,BaseName)
 	//SUBMENU=Waves and Folders
 	//TITLE=Make Waves
-	
+	//SUBGROUP=Waves
 	String menu_Type
 	Variable Rows,Columns,Layers,Chunks,NumberWaves
 	String BaseName
@@ -3927,7 +4540,7 @@ End
 Function NT_KillWaves(DS_Waves)
 	//SUBMENU=Waves and Folders
 	//TITLE=Kill Waves
-	
+	//SUBGROUP=Waves
 	String DS_Waves
 	
 	STRUCT ds ds
@@ -3941,9 +4554,9 @@ Function NT_KillWaves(DS_Waves)
 		totalSize = 0
 	EndIf
 	
-	ds.wsi = 0
-	Do
-		Wave theWave = ds.waves[ds.wsi]
+	Variable i
+	For(i=0;i<ds.numWaves[0];i+=1)
+		Wave theWave = ds.waves[i]
 		String info = WaveInfo(theWave,0)
 		totalSize += str2num(StringByKey("SIZEINBYTES",info))
 		
@@ -3951,7 +4564,7 @@ Function NT_KillWaves(DS_Waves)
 		ReallyKillWaves(theWave)
 		
 		ds.wsi += 1
-	While(ds.wsi < ds.numWaves[0])
+	EndFor
 	
 	//print out the total size of the deleted waves after killing the waves.
 	//print on last wave set
@@ -3961,878 +4574,104 @@ Function NT_KillWaves(DS_Waves)
 End
 
 
-
-
-
-Function NT_RenameToTuning(DS_Tuning,DS_Data,NameIndex)
-	String DS_Tuning //tuning curve to rename the data with
-	String DS_Data //data to be renamed according to the preferred direction of the tuning curve
-	Variable NameIndex //underscore position of the angle in the wave name
-	
-	//SUBMENU=Turning Project
-	//TITLE=Rename to Tuning
+Function NT_SplitWave(DS_Waves,BaseName,nWaves)
+	//SUBMENU=Waves and Folders
+	//TITLE=Split Wave
+	//SUBGROUP=Waves
 	
 //	Note={
-//	Data waves are renamed so that it is normalized to the PD of the cell.
-//	E.g. ND, N135, N90, N45, PD, P45, P90, P135 instead of angles.
-
-//	\f01Tuning\f00 : Tuning curve data
-//	\f01Data\f00 : Spiking, Calcium ROIs, or Currents that underlie tuning curve
-//	\f01NameIndex\f00 : Underscore position in the 'Data' wave names that contain
-//	    the angle of the stimulus.
+//	Takes a single wave and splits it into any number of subwaves.
+//	
+//	Useful if multiple data trials were taken in a single acquisition.
+//	
+//	\f01Base Name\f00 : Base name of the output waves
+//	\f01# Waves\f00 : Number of waves to split the input wave into
 //	}
+	
+	String DS_Waves
+	String BaseName
+	Variable nWaves //number of output waves to split to
+	
+	String BaseName_Title = "Base Name"
+	String nWaves_Title = "# Waves"
 	
 	STRUCT ds ds
 	GetStruct(ds)
 	
-	ds.wsi = 0
+	Variable i,j
 	
-	Make/FREE/N=8 angleWave = 45 * x
-	Make/FREE/N=8 distWave = 0
-	
-	
-	Wave tuning = ds.waves[0][0] //one tuning curve per waveset
-	//Get the preferred direction
-	Variable PD = VectorSum(tuning,"0;45;90;135;180;225;270;315;","angle")
-	
-	//Get the angular distance of the PD from each angle, find the minimum
-	distWave = polarMath(angleWave[p],PD,"deg","distance",0)
-	
-	WaveStats/Q/M=1 distWave
-	Variable closestPD = angleWave[V_minRowLoc]
-	
-	//Change the names of the waves
-	Do
-		Wave data = ds.waves[ds.wsi][1]
-		String name = NameOfWave(data)
+	For(i=0;i<ds.numWaves[%Waves];i+=1)
+		Wave w = ds.waves[i][%Waves]
+		SetDataFolder GetWavesDataFolderDFR(w)
 		
-		//name at the indicated underscore position
-		String subname = StringFromList(NameIndex,name,"_")
+		Variable size = DimSize(w,0)
 		
-		//is there a turn indicated by the name? (i.e. *t*)
-		Variable isTurn = stringmatch(subname,"*t*")
+		Variable nPoints = floor(size / nWaves)
 		
-		If(isTurn)
-			//turn
-			Variable entry = str2num(StringFromList(0,subname,"t"))
-			Variable exit = str2num(StringFromList(1,subname,"t"))
+		Variable startPt = 0
+		
+		For(j=0;j<nWaves;j+=1)
+			String outputName = BaseName + "_" + num2str(j)
+			Make/O/N=(nPoints) $outputName/Wave=out
 			
-			If(numtype(entry) == 2 || numtype(exit) == 2)
-				Abort "Couldn't calculate angle"
-			EndIf
+			out = w[startPt + p]
 			
-			//distance between entry and exit directions
-			Variable dist = round(polarMath(entry,exit,"deg","distance",1)) //signed distance
-				
-			//distance between PD and the entry direction
-			Variable entryDist = round(polarMath(closestPD,entry,"deg","distance",1)) //signed distance
+			SetScale/P x,DimOffset(w,0),DimDelta(w,0),out
 			
-			switch(entryDist)
-				case 0:
-					String entryName = "PD"
-					break
-				case 180:
-				case -180:
-					entryName = "ND"
-					break
-				default:
-					entryName = num2str(entryDist)
-					If(stringmatch(entryName,"*-*"))
-						entryName = ReplaceString("-",entryName,"N")
-					Else
-						entryName = "P" + entryName
-					EndIf
-					break
-			endswitch
-			
-			switch(dist)
-				case 90:
-					String newName = ReplaceListItem(NameIndex,name,"_",entryName + "t90",noEnding=1)
-					break
-				case -90:
-				 	newName = ReplaceListItem(NameIndex,name,"_",entryName + "tN90",noEnding=1)
-					break
-				case 180:
-				case -180:
-					newName = ReplaceListItem(NameIndex,name,"_",entryName + "t180",noEnding=1)
-					
-					break
-				default:
-					print "Unknown",dist
-					break
-			endswitch
-			
-			//If the new name is the same as the old one
-			If(!cmpstr(name,newName))
-				ds.wsi += 1
-				continue
-			EndIf
-			
-			SetDataFolder GetWavesDataFolder(data,1)
-			Duplicate/O data,$newName 
-			ReallyKillWaves(data)
-		Else
-			//linear
-			
-			//distance between PD and the entry direction
-			entry = str2num(subname)
-			
-			If(numtype(entry) == 2)
-				Abort "Couldn't find angle"
-			EndIf
-			
-			entryDist = round(polarMath(closestPD,entry,"deg","distance",1)) //signed distance
-			
-			switch(entryDist)
-				case 0:
-					entryName = "PD"
-					break
-				case 180:
-				case -180:
-					entryName = "ND"
-					break
-				default:
-					entryName = num2str(entryDist)
-					If(stringmatch(entryName,"*-*"))
-						entryName = ReplaceString("-",entryName,"N")
-					Else
-						entryName = "P" + entryName
-					EndIf
-					break
-			endswitch
-			
-			//Generate the new name
-			newName = ReplaceListItem(NameIndex,name,"_",entryName,noEnding=1)
-			
-			//If the new name is the same as the old one
-			If(!cmpstr(name,newName))
-				ds.wsi += 1
-				continue
-			EndIf
-			
-			SetDataFolder GetWavesDataFolder(data,1)
-			Duplicate/O data,$newName 
-			ReallyKillWaves(data)
-			
-		EndIf
-		
-		ds.wsi += 1
-	While(ds.wsi < ds.numWaves[1])
-End
-
-Function NT_TransienceIndex(DS_Data,StartTime,EndTime)
-	String DS_Data
-	Variable StartTime,EndTime
-	
-	//SUBMENU=GluSnFR Project
-	//TITLE=Transience Index
-	
-	STRUCT ds ds
-	GetStruct(ds)
-	
-	ds.wsi = 0
-
-	SetDataFolder GetWavesDataFolder(ds.waves[0],1)
-	
-	String outName = NameOfWave(ds.waves[0]) + "_STI"
-	Make/O/N=(ds.numWaves[0]) $outName/Wave=outWave
-	
-	AddOutput(outWave,ds)
-	
-	Do
-		Wave theWave = ds.waves[ds.wsi]
-				
-		WaveStats/R=(StartTime,StartTime + 1) theWave
-		
-		//peak with a 100 ms measurement width
-		Variable peak = mean(theWave,V_MaxLoc - 0.05,V_MaxLoc + 0.05)
-		
-		//area
-		Variable ar = area(theWave,StartTime,EndTime) //2 second range is what zach used
-		
-		outWave[ds.wsi] = peak / ar
-		
-		ds.wsi += 1
-	While(ds.wsi < ds.numWaves[0])
-	
-End
-
-Function NT_NormalizedPeak(DS_Data,StartTime,EndTime)
-	String DS_Data
-	Variable StartTime,EndTime
-	
-	String StartTime_Assign = "root:Packages:NeuroToolsPlus:ControlWaves:rangeLeft"
-	String EndTime_Assign = "root:Packages:NeuroToolsPlus:ControlWaves:rangeRight"
-	
-	//SUBMENU=GluSnFR Project
-	//TITLE=Normalized Peak
-	
-	STRUCT ds ds
-	GetStruct(ds)
-	
-	ds.wsi = 0
-	
-	SetDataFolder GetWavesDataFolder(ds.waves[0],1)
-	
-	String outName = NameOfWave(ds.waves[0]) + "_NormPk"
-	Make/O/N=(ds.numWaves[0]) $outName/Wave=outWave
-	
-	AddOutput(outWave,ds)
-	
-	Do
-		Wave theWave = ds.waves[ds.wsi]
-				
-		outWave[ds.wsi] = WaveMax(theWave,StartTime,EndTime)
-		
-		ds.wsi += 1
-	While(ds.wsi < ds.numWaves[0])
-	
-	//Normalize to maximum value
-	Variable maxVal = WaveMax(outWave)
-	outWave /= maxVal
-	
-End
-
-
-Function NT_FacilitationIndex(menu_DataType,DS_CenterSpot,DS_CenterNoSpot,DS_SurroundSpot,DS_SurroundNoSpot,StartTime,EndTime,Width,Threshold)
-	String menu_DataType,DS_CenterSpot,DS_CenterNoSpot,DS_SurroundSpot,DS_SurroundNoSpot
-	Variable StartTime,EndTime,Width,Threshold
-	
-	String menu_DataType_List = "Calcium;Spiking;PSTH;"
-	
-	//SUBMENU=Local Motion Project
-	//TITLE=Facilitation Index
-	
-//	Note={
-//	Calculates an index (FI) measuring how facilitated a spot response is
-//	during continuous background jitter confined to the center versus the surround.
-//	
-//	FI = 0 means the spot response was equal for center and surround background
-// stimuli
-//
-//	FI = 1 means the spot response was maximal for the surround background stimulus,
-// but is zero for the center background stimulus.
-//
-//	FI = (Surround - Center) / (Surround + Center)
-//	
-// \f01DataType\f00 : Can accept either calcium recordings of ROIs, raw spike recordings, or 
-// spike time histograms. 
-// \f01Threshold\f00 : Calculates percent of waves above the threshold FI if using Calcium.
-//		Used for spike threshold if using Spiking data type.
-//	}
-	
-	STRUCT ds ds
-	GetStruct(ds)
-	
-	ds.wsi = 0 
-		
-	//Creates a new output wave with the specified suffix
-	Wave FI = MakeOutputWave(ds,"FI",0)
-	
-	//Creates percent above threshold wave
-	Make/O/N=1 $(NameOfWave(FI) + "_pctAbove")/Wave=PctAbove
-	
-	FI = 0
-	PctAbove = 0
-	
-	If(EndTime < StartTime)
-		Abort "Ensure start and end times are valid"
-	EndIf
-	
-	Do
-		//Get all the waves
-		Wave CS = ds.waves[ds.wsi][%CenterSpot]
-		Wave SS = ds.waves[ds.wsi][%SurroundSpot]
-		Wave CNS = ds.waves[ds.wsi][%CenterNoSpot]
-		Wave SNS = ds.waves[ds.wsi][%SurroundNoSpot]
-		
-		//make sure the range is valid
-		If(EndTime == 0)
-			EndTime = xEnd(CS)
-			StartTime = 0
-		EndIf
-		
-		//Get the peaks
-		strswitch(menu_DataType)
-			case "Calcium":
-				WaveStats/Z/Q/R=(StartTime,EndTime) CS
-				Variable CSP = mean(CS,V_maxLoc - 0.5 * Width,V_maxLoc + 0.5 * Width)
-				Variable CNSP = mean(CNS,V_maxLoc - 0.5 * Width,V_maxLoc + 0.5 * Width) //baseline response without the spot
-						
-				WaveStats/Z/Q/R=(StartTime,EndTime) SS
-				Variable SSP = mean(SS,V_maxLoc - 0.5 * Width,V_maxLoc + 0.5 * Width)
-				Variable SNSP = mean(SNS,V_maxLoc - 0.5 * Width,V_maxLoc + 0.5 * Width)  //baseline response without the spot
-				Variable isCa = 1
-				break
-			case "Spiking":
-				CSP = GetSpikeCount(CS,StartTime,EndTime,Threshold)
-				CNSP = GetSpikeCount(CNS,StartTime,EndTime,Threshold)
-				SSP = GetSpikeCount(SS,StartTime,EndTime,Threshold)
-				SNSP = GetSpikeCount(SNS,StartTime,EndTime,Threshold)
-				isCa = 0
-				break
-			case "PSTH":
-				WaveStats/Z/Q/R=(StartTime,EndTime) CS
-				CSP = mean(CS,V_maxLoc - 0.5 * Width,V_maxLoc + 0.5 * Width)
-				CNSP = mean(CNS,V_maxLoc - 0.5 * Width,V_maxLoc + 0.5 * Width) //baseline response without the spot
-						
-				WaveStats/Z/Q/R=(StartTime,EndTime) SS
-				SSP = mean(SS,V_maxLoc - 0.5 * Width,V_maxLoc + 0.5 * Width)
-				SNSP = mean(SNS,V_maxLoc - 0.5 * Width,V_maxLoc + 0.5 * Width)  //baseline response without the spot
-				isCa = 0
-				break
-		endswitch
-		
-		//Change from no spot to spot condition for center and surround clouds
-		Variable Cdelta = CSP - CNSP
-		Variable Sdelta = SSP - SNSP
-		
-		//calculate facilitation index
-		FI[ds.wsi] = (Sdelta - Cdelta) / (Sdelta + Cdelta)
-		
-		If(FI[ds.wsi] > Threshold && isCa)
-			PctAbove += 1
-		EndIf
-	
-		ds.wsi += 1
-	While(ds.wsi < ds.numWaves[%CenterSpot])
-	
-	If(isCa)
-		PctAbove = 100 * (PctAbove / ds.numWaves[%CenterSpot])
-	EndIf
-End
-
-Function NT_PeakTime(DS_ROIs,PercentPeak,FitTime,StartTime,EndTime)
-	String DS_ROIs
-	Variable PercentPeak //0 to 1, 1 just takes the location peak itself
-	Variable FitTime //amount of time prior to the peak location to begin the sigmoid fit
-	Variable StartTime,EndTime
-	
-	//SUBMENU=Turning Project
-	//TITLE=Peak Time
-	
-//	Note={
-//	Finds the time point of the peak value, or some fraction of the peak value.
-//	Performs a sigmoid fit to the peak event to more accurately get the peak rise times.
-//	Output is a single wave with the peak times for each wave set.
-//	
-//	\f01PercentPeak\f00 : Time point when the amplitude is this fraction of the actual peak. 0-1.
-//	      -Set to 1 to take the actual peak time. 
-//	\f01FitTime\f00 : Amount of time prior to the peak to start the sigmoid fit (1-2 s)
-//	\f01StartTime\f00 : Start X value for finding the peak
-//	\f01EndTime\f00 : Ending X value for finding the peak
-//	}
-//	
-	STRUCT ds ds
-	GetStruct(ds)
-	
-	ds.wsi = 0
-	
-	If(PercentPeak > 1 || PercentPeak < 0)
-		Abort "PercentPeak must be between 0 and 1"
-	EndIf
-	
-	String outName = "PkLoc_" + NameOfWave(ds.waves[0])
-	Make/O/N=(ds.numWaves[0]) $outName/Wave=outWave
-	
-	
-	Note outWave,"Percent Peak: " + num2str(PercentPeak)
-	Note outWave,"Peak Location Waves:"
-	
-	Do
-		Wave ROI = ds.waves[ds.wsi]
-		SetDataFolder GetWavesDataFolder(ROI,1)
-		
-		WaveStats/Q ROI
-		
-		//peak location X scale
-		Variable pk = V_MaxLoc
-		
-		//Peak amplitude
-		Variable pkVal = V_Max
-		
-		//peak location X point
-		Variable pkPnt = ScaleToIndex(ROI,pk,0)
-		
-		Variable fitStart = pk - FitTime //fit starts 1 second prior to the peak 
-		Variable fitStartPt = ScaleToIndex(ROI,fitStart,0)
-		
-		//Fit a sigmoid to the data for reducing measurement noise
-		try
-			CurveFit/Q sigmoid ROI[fitStartPt,pkPnt]/D;AbortOnRTE
-		catch
-			Variable error = GetRTError(1)
-			print GetErrMessage(error),"...continuing..."
-			continue
-		endtry	
-		
-		Wave fit = $("fit_" + NameOfWave(ROI))
-		
-		If(!WaveExists(fit))
-			Abort "Couldn't find the fit wave"
-		EndIf
-		
-		Variable threshold = PercentPeak * pkVal
-		FindLevel/EDGE=1/Q fit,threshold
-		
-		If(V_flag)
-			print "Couldn't find the level. Using NaN"
-			outWave[ds.wsi] = nan
-		Else
-			outWave[ds.wsi] = V_LevelX
-		EndIf
-		
-		KillWaves/Z fit
-		
-		Note outWave,NameOfWave(ROI)
-			
-		ds.wsi += 1
-	While(ds.wsi < ds.numWaves[0])
-	
-End
-
-//Counts spikes for turning stimuli - Change Direction Project
-Function NT_TurnSpikeCount(DS_SpikeData,Threshold,StartTime,EndTime,FolderName,menu_Range,menu_TurnType,filterTerm)
-	//SUBMENU=Turning Project
-	//TITLE=Spike Count (Turn Data)
-	
-//	Note={
-//	Counts spikes, names the output waves specifically for turning stimuli.
-//	
-//	\f01Range\f00 : Specifies time range for the spike count
-//	\f01TurnType\f00 : Specifies linear, ± 90°, or 180° turns
-//	\f01FilterTerm\f00 : String for additional filtering of a data set. Waves that
-//	    don't match the filter will be ignored.
-//	}
-	
-	//Data Set for the spiking data
-	String DS_SpikeData
-	
-	//Some input variables
-	Variable Threshold,StartTime,EndTime
-	
-	//Name of the folder to put the spike counts in
-	String FolderName
-	
-	//Drop down menu for the time range we're counting in - for wave naming purposes
-	String menu_Range
-	
-	//Drop down menu for the type of turn the data contains
-	String menu_TurnType
-	
-	//This will filter out certain wavesets. If the string match fails on the first wave, it will skip that wave set
-	String filterTerm
-	
-	String menu_Range_List = "early;late;all;"
-	String menu_TurnType_List = "Linear;Turn90;TurnN90;Turn180;"
-	
-	String Threshold_Assign = "root:Packages:NeuroToolsPlus:ControlWaves:threshold"
-	
-	//Data set info structure
-	STRUCT ds ds 
-	
-	//Fills the data set structure
-	GetStruct(ds)
-	
-	//Reset wave set index
-	ds.wsi = 0
-	
-	//Filter term match test
-	If(strlen(filterTerm))
-		If(!stringmatch(NameOfWave(ds.waves[0]),filterTerm))
-			return 0
-		EndIf
-	EndIf
-	
-	String folder = GetWavesDataFolder(ds.waves[0],1)
-	
-	If(strlen(FolderName))
-		folder = ParseFilePath(1,folder,":",1,0) // back out one folder
-	
-		folder += FolderName
-	EndIf
-	
-	If(!DataFolderExists(folder))
-		NewDataFolder $folder
-	EndIf
-	
-	SetDataFolder $folder
-	
-	//Name of the output wave that will hold the results
-	String outputName = "DSSpk_" + menu_Range + "_" + StringsFromList("2-*",NameOfWave(ds.waves[0]),"_",noEnding=1)
-	Make/O/N=(ds.numWaves[0]) $outputName/Wave = outWave
-	
-	String vAngName = "vAng_" + menu_Range + "_" + StringsFromList("2-*",NameOfWave(ds.waves[0]),"_",noEnding=1)
-	Make/O/N=(1) $vAngName/Wave = vAng
-	
-	String dsiName = "vDSI_" + menu_Range + "_" + StringsFromList("2-*",NameOfWave(ds.waves[0]),"_",noEnding=1)
-	Make/O/N=(1) $dsiName/Wave = dsi
-	
-	//Function Loop
-	Do
-		If(endTime == 0)
-			endTime = pnt2x(ds.waves[ds.wsi],DimSize(ds.waves[ds.wsi],0)-1)
-		EndIf
-		
-		//Spike count
-		outWave[ds.wsi] = GetSpikeCount(ds.waves[ds.wsi],StartTime,EndTime,Threshold)
-		
-		ds.wsi += 1
-	While(ds.wsi < ds.numWaves[0])
-	
-	//Were any spikes detected? If not, toss out the tuning curve
-	If(sum(outWave) == 0)
-		KillWaves/Z vAng,dsi,outWave
-		return 0
-	EndIf
-	
-	SetScale/P x,0,45,"deg",outWave
-	
-	//Vector Sum angle
-	vAng[0] = VectorSum(outWave,"0;45;90;135;180;225;270;315;","angle")
-	//Vector Sum DSI
-	dsi[0] = VectorSum(outWave,"0;45;90;135;180;225;270;315;","DSI")
-	
-	
-	Note outWave,"Threshold: " + num2str(Threshold)
-	Note outWave,"StartTime: " + num2str(StartTime)
-	Note outWave,"EndTime: " + num2str(EndTime)
-	Note outWave,"Range: " + menu_Range
-	Note outWave,"TurnType: " + menu_TurnType
-	Note outWave,"PD: " + num2str(vAng[0])
-	Note outWave,"DSI: " + num2str(dsi[0])
-End
-
-//Counts spikes for turning stimuli - Change Direction Project
-Function NT_CollisionSpikeCount(DS_SpikeData,Threshold,StartTime,EndTime,menu_Range)
-	//SUBMENU=Turning Project
-	//TITLE=Spike Count (Collision Data)
-	
-//	Note={
-//	Counts spikes, names the output waves specifically for colliding stimuli.
-//	
-//	\f01Range\f00 : Specifies time range for the spike count
-	
-	//Data Set for the spiking data
-	String DS_SpikeData
-	
-	//Some input variables
-	Variable Threshold,StartTime,EndTime
-
-	//Drop down menu for the time range we're counting in - for wave naming purposes
-	String menu_Range
-	
-	String menu_Range_List = "early;collision;late;"
-	
-	String Threshold_Assign = "root:Packages:NeuroToolsPlus:ControlWaves:threshold"
-	
-	//Data set info structure
-	STRUCT ds ds 
-	
-	//Fills the data set structure
-	GetStruct(ds)
-	
-	//Reset wave set index
-	ds.wsi = 0
-	
-	String folder = GetWavesDataFolder(ds.waves[0],1)
-	SetDataFolder $folder
-	
-	//Name of the output wave that will hold the results
-	String outputName = "DSSpk_" + StringFromList(1,NameOfWave(ds.waves[0]),"_") + "_" + menu_Range + "_" + StringsFromList("2-*",NameOfWave(ds.waves[0]),"_",noEnding=1)
-	Make/O/N=(ds.numWaves[0]) $outputName/Wave = outWave
-	
-	AddOutput(outWave,ds)
-	
-	//Function Loop
-	Do
-		If(endTime == 0)
-			endTime = pnt2x(ds.waves[ds.wsi],DimSize(ds.waves[ds.wsi],0)-1)
-		EndIf
-		
-		//Spike count
-		outWave[ds.wsi] = GetSpikeCount(ds.waves[ds.wsi],StartTime,EndTime,Threshold)
-		
-		ds.wsi += 1
-	While(ds.wsi < ds.numWaves[0])
-		
-	Note outWave,"Threshold: " + num2str(Threshold)
-	Note outWave,"StartTime: " + num2str(StartTime)
-	Note outWave,"EndTime: " + num2str(EndTime)
-	Note outWave,"Range: " + menu_Range
-End
-
-
-//Calculates the difference in angle between two waves. 
-Function NT_AngleDistance(DS_Turns,menu_Range,Suffix)
-	//SUBMENU=Turning Project
-	//TITLE=Angular Distance
-	
-//	Note = {
-//	Gets the angular distance between the apparent preferred directions for -90° 
-//	and +90° turns, compared with the preferred direction for the linear stimulus.
-//	
-//	Each wave set must contain all three (+90°,-90°, and linear) angle varieties.
-//	
-//	\f01Range\f00 : Time range that the tuning curves were acquired in (naming purposes)
-//	\f01Suffix\f00 : Suffix applied to the output wave, defaults to 'delta'
-//	}
-	
-	String DS_Turns //Data set containing linear, turn90, and turnN90 avg angles in each wave set.
-	//If all three aren't present, we ignore the wave set.
-	
-	String menu_Range,Suffix
-	String menu_Range_List = "early;late;all;"
-	
-	//Data set info structure
-	STRUCT ds ds 
-	
-	//Fills the data set structure
-	GetStruct(ds)
-	
-	//Data set checks, must have three waves
-	If(ds.numWaves[0] != 3)
-		return 0
-	EndIf
-	
-	Variable i
-	
-	If(!strlen(suffix))
-		suffix = "delta"
-	EndIf
-	
-	//allocate to waves
-	For(i=0;i<3;i+=1)
-		String name = NameOfWave(ds.waves[i])
-		
-		If(stringmatch(name,"*t90*"))
-			Wave turn90 = ds.waves[i]
-			String outName = name + "_" + suffix
-			SetDataFolder GetWavesDataFolder(turn90,1)
-			Duplicate/O turn90,$outName
-			Wave turn90_delta = $outName
-			
-		ElseIf(stringmatch(name,"*t270*"))
-			Wave turnN90 = ds.waves[i]
-			outName = name + "_" + suffix
-			SetDataFolder GetWavesDataFolder(turnN90,1)
-			Duplicate/O turnN90,$outName
-			Wave turnN90_delta = $outName
-			
-		Else
-			Wave linear = ds.waves[i]
-		EndIf
-	EndFor
-	
-	//Compute the signed difference between them
-	turn90_delta[0] = polarMath(linear[0],turn90[0],"deg","distance",1)
-	
-	turnN90_delta[0] = polarMath(linear[0],turnN90[0],"deg","distance",1)
-	
-End
-
-
-//Calculates the percent difference between two IPSCs. I'm using it to compare linear and turning stimuli IPSCs - Change Direction Project
-Function NT_IPSC_PercentDiff(DS_IPSC_Turn,TurnIdentityPos,FolderName)
-	//SUBMENU=Turning Project
-	//TITLE=% Difference IPSC
-	
-//	Note={
-//	Calculates the %Difference between two IPSC waves.
-//	Input is two IPSC waves per wave set, one is the linear exit stimulus, 
-//	      the other is the turning stimulus.
-//	
-//	\f01TurnIdentityPos\f00 : Underscore position that identifies the wave's
-//	    turn type (turn90, turnN90, linear)
-//	\f01FolderName\f00 : Name of folder for the output waves
-//	}
-	
-	//Data Set for the turning IPSC data
-	String DS_IPSC_Turn
-	
-	Variable TurnIdentityPos //this indicates the underscore position of where the turn name (e.g. 90t270) can be found
-									//allows identification of the entry and exit direction for that turn
-									
-	//Name of the folder to put the spike counts in
-	String FolderName
-	
-	//Data set info structure
-	STRUCT ds ds 
-	
-	//Fills the data set structure
-	GetStruct(ds)
-	
-	//Reset wave set index
-	ds.wsi = 0
-	
-	//Function Loop
-	Do
-		Wave turn = ds.waves[ds.wsi][0] //turn wave
-		
-		If(!WaveExists(turn))
-			continue
-		EndIf
-		
-		//Set up the folder, otherwise puts data into the same folder 
-		String folder = GetWavesDataFolder(ds.waves[ds.wsi][0],1)
-		folder = ParseFilePath(1,folder,":",1,0) // back out one folder
-		
-		folder += FolderName
-		
-		If(!DataFolderExists(folder))
-			NewDataFolder $folder
-		EndIf
-		
-		SetDataFolder GetWavesDataFolder(turn,1)
-		
-		//Get entry and exit angles
-		String entryAngle = StringFromList(0,StringFromList(TurnIdentityPos,NameOfWave(turn),"_"),"t")
-		String exitAngle = StringFromList(1,StringFromList(TurnIdentityPos,NameOfWave(turn),"_"),"t")
-		
-		//Check that they are valid numeric angles
-		Variable check = str2num(entryAngle)
-		If(numtype(check) == 2)
-			continue
-		EndIf
-		
-		check = str2num(exitAngle)
-		If(numtype(check) == 2)
-			continue
-		EndIf
-		
-		//Find the entry and exit linear waves
-		String name = ReplaceListItem(TurnIdentityPos,NameOfWave(turn),"_",entryAngle,noEnding=1)
-		
-		Variable pos = whichlistitem("turn90",name,"_")
-		If(pos == -1)
-			pos = whichlistitem("turnN90",name,"_")
-		EndIf
-		
-		If(pos == -1)
-			print "Couldn't resolve the waves from the naming scheme"
-			continue
-		EndIf
-		
-		name = ReplaceListItem(pos,name,"_","linear",noEnding=1)
-		
-		Wave entry = $ReplaceListItem(TurnIdentityPos,name,"_",entryAngle,noEnding=1)
-		Wave exit = $ReplaceListItem(TurnIdentityPos,name,"_",exitAngle,noEnding=1)
-		
-		//wave checks
-		If(!WaveExists(entry) || !WaveExists(exit))
-			print "Couldn't find the entry or exit wave"
-			continue
-		EndIf
-		
-		//Set data folder to the output folder 
-		SetDataFolder $folder
-		
-		//Make the output waves to hold the percent differences
-		String outputName = NameOfWave(turn)
-		outputName = ReplaceListItem(0,outputName,"_", "PctDiff",noEnding=1)
-		outputName = ReplaceListItem(TurnIdentityPos + 1,outputName,"_", "Entry",noEnding=1)
-		Duplicate/O turn,$outputName/Wave=entryDiff
-
-		outputName = ReplaceListItem(TurnIdentityPos + 1,outputName,"_", "Exit",noEnding=1)
-		Duplicate/O turn,$outputName/Wave=exitDiff
-		
-		//Percent difference
-		Multithread entryDiff = abs(entry - turn) / (0.5 * (entry + turn))
-		Multithread exitDiff = abs(exit - turn) / (0.5 * (exit + turn))
-		
-		//Some median smoothing to kill the noise in low signal regions
-		Smooth/M=0 50,entryDiff
-		Smooth/M=0 50,exitDiff
-		
-		//Notes
-		Note entryDiff,"Percent Difference:"
-		Note entryDiff,GetWavesDataFolder(entry,2)
-		Note entryDiff,GetWavesDataFolder(turn,2)
-		
-		Note exitDiff,"Percent Difference:"
-		Note exitDiff,GetWavesDataFolder(exit,2)
-		Note exitDiff,GetWavesDataFolder(turn,2)
-		
-		ds.wsi += 1
-	While(ds.wsi < ds.numWaves[0][0])
-	
-End
-
-Function NT_CircularStats(DS_Waves,cb_Radians,cb_outputInDegrees)
-	//SUBMENU=Turning Project
-	//TITLE=Circular Stats
-	
-	String DS_Waves //input waves contain angular data
-	Variable cb_Radians //is the data already in radians?
-	Variable cb_outputInDegrees //do you want the output data to be in degrees?
-	
-	//Data set info structure
-	STRUCT ds ds 
-	
-	//Fills the data set structure
-	GetStruct(ds)
-	
-	Variable i
-	For(i=0;i<ds.numWaves[0];i+=1)
-		Wave theWave = ds.waves[i]
-		
-		SetDataFolder GetWavesDataFolder(theWave,1)
-		
-		//Make radians scaled wave for the mean angles
-		If(!cb_Radians)
-			Duplicate/O theWave,$(ds.paths[i][0] + "_rad")
-			Wave rad = $(ds.paths[i][0] + "_rad")
-			rad = theWave * pi/180
-		Else
-			Wave rad = theWave
-		EndIf		
-		
-		//Extra column needed for vector lengths, set all to 1
-		Redimension/N=(-1,2) rad
-		rad[][1] = 1
-		
-		StatsCircularMeans/Z/CI rad
-		Wave stats = W_CircularMeans
-		
-		Duplicate/O stats,$(ds.paths[i][0] + "_CircularMeans")
-		KillWaves/Z stats
-		
-		Wave stats = $(ds.paths[i][0] + "_CircularMeans")
-		If(cb_outputInDegrees)
-			stats[1] = stats[1] * 180/pi
-			stats[2] = stats[2] * 180/pi
-			stats[3] = stats[3] * 180/pi
-			stats[4] = stats[4] * 180/pi
-		EndIf
-		
-		Redimension/N=(-1,1) rad
-		rad = (rad < 0) ? rad + 2*pi : rad
-		StatsCircularMoments/Q/Z rad
-		Wave stats = W_CircularStats
-		
-		If(cb_outputInDegrees)
-		
-			stats[10] = stats[10] * 180/pi//circular standard deviation
-			stats[8] = stats[8] * 180/pi //mean
-			stats[11] = stats[11] * 180/pi //median
-		EndIf
-		
-		Duplicate/O stats,$(ds.paths[i][0] + "_CircularStats")
-		KillWaves/Z stats
-		
-		
-		
+			startPt += nPoints
+		EndFor
 		
 	EndFor
+End
+
+Function NT_SetDimensionLabel(DS_Waves,WhichDimension,LabelList)
+	//TITLE = Set Dimension Labels
+	//SUBMENU = Waves and Folders
+	String DS_Waves
+	Variable WhichDimension
+	String LabelList
+	
+	STRUCT ds ds
+	GetStruct(ds)
+	
+//	Note={
+//	Sets the dimension labels of the input waves.
+//	The number of points in the wave must equal the number of labels.
+//	
+//	\f01Dimension\f00 : Dimension to label
+//	\f01Labels\f00 : Comma-separated list of labels
+//	}
+	
+	Variable i,j
+	For(i=0;i<ds.numWaves[%Waves];i+=1)
+		Wave w = ds.waves[i][%Waves]
+		
+		If(ItemsInList(LabelList,",") != DimSize(w,WhichDimension))
+			continue
+			print "Number of labels must equal the number of data points in the specified dimension."
+		EndIf
+		
+		For(j=0;j<ItemsInList(LabelList,",");j+=1)
+			String theLabel = StringFromList(j,LabelList,",")
+			
+			SetDimLabel WhichDimension,j,$theLabel,w
+		EndFor		
+	EndFor
+	
 End
 
 //Concatenates each wave in a waveset together into a single output wave
 Function NT_Concatenate(DS_Waves,OutputFolder,Suffix)
 	//SUBMENU=Waves and Folders
+	//SUBGROUP=Waves
 	String DS_Waves //input waves contain angular data
 	String OutputFolder //name of the output folder, full path or relative path
 	String Suffix //suffix applied to end of first wave in the wave set as the output wave name
 	
+//	Note={
+//	Concatenates each wave in a waveset together into a single output wave
+//	}
+
 	//Data set info structure
 	STRUCT ds ds 
 	
@@ -4867,37 +4706,12 @@ Function NT_Concatenate(DS_Waves,OutputFolder,Suffix)
 End
 
 
-
-Function NT_MiscFunction(DS_Waves)
-	String DS_Waves
-	
-	STRUCT ds ds
-	GetStruct(ds)
-	
-	ds.wsi = 0
-	
-	
-	Do
-		Wave theWave = ds.waves[ds.wsi]
-		
-		//Enter code here
-		SetDataFolder GetWavesDataFolder(theWave,1)
-		
-		Make/O/N=(DimSize(theWave,0)) $(NameOfWave(theWave) + "_DSI")/Wave = dsi
-		
-		Variable null = theWave[0]
-		dsi = (theWave - null) / (theWave + null)
-		
-		ds.wsi += 1
-	While(ds.wsi < ds.numWaves[0])
-
-End
-
-
 //Generates a scatter plot with connected paired points
 //Requires a 2D matrix wave, with each column containing pairs of points
-Function NT_PairedScatterPlot(DS_Control,DS_Test)
-	String DS_Control,DS_Test
+Function NT_ScatterPlot(Control,Test,cb_Paired)
+	Wave Control,Test
+	Variable cb_Paired
+	
 	//SUBMENU=Graphing
 	//TITLE=Paired Scatter Plot
 	
@@ -4906,718 +4720,108 @@ Function NT_PairedScatterPlot(DS_Control,DS_Test)
 //	Input control data set and a test data set.
 // Control and Test must have same number of points
 //	}
-	
-	STRUCT ds ds
-	GetStruct(ds)
-	
-	ds.wsi = 0
-	
-	Do
-		Wave control = ds.waves[ds.wsi][%Control]
-		Wave test = ds.waves[ds.wsi][%Test]
-		
-		Variable cols = DimSize(control,0)
-		
-		If(cols != DimSize(test,0))
-			DoAlert 0,"Data waves must have the same number of points."
-			return 0
-		EndIf
-		
-		SetDataFolder GetWavesDataFolder(control,1)
-		
-		String outName = NameOfWave(control) + "_VS_" + NameOfWave(test)
-		Make/O/N=(2,cols) $outName/Wave=out
-		
-		out[0][] = control[q]
-		out[1][] = test[q]
-		
-		Display out[][0]
-		
-		Variable i
-		For(i=1;i<cols;i+=1)
-			AppendToGraph out[][i]
-		EndFor
-		
-		ModifyGraph mode=4,marker=8,msize=3,rgb=(0,0,0),lsize=0.5,opaque=1,btLen=2,btThick=0
-		ModifyGraph axThick=0.5,axThick(bottom)=0.5,standoff(bottom)=0,manTick(left)={0,0.1,0,1},manMinor(left)={0,0},manTick(bottom)={0,1,0,0},manMinor(bottom)={0,0}
-		ModifyGraph margin(left)=28,margin(bottom)=28,margin(right)=7,margin(top)=7,gfSize=8,standoff=0,ZisZ(left)=1
-		SetAxis bottom -0.25,1.25
-		
-		ds.wsi += 1
-	While(ds.wsi < ds.numWaves[%Control])
-	
-End
 
-//Calculates the modulation index of two Ca signals. Calculates the peak first, then a % difference.
-Function NT_Modulation_Index(DS_Data,StartTime,EndTime,PeakWidth,cb_Abs_Value)
-	//SUBMENU=Turning Project
-	//TITLE=Modulation Index
-//	
-//	Note={
-//	Calculates the modulation index between the peaks of two waves (difference / sum)
-//	Each waveset should have two waves that will be compared.
-//	
-//	\f01StartTime:\f00 Starting X value for finding the peak
-//	\f01EndTime:\f00 Ending X value for finding the peak
-//	\f01PeakWidth:\f00 Size of window to average around the peak value.
-//	}
+	Variable cols = DimSize(control,0)
 	
-	String DS_Data
-	Variable StartTime,EndTime,PeakWidth,cb_Abs_Value
-	
-	//Data set info structure
-	STRUCT ds ds 
-	
-	//Fills the data set structure
-	GetStruct(ds)
-	
-	//Reset wave set index
-	ds.wsi = 0
-	
-	DFREF saveDF = GetDataFolderDFR()
-	
-	If(ds.numWaves[0] != 2)
-		Abort "This function requires 2 waves per wave set"
-	EndIf
-
-	//declare each wave in the wave set
-	Wave wave1 = ds.waves[0]
-	Wave wave2 = ds.waves[1]
-	
-	If(ds.wsn == 0)	
-		SetDataFolder GetWavesDataFolder(wave1,1)
-		Make/O/N=(ds.numWaveSets[0]) $"MI"/Wave=MI
-		Note/K MI,"Modulation Index (difference / sum)"
-		Note MI,"Waves:"
-		
-		SaveWaveRef(MI)
-	Else
-		Wave MI = recallSavedWaveRef()
-	EndIf
-	
-	//YOUR CODE GOES HERE....
-	Variable pk1,pk2,modulationIndex
-	
-	PeakWidth /= 2
-	
-	WaveStats/Q/R=(StartTime,EndTime) wave1 //find the peak location
-	
-	//Get the average value ±PeakWidth around the peak location
-	pk1 = mean(wave1,V_maxLoc - PeakWidth,V_maxLoc + PeakWidth)
-	
-	WaveStats/Q/R=(StartTime,EndTime) wave2 //find the peak location
-	
-	//Get the average value ±PeakWidth around the peak location
-	pk2 = mean(wave2,V_maxLoc - PeakWidth,V_maxLoc + PeakWidth)
-	
-//	pk1 = WaveMax(wave1,StartTime,EndTime)
-//	pk2 = WaveMax(wave2,StartTime,EndTime)
-	
-	//Ensure no negative values
-	pk1 = (pk1 < 0) ? 0 : pk1
-	pk2 = (pk2 < 0) ? 0 : pk2
-	
-	If(cb_Abs_Value)
-		MI[ds.wsn] = abs(pk2 - pk1) / (pk1 + pk2)
-	Else
-		MI[ds.wsn] = (pk2 - pk1) / (pk1 + pk2)
-	EndIf
-	
-//	MI = (MI < 0) ? 0 : MI
-	
-	Note MI,NameOfWave(wave1) + " vs. " + NameOfWave(wave2)
-	
-	SetDataFolder saveDF
-End
-
-//Calculates the modulation index of two Ca signals. Calculates the peak first, then a % difference.
-Function NT_Modulation_Index2(DS_Data1,DS_Data2,StartTime,EndTime,PeakWidth,cb_Abs_Value,Output_Suffix)
-	//SUBMENU=Turning Project
-	//TITLE=Modulation Index 2
-//	
-//	Note={
-//	Calculates the modulation index between the peaks of two waves (difference / sum)
-//	Corresponding waves in each data set are compared. Same as Modulation Index, but uses
-// two data sets instead of one to define the data. 
-//	
-//	\f01StartTime:\f00 Starting X value for finding the peak
-//	\f01EndTime:\f00 Ending X value for finding the peak
-//	\f01PeakWidth:\f00 Size of window to average around the peak value.
-//	}
-	
-	String DS_Data1,DS_Data2
-	Variable StartTime,EndTime,PeakWidth,cb_Abs_Value
-	String Output_Suffix
-	
-	//Data set info structure
-	STRUCT ds ds 
-	
-	//Fills the data set structure
-	GetStruct(ds)
-	
-	//Reset wave set index
-	ds.wsi = 0
-	
-	DFREF saveDF = GetDataFolderDFR()
-	
-	If(ds.numWaves[0] != ds.numWaves[1])
-		Abort "Each waveset must have the same number of waves"
-	EndIf
-	
-	//modulation index wave is put in the first wave's folder
-	Wave wave1 = ds.waves[0][0] //data 1
-	SetDataFolder GetWavesDataFolder(wave1,1)
-	
-	If(strlen(Output_Suffix))
-		Output_Suffix = "_" + Output_Suffix
-	EndIf
-	
-	Make/O/N=(ds.numWaves[0]) $("MI" + Output_Suffix)/Wave=MI
-	Note/K MI,"Modulation Index (difference / sum)"
-	Note MI,"Waves:"
-	
-	//YOUR CODE GOES HERE....
-	Variable pk1,pk2,modulationIndex
-	
-	PeakWidth /= 2
-		
-	Do
-		//declare each wave in the wave set
-		Wave wave1 = ds.waves[ds.wsi][0] //data 1
-		Wave wave2 = ds.waves[ds.wsi][1] //data 2
-		
-		//Data 1
-		WaveStats/Q/R=(StartTime,EndTime) wave1 //find the peak location
-		
-		//Get the average value ±PeakWidth around the peak location
-		pk1 = mean(wave1,V_maxLoc - PeakWidth,V_maxLoc + PeakWidth)
-		
-		//Data 2
-		WaveStats/Q/R=(StartTime,EndTime) wave2 //find the peak location
-		
-		//Get the average value ±PeakWidth around the peak location
-		pk2 = mean(wave2,V_maxLoc - PeakWidth,V_maxLoc + PeakWidth)
-		
-		//Ensure no negative peak values
-		pk1 = (pk1 < 0) ? 0 : pk1
-		pk2 = (pk2 < 0) ? 0 : pk2
-		
-		//calculate modulation index for absolute value (unsigned DSI) or signed DSI.
-		If(cb_Abs_Value)
-			MI[ds.wsi] = abs(pk1 - pk2) / (pk1 + pk2)
-		Else
-			MI[ds.wsi] = (pk1 - pk2) / (pk1 + pk2)
-		EndIf
-
-		Note MI,NameOfWave(wave1) + " vs. " + NameOfWave(wave2)
-		
-		ds.wsi += 1
-	While(ds.wsi < ds.numWaves[0])
-	
-	SetDataFolder saveDF
-	
-End
-
-
-
-//Calculates the modulation index for a set of 3 Ca signals.
-//MI = (Turn - ND) / (PD - ND)
-//MI = 0 means the turn response was equal to the ND response.
-//MI = 1 means the turn response was equal to the PD response.
-Function NT_ModIndex_Turn180(DS_PD,DS_ND,DS_Turn,StartTime,EndTime,PeakWidth)
-	//SUBMENU=Turning Project
-	//TITLE=Mod. Index (Turn 180)
-//	
-//	Note={
-//	Calculates modulation index using three waves, PD, ND, and Turn.
-//	MI of 1 means the Turn is identical to the PD response
-//	MI of 0 means the Turn is identical to the ND response
-//	}
-	
-	String DS_PD,DS_ND,DS_Turn
-	Variable StartTime,EndTime,PeakWidth
-	
-	//Data set info structure
-	STRUCT ds ds 
-	
-	//Fills the data set structure
-	GetStruct(ds)
-	
-	//Reset wave set index
-	ds.wsi = 0
-	
-	DFREF saveDF = GetDataFolderDFR()
-	
-	If(ds.numWaves[0] != ds.numWaves[1] && ds.numWaves[0] != ds.numWaves[2])
-		Abort "All wave sets must have the same number of waves"
-	EndIf
-	
-	
-	
-	Do
-		//declare each wave in the wave set
-		Wave wave1 = ds.waves[ds.wsi][0]
-		Wave wave2 = ds.waves[ds.wsi][1]
-		Wave wave3 = ds.waves[ds.wsi][2]
-		
-		//Set the folder, output wave and wave notes
-		If(ds.wsi == 0)
-			SetDataFolder GetWavesDataFolder(wave1,1)
-			Make/O/N=(ds.numWaves[0]) $"MI"/Wave=MI
-			Note/K MI,"Modulation Index ( (Signal - ND) / (PD - ND))"
-			Note MI,"Waves:"
-		EndIf
-		
-		Variable pk1,pk2,pk3,modulationIndex
-	
-		PeakWidth /= 2
-		
-		WaveStats/Q/R=(StartTime,EndTime) wave1 //find the peak location
-		
-		//Get the average value ±PeakWidth around the peak location
-		pk1 = mean(wave1,V_maxLoc - PeakWidth,V_maxLoc + PeakWidth)
-		
-		WaveStats/Q/R=(StartTime,EndTime) wave2 //find the peak location
-		
-		//Get the average value ±PeakWidth around the peak location
-		pk2 = mean(wave2,V_maxLoc - PeakWidth,V_maxLoc + PeakWidth)
-		
-		WaveStats/Q/R=(StartTime,EndTime) wave3 //find the peak location
-		
-		//Get the average value ±PeakWidth around the peak location
-		pk3 = mean(wave3,V_maxLoc - PeakWidth,V_maxLoc + PeakWidth)
-		
-		//Ensure no negative values
-		pk1 = (pk1 < 0) ? 0 : pk1
-		pk2 = (pk2 < 0) ? 0 : pk2
-		pk3 = (pk3 < 0) ? 0 : pk3
-		
-		//Some special cases need to be handled to avoid unreasonable MI values in the case of the turn
-		//response being greater than PD or less than ND.
-		
-		If(pk2 > pk1) //ND greater than PD, throw out the ROI with a nan MI index
-			MI[ds.wsi] = -1
-//		ElseIf(pk3 < pk2) //Turn less than ND, make MI = 0 since it is fully ND
-//			MI[ds.wsi] = 0
-//		ElseIf(pk3 > pk1) //Turn greater than PD, make MI = 1 ince it is fully PD
-//			MI[ds.wsi] = 1
-		Else
-			MI[ds.wsi] = abs(pk3 - pk2) / (pk1 - pk2)
-		EndIf
-		
-		ds.wsi += 1
-	While(ds.wsi < ds.numWaves[0])
-	
-	SetDataFolder saveDF
-End
-
-Function NT_DefineROISector(DS_BaseImage,CDF_MI,X_Center,Y_Center,menu_Split,menu_ROI_Group,menu_diagonalAngle)
-	//SUBMENU=Turning Project
-	//TITLE=Define ROI Sector
-	
-//	Note = {
-//	For a given set of ROIs, it assigns each ROI to different spatial sectors,
-//	as defined by the 'Split' input, and the X/Y centers. Modulation index
-//	for these ROIs is sorted into one wave for each spatial sector.
-//	
-//	\f01MI\f00 : Modulation index wave. Must be same size as number of ROIs
-//	\f01X_Center\f00 : X center point on the image from where the divide is drawn
-//	\f01Y_Center\f00 : Y center point on the image from where the divide is drawn
-//	\f01Split\f00 : Defines how the image is split up into sectors
-//	\f01ROI_Group\f00 : ROI Group from previously defined ROIs
-//	\f01diagonalAngle\f00 : Defines angle to divide the image if diagonal split is chosen
-//	}
-	
-	String DS_BaseImage,CDF_MI
-	Variable X_Center,Y_Center
-	String menu_Split //Should we split the receptive field vertically, horizontally, or diagonally
-	String menu_ROI_Group
-	String menu_diagonalAngle
-	
-	String menu_Split_List = "Vertical;Horizontal;Diagonal;"
-	String menu_diagonalAngle_List = "45;-45;" //+45 is bottom left to top right, -45 is top left to bottom right
-	
-	//Use the ROI lists as the menu items 
-	String menu_ROI_Group_List = TextWaveToStringList(root:Packages:NeuroToolsPlus:ScanImage:ROIGroupListWave,";")
-	
-	Variable angle = str2num(menu_diagonalAngle)
-	
-	DFREF NTSI = $SI
-	
-	//Data set info structure
-	STRUCT ds ds 
-	
-	//Fills the data set structure
-	GetStruct(ds)
-
-	//If the data set happens to have more than one image in it, just use the first one
-	Wave theWave = ds.waves[0]
-	
-	If(!WaveExists(theWave))
+	If(cols != DimSize(test,0))
+		DoAlert 0,"Data waves must have the same number of points."
 		return 0
 	EndIf
 	
-	//Make sure it's a 2D wave
-	If(WaveDims(theWave) < 2)
-		return 0
-	EndIf
+	SetDataFolder GetWavesDataFolder(control,1)
 	
-	//Make sure the MI wave is selected and valid
-	Wave/Z MI = $CDF_MI
-	If(!WaveExists(MI))
-		print "Couldn't find the MI Wave"
-		return 0
-	EndIf	
+	String outName = NameOfWave(control) + "_VS_" + NameOfWave(test)
+	Make/O/N=(2,cols) $outName/Wave=out
 	
-	//YOUR CODE GOES HERE....
+	out[0][] = control[q]
+	out[1][] = test[q]
 	
-	Variable rows =  DimSize(theWave,0)
-	Variable cols =  DimSize(theWave,1)
+	Display out[][0]
 	
-	//Resolve the X center point
-	If(X_Center > 1e-3 && X_Center < 1) //above scale of the image (mm not microns) means its a fractional input
-		Variable xTurn = IndexToScale(theWave,DimSize(theWave,0) * X_Center,0)
-	Else
-		//Make sure center point is actually within the range of the images
-		Variable index = ScaleToIndex(theWave,X_Center,0)
-		If(index > rows || index < 0)
-			DoAlert 1,"Turn center point was not within the image scale. Continue anyway?"
-			
-			If(V_flag == 2)
-				Abort ""
-			EndIf
-		EndIf
-		
-		xTurn = X_Center
-	EndIf
-	
-	//Resolve the Y center point
-	If(Y_Center > 1e-3 && Y_Center < 1) //above scale of the image (mm not microns) means its a fractional input
-		Variable yTurn = IndexToScale(theWave,DimSize(theWave,1) * Y_Center,1)
-	Else
-		//Make sure center point is actually within the range of the images
-		index = ScaleToIndex(theWave,Y_Center,1)
-		If(index > cols || index < 0)
-			DoAlert 1,"Turn center point was not within the image scale. Continue anyway?"
-			
-			If(V_flag == 2)
-				Abort ""
-			EndIf
-		EndIf
-	
-		yTurn = Y_Center
-	EndIf
-	
-	//Get the center XY coordinates of the ROI group
-	SI_GetCenter(group =menu_ROI_Group)
-	
-	SVAR software = NTSI:imagingSoftware
-	
-	strswitch(software)
-		case "2PLSM":
-			Wave xROI = $("root:twoP_ROIs:" + menu_ROI_Group + "_ROIx")
-			Wave yROI = $("root:twoP_ROIs:" + menu_ROI_Group + "_ROIy")
-			break
-		case "ScanImage":
-			Wave xROI = $("root:Packages:NeuroToolsPlus:ScanImage:ROIs:" + menu_ROI_Group + "_ROIx")
-			Wave yROI = $("root:Packages:NeuroToolsPlus:ScanImage:ROIs:" + menu_ROI_Group + "_ROIy")
-			break
-	endswitch
-	
-	
-	If(!WaveExists(xROI) || !WaveExists(yROI))
-		return 0
-	EndIf
-	
-	//Assign each ROI to one side of the image or the other
-	Variable numROIs = DimSize(xROI,0)
-	If(numROIs == 0)
-		return 0
-	EndIf
-	
-	//Name of the output wave that will hold the results
-	SetDataFolder root:Analysis:$menu_ROI_Group
-	String outputName = menu_ROI_Group + "_Sectors"
-	
-	DFREF MIFolder = GetWavesDataFolderDFR(MI)
-	
-	//Make the output wave 
-	Make/O/N=(numROIs) $outputName/Wave = outWave
-	
-	Variable i,count1=0,count2=0
-	For(i=0;i<numROIs;i+=1)
-		Variable ycoord = yROI[i]
-		Variable xcoord = xROI[i]
-		
-		strswitch(menu_Split)
-			case "Vertical":
-				If(i == 0)
-					Make/O/N=1 :top/Wave=out1
-					Make/O/N=1 :bottom/Wave=out2
-				EndIf
-						
-				If(ycoord > yTurn)
-					outWave[i] = 1 //top
-					out1 += MI[i]
-					count1 += 1
-				Else
-					outWave[i] = 0 //bottom
-					out2 += MI[i]
-					count2 += 1
-				EndIf
-				
-				//Split the original MI wave into sectors for scatter plotting
-				Duplicate/O MI,MIFolder:MI_top
-				Duplicate/O MI,MIFolder:MI_bottom
-				
-				Wave MI_1 = MIFolder:MI_top
-				Wave MI_2 = MIFolder:MI_bottom
-				break
-			case "Horizontal":
-				If(i == 0)
-					Make/O/N=1 :left/Wave=out1
-					Make/O/N=1 :right/Wave=out2
-				EndIf
-				
-				If(xcoord < xTurn)
-					outWave[i] = 1 //left
-					out1 += MI[i]
-					count1 += 1
-				Else
-					outWave[i] = 0 //right
-					out2 += MI[i]
-					count2 += 1
-				EndIf
-				
-				//Split the original MI wave into sectors for scatter plotting
-				Duplicate/O MI,MIFolder:MI_left
-				Duplicate/O MI,MIFolder:MI_right
-				
-				Wave MI_1 = MIFolder:MI_left
-				Wave MI_2 = MIFolder:MI_right
-				
-				break
-			case "Diagonal":
-				If(i == 0)
-					Make/O/N=1 :above/Wave=out1
-					Make/O/N=1 :below/Wave=out2
-				EndIf
-				
-				Variable slope = sin(angle * pi/180) / cos(angle * pi/180)
-				Make/FREE line
-				SetScale/I x,-200e-6,200e-6,line //set the scale range ±200 microns
-				
-				line =  (x - X_Center) * slope + Y_Center //y = mx + b
-				
-				//check if ROI is below the line
-				Variable threshold = line[x2pnt(line,xCoord)]
-				
-				If(yCoord > threshold)
-					//above the line
-					outWave[i] = 1
-					out1 += MI[i]
-					count1 += 1
-					
-				Else
-					//below the line
-					outWave[i] = 0
-					out2 += MI[i]
-					count2 += 1
-				EndIf
-				
-				//Split the original MI wave into sectors for scatter plotting
-				Duplicate/O MI,MIFolder:MI_above
-				Duplicate/O MI,MIFolder:MI_below
-				
-				Wave MI_1 = MIFolder:MI_above
-				Wave MI_2 = MIFolder:MI_below
-				
-				break
-		endswitch
-	EndFor
-
-	out1 /= count1
-	out2 /= count2
-	
-	Variable num1 = sum(outWave) //number of sites in left/top/above
-	Variable num2 = DimSize(outWave,0) - num1 //number of sites in right/bottom/below
-	Redimension/N=(num1) MI_1
-	Redimension/N=(num2) MI_2
-	
-	count1 = 0
-	count2 = 0
-	
-	MI_1 = 0
-	MI_2 = 0
-	
-	For(i=0;i<DimSize(outWave,0);i+=1)
-		If(outWave[i] == 1)
-			MI_1[count1] = MI[i] //left or top or above
-			count1 += 1
-		Else
-			MI_2[count2] = MI[i] //right or bottom or below
-			count2 += 1
-		EndIf
+	Variable i
+	For(i=1;i<cols;i+=1)
+		AppendToGraph out[][i]
 	EndFor
 	
-	KillWaves/Z left,right
-End
-
-Function NT_DistanceFromSoma(DS_ROI_X,DS_ROI_Y,Soma_X,Soma_Y)
-	String DS_ROI_X,DS_ROI_Y //X and Y coordinate waves for all the ROIs. Should be single waves.
-	Variable Soma_X,Soma_Y //Scaled coordinates of the soma or whatever reference point we're using
-	
-	//SUBMENU=Turning Project
-	//TITLE=Distance From Soma
-	
-	//	Note={
-	//	Calculates the distance (line of sight, not cable distance) of ROIs from a target location,
-	//	usually the soma but could be any coordinate. 
-	//	
-	//	Input two waves, one with all the ROIs X coordinates and the other with the Y coordinates.
-	//	}
-		
-	STRUCT ds ds
-	GetStruct(ds)
-	
-	If(ds.numWaves[%ROI_X] != 1 || ds.numWaves[%ROI_Y] != 1 )
-		DoAlert 0,"Must have single X ROI coordinates wave and a single Y ROI coordinates wave."
-		return 0
-	EndIf
-	
-	//Get the coordinates waves
-	Wave xROI = ds.waves[0][%ROI_X]
-	Wave yROI = ds.waves[0][%ROI_Y]
-	
-	//Make the output distance wave
-	String folder = GetWavesDataFolder(xROI,1)
-	
-	String outPath =  folder + RemoveEnding(NameOfWave(xROI),"x") + "_DistanceToSoma"
-	Make/O/N=(DimSize(xROI,0)) $outPath/Wave=distance
-	
-	//calculate distance from the target coordinate.
-	distance = sqrt((xROI[p] - Soma_X)^2 + (yROI[p] - Soma_Y)^2)
-
-End
-
-Function NT_AverageMasked(DS_Data,DS_DataMask,cb_InvertMask,OutputFolder,cb_replaceSuffix)
-	//SUBMENU=Turning Project
-	//TITLE=Average With Data Mask
-	String DS_Data,DS_DataMask
-	Variable cb_InvertMask
-	String OutputFolder
-	Variable cb_replaceSuffix
-	
-//	Note={
-//	Averages waves according to a bitwise data mask. Mask values of 1 are included 
-// in the average.
-
-//	\f01Invert Mask\f00 : Mask values of 0 are included in the average
-//	\f01outFolder\f00 : Folder to put the averaged wave.
-//	\f01ReplaceSuffix\f00 : End of the wave name is replaced with '_avg'. Otherwise '_avg'
-//      is added to the end of the wave name.
-//	}
-	
-	STRUCT ds ds
-	GetStruct(ds)
-	
-	DFREF cdf = GetDataFolderDFR()
-	
-	Wave mask = ds.waves[0][1]
-	
-	If(numpnts(mask) != DimSize(ds.waves,0))
-		Abort "Data mask must have the same number of points as the number of waves"
-	EndIf
-	
-	//Create output folder if specified
-	If(strlen(OutputFolder))
-		If(!DataFolderExists(GetWavesDataFolder(ds.waves[0],1) + OutputFolder))
-			NewDataFolder $(GetWavesDataFolder(ds.waves[0],1) + OutputFolder)
-		EndIf
-	EndIf
-	SetDataFolder GetWavesDataFolder(ds.waves[0],1) + OutputFolder
-		
-	//Make output wave for each wave set
-	If(cb_ReplaceSuffix)
-		String outputName = ReplaceSuffix(NameOfWave(ds.waves[0]),"avg")
+	If(cb_Paired)
+		Variable mode = 4
 	Else
-		outputName = NameOfWave(ds.waves[0]) + "_avg"
+		mode = 3
 	EndIf
+		
+	ModifyGraph mode=(mode),marker=8,msize=3,rgb=(0,0,0),lsize=0.5,opaque=1,btLen=2,btThick=0
+	ModifyGraph axThick=0.5,axThick(bottom)=0.5,standoff(bottom)=0,manTick(left)={0,0.1,0,1},manMinor(left)={0,0},manTick(bottom)={0,1,0,0},manMinor(bottom)={0,0}
+	ModifyGraph margin(left)=28,margin(bottom)=28,margin(right)=7,margin(top)=7,gfSize=8,standoff=0,ZisZ(left)=1
+	SetAxis bottom -0.25,1.25
 	
-	//What is the wave type?
-	Variable type = WaveType(ds.waves[0])
-	
-	//Make the output wave of the same type
-	Make/O/N=(DimSize(ds.waves[0],0),DimSize(ds.waves[0],1),DimSize(ds.waves[0],2))/Y=(type) $outputName/Wave=outWave
-	
-	//Set the scale of the output wave
-	String xDim = WaveUnits(ds.waves[0],0)
-	String yDim = WaveUnits(ds.waves[0],1)
-	String zDim = WaveUnits(ds.waves[0],2)
-	
-	SetScale/P x,DimOffset(ds.waves[0],0),DimDelta(ds.waves[0],0),xDim,outWave
-	SetScale/P y,DimOffset(ds.waves[0],1),DimDelta(ds.waves[0],1),yDim,outWave
-	SetScale/P z,DimOffset(ds.waves[0],2),DimDelta(ds.waves[0],2),zDim,outWave
-	
-	//Add outwave to the output data set
-	AddOutput(outWave,ds)
 
-	//Reset outWave in case of overwrite
-	outWave = 0
+	//Average and SDev wavess
 	
-	String noteStr = "Average: " + num2str(ds.numWaves[0]) + " Waves\r"
+	SetDataFolder GetWavesDataFolderDFR(Control)
+	Make/N=1/O $(NameOfWave(Control) + "_avg")/Wave=avg
+	Make/N=1/O $(NameOfWave(Control) + "_sdev")/Wave=sdev
+
+	WaveStats/Q Control
+	avg = V_avg
+	sdev = V_sdev
 	
-	Variable count = 0
-	ds.wsi = 0
-	Do
-		//Check masking
-		If(cb_InvertMask)
-			If(!mask[ds.wsi])
-				Wave theWave = ds.waves[ds.wsi][0]
-				count += 1
-			Else
-				ds.wsi += 1
-				
-				If(ds.wsi >= ds.numWaves[0])
-					break
-				EndIf
-				continue
-			EndIf
-		Else
-			If(mask[ds.wsi])
-				Wave theWave = ds.waves[ds.wsi][0]
-				count += 1
-			Else
-				ds.wsi += 1
-				If(ds.wsi >= ds.numWaves[0])
-					break
-				EndIf
-				continue
-			EndIf
-		EndIf
-		
-		Multithread outWave += theWave
-		
-		noteStr += ds.paths[ds.wsi][0] + "\r"
-		
-		ds.wsi += 1
-	While(ds.wsi < ds.numWaves[0])
+	SetDataFolder GetWavesDataFolderDFR(Test)
+	Make/N=1/O $(NameOfWave(Test) + "_avg")/Wave=avg
+	Make/N=1/O $(NameOfWave(Test) + "_sdev")/Wave=sdev
 	
-	Multithread outWave /= count
+	WaveStats/Q Test
+	avg = V_avg
+	sdev = V_sdev
 	
-	//Set the wave note
-	Note/K outWave,noteStr
-	
-	//Reset data folder
-	SetDataFolder cdf
+	SetScale/P x,0.999,1.001,avg
 	
 End
 
+Function/Wave ColorTableAlpha(ColorTable,alpha)
+	//creates a duplicate of a standard Igor color table, but with transparency
+	String ColorTable
+	Variable alpha
+	
+	DFREF saveDF = GetDataFolderDFR()
+	
+	If(alpha > 1)
+		print "Transparency must be set to between 0 and 1"
+		return $""
+	EndIf
+	
+	//percentage alpha
+	If(alpha <= 1)
+		alpha = round(0xffff * alpha)
+	EndIf
+	
+	If(!DataFolderExists("root:Packages:NeuroToolsPlus:CustomColors"))
+		NewDataFolder root:Packages:NeuroToolsPlus:CustomColors
+	EndIf
+		
+	DFREF cc = root:Packages:NeuroToolsPlus:CustomColors
+	SetDataFolder cc
+	
+	ColorTab2Wave $ColorTable
+	Wave colorTab = :M_colors
+	
+	Duplicate/O colorTab,$(ColorTable +  "_" + num2str(alpha))
+	Wave colorTab = $(ColorTable +  "_" + num2str(alpha))
+	
+	Redimension/N=(-1,4) colorTab
+	
+	colorTab[][3] = alpha
+	
+	KillWaves/Z M_colors
+	
+	SetDataFolder saveDF
+	
+	return colorTab
+End
 
 
 //Generates a custom color table for a green to magenta fade
-Function NT_CustomColorTable(menu_firstColor,menu_secondColor,alpha)
-	//SUBMENU=Waves and Folders
+Function/WAVE NT_CustomColorTable(menu_firstColor,menu_secondColor,alpha)
+	//SUBMENU=Graphing
 	//TITLE=Custom Color Table
 //	
 //	Note={
@@ -5637,8 +4841,10 @@ Function NT_CustomColorTable(menu_firstColor,menu_secondColor,alpha)
 	
 	//percentage alpha
 	If(alpha <= 1)
+		String alphaStr = num2str(alpha * 100)
 		alpha = round(0xffff * alpha)
 	EndIf
+	
 	
 	DFREF saveDF = GetDataFolderDFR()
 	
@@ -5649,7 +4855,7 @@ Function NT_CustomColorTable(menu_firstColor,menu_secondColor,alpha)
 	DFREF cc = root:Packages:NeuroToolsPlus:CustomColors
 	SetDataFolder cc
 	
-	Make/U/W/O/N=(256,4) cc:$(menu_firstColor + menu_secondcolor)/Wave = color
+	Make/U/W/O/N=(256,4) cc:$(menu_firstColor + menu_secondcolor + "_" + alphaStr)/Wave = color
 	
 	Variable startR,startG,startB,endR,endG,endB
 	
@@ -5756,6 +4962,8 @@ Function NT_CustomColorTable(menu_firstColor,menu_secondColor,alpha)
 	color[][3] = alpha
 	
 	SetDataFolder saveDF
+	
+	return color
 End
 
 Function copyTable()

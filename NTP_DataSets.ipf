@@ -101,12 +101,12 @@ Function CreateOutputDataSet(ds)
 	Wave/T DSNamesLB_ListWave = NPD:DSNamesLB_ListWave
 	DSNamesLB_ListWave[index][0][1] = filterSettingStr
 	
-	SetDSGroup(group="All")
-	Wave DSGroupContentsSelWave = NPD:DSGroupContentsSelWave
-	DSGroupContentsSelWave = 0
-	DSGroupContentsSelWave[index] = 1
-	ListBox DSGroupContents win=NTP#Data,selRow = index
-	changeDataSet(dsName)
+//	SetDSGroup(group="All")
+//	Wave DSGroupContentsSelWave = NPD:DSGroupContentsSelWave
+//	DSGroupContentsSelWave = 0
+//	DSGroupContentsSelWave[index] = 1
+//	ListBox DSGroupContents win=NTP#Data,selRow = index
+//	changeDataSet(dsName)
 //	
 //	//Data Set Names list box Selection and List waves
 //	Wave/T DSNamesLB_ListWave = NPD:DSNamesLB_ListWave
@@ -269,6 +269,18 @@ Function addDataSet(dsName)
 		SetupDSGroupForm(dsName) //reopen the form with the new data set
 	EndIf
 	
+	//Make sure the all group is visible after data set creation
+	ControlInfo/W=NTP#Data HideAllGroup
+
+	If(V_Value)
+		CheckBox HideAllGroup win=NTP#Data,value=0
+		STRUCT WMCheckboxAction cba //rebuild the data group waves accordingly
+		cba.checked = 0
+		cba.eventCode = 2
+		cba.ctrlName = "HideAllGroup"
+		NTPCheckProc(cba) //trigger the checkbox code
+	EndIf
+		
 	SetDSGroup(group="All",dataset=dsName)
 	
 	//Switch focus to the DataSet list box
@@ -422,8 +434,13 @@ End
 
 //Creates a new data archive
 //Creates an empty DataSet_load, returns it's name
-Function/S NewDataTable([isOutputDS])
+Function/S NewDataTable([isOutputDS,dsName])
 	Variable isOutputDS
+	String dsName
+	
+	If(ParamIsDefault(dsName))
+		dsName = ""
+	EndIf
 	
 	isOutputDS = ParamIsDefault(isOutputDS) ? 0 : 1
 	
@@ -431,27 +448,29 @@ Function/S NewDataTable([isOutputDS])
 	DFREF NPC = $CW
 	
 	If(isOutputDS)
-		String dsName = "Output"
+		dsName = "Output"
 	Else
-		Do
-			dsName = ""
-			Prompt dsName,"Name of Data Table:"
-			DoPrompt "New Data Table",dsName
+		If(ParamIsDefault(dsName) || !strlen(dsName))
+			Do
+				dsName = ""
+				Prompt dsName,"Name of Data Table:"
+				DoPrompt "New Data Table",dsName
+				
+				If(!cmpstr(dsName,"Output"))
+					DoAlert/T="Add Data Set" 0, "The data set name 'Output' is reserved."
+					Variable reservedName = 1
+				Else
+					reservedName = 0
+				EndIf
+			While(reservedName)
 			
-			If(!cmpstr(dsName,"Output"))
-				DoAlert/T="Add Data Set" 0, "The data set name 'Output' is reserved."
-				Variable reservedName = 1
-			Else
-				reservedName = 0
+			//cancelled
+			If(V_flag)
+				return ""
 			EndIf
-		While(reservedName)
+		EndIf
 	EndIf
-	
-	//cancelled
-	If(V_flag)
-		return ""
-	EndIf
-	
+
 	addDataSet(dsName)
 	
 	//Is the data set already archived? Returns if it does
@@ -462,7 +481,7 @@ Function/S NewDataTable([isOutputDS])
 	EndIf 
 	
 	//Set the column dimension labels
-	String colLabels = "Pos_0;Pos_1;Pos_2;Pos_3;Pos_4;Pos_5;Pos_6;Pos_7;Pos_8;Pos_9;Trials;Traces;Channels;Comment;IgorPath;Path;Type;Marker;"
+	String colLabels = "Path;IgorPath;Pos_0;Pos_1;Pos_2;Pos_3;Pos_4;Pos_5;Pos_6;Pos_7;Pos_8;Pos_9;Trials;Traces;Channels;Comment;Type;Marker;"
 	
 	//This will be a table based on underscore position, with up to 10 positions. Right now filtering only supports 7 though.
 	Make/O/T/N=(1,ItemsInList(colLabels,";")) NPD:$("DS_" + dsName + "_archive")/Wave=archiveBASE
@@ -474,7 +493,7 @@ Function/S NewDataTable([isOutputDS])
 	EndFor
 	
 	If(!isOutputDS)
-		Edit/K=1 archiveBASE.ld as "Data Set: " + dsName
+		openArchive(dsName)
 	EndIf
 	
 	return dsName
@@ -567,7 +586,7 @@ Function archiveDataSet(dataset,doCollapse,obeyGroupings)
 	
 	
 	//Set the column dimension labels
-	String colLabels = "Pos_0;Pos_1;Pos_2;Pos_3;Pos_4;Pos_5;Pos_6;Pos_7;Pos_8;Pos_9;Trials;Traces;Channels;Comment;IgorPath;Path;Type;Marker;"
+	String colLabels = "Path;IgorPath;Pos_0;Pos_1;Pos_2;Pos_3;Pos_4;Pos_5;Pos_6;Pos_7;Pos_8;Pos_9;Trials;Traces;Channels;Comment;Type;Marker;"
 	
 	
 	//This will be a table based on underscore position, with up to 10 positions. Right now filtering only supports 7 though.
@@ -812,6 +831,9 @@ Function deleteDataSet(dsName)
 	Wave/T archive = NPD:$("DS_" + dsName + "_archive")
 	ReallyKillWaves(BASE)
 	ReallyKillWaves(ORG)
+	
+	//Kill any window panels for this archive
+	KillWindow/Z $("archivePanel_" + dsName)
 	ReallyKillWaves(archive)
 	
 	KillStrings/Z notes
@@ -882,7 +904,7 @@ Function deleteDataSet(dsName)
 	
 	SetDSGroup(group="All")
 	
-	OpenDSNotesEntry()
+	OpenDSNotesEntry2()
 	
 	notificationEntry = "Deleted Data Set: \f01" + delDSName
 	SendNotification()
@@ -982,7 +1004,7 @@ Function changeDataSet(dsName)
 	drawFullPathText()
 	
 	//Change the DS Notes to the new data set
-	OpenDSNotesEntry(dataset=dsName)
+	OpenDSNotesEntry2(dataset=dsName)
 	
 						
 	Variable numWS_DS = GetNumWaveSets(ds)
@@ -1039,9 +1061,85 @@ Function CheckDataSetWaves([dsName])
 	EndFor
 End
 
+Function/Wave GetDataTableLine(dsName,dti)
+	//Returns a wave reference wave containing the waves from a single line on a data table
+	String dsName
+	Variable dti
+	
+	Wave/T archive = GetDataSetWave(dsName,"ARCHIVE")
+	If(!WaveExists(archive))
+		return $""
+	EndIf
+	
+	Variable i,j,k,m,rows
+	rows = DimSize(archive,0)
+	
+	//loop through each row in the archive table
+	Make/FREE/N=0/T dtiWaves
+	Variable currentRow = 0
+
+	String path = archive[dti][%IgorPath] //full path to the wave
+	If(!strlen(path))
+		path = "root:"
+	EndIf
+	
+	//loop through each underscore position
+	For(j=0;j<10;j+=1)
+		String item = archive[dti][%$("Pos_" + num2str(j))]
+		
+		If(!strlen(item))
+			continue
+		EndIf
+		
+		//resolve any list syntax (commas and hyphens)
+		String itemList = resolveListItems(item,",")
+		
+		Variable size = DimSize(dtiWaves,0)
+			
+		If(size - currentRow > 0)
+			Variable expansion = ItemsInList(itemList,",") - 1
+				
+			//Loop through the rows in the current block and add the underscore positions
+			For(k=size - 1;k > currentRow - 1;k-=1) //go backwards
+				InsertPoints/M=0 k+1,expansion,dtiWaves
+				
+				String baseName = dtiWaves[k]
+				dtiWaves[k,k + expansion] = baseName
+				
+				//In the case of a list, add each list item to each row in the block sequence
+				For(m=0;m<ItemsInList(itemList,",");m+=1)
+					item = StringFromList(m,itemList,",")
+
+					dtiWaves[k + m] += item + "_"
+				EndFor
+				
+			EndFor
+
+		Else
+			//resize the BASE data set
+			Redimension/N=(currentRow + ItemsInList(itemList,",")) dtiWaves
+			For(m=0;m<ItemsInList(itemList,",");m+=1)
+				item = StringFromList(m,itemList,",")
+				dtiWaves[currentRow + m] = path + item + "_"
+			EndFor
+		EndIf
+	EndFor
+	
+	If(DimSize(dtiWaves,0) > 0)
+		//Remove any extra underscores from the wave names
+		dtiWaves = RemoveEnding(dtiWaves[p],"_")
+	EndIf
+	
+	Make/N=(DimSize(dtiWaves,0))/FREE/WAVE refs
+	refs = $dtiWaves[p]
+	
+	return refs
+End
+
+
 //Returns the wave reference to the named data set
 Function/Wave GetDataSetWave(dsName,version,[checkArchive])
-	//version is either "BASE","ORG",or "NOLABEL" for the 3 existing copies of the data set
+	//version is either "BASE","ORG",or "ARCHIVE" for the 3 existing copies of the data set
 	String dsName,version
 	Variable checkArchive //this can be used to perform updates of the ORG data set. Leave at 0 normally to avoid recursion
 	
@@ -1126,13 +1224,8 @@ Function/WAVE transferArchivedDataSet(dsName)
 	
 	//loop through each row in the archive table
 	For(i=0;i<rows;i+=1)
-		
-		Variable pathCol = FindDimLabel(archive,1,"IgorPath")
-		If(pathCol < 0)
-			continue
-		EndIf
-		
-		String path = archive[i][pathCol] //full path to the wave
+
+		String path = archive[i][%IgorPath] //full path to the wave
 		If(!strlen(path))
 			path = "root:"
 		EndIf
@@ -1147,7 +1240,7 @@ Function/WAVE transferArchivedDataSet(dsName)
 			
 		//loop through each underscore position
 		For(j=0;j<10;j+=1)
-			String item = archive[i][j]
+			String item = archive[i][%$("Pos_" + num2str(j))]
 			
 			If(!strlen(item))
 				continue
@@ -1255,7 +1348,7 @@ Function CheckDSGroupLists()
 	
 	size = DimSize(DSGroupContents,0)
 	For(i=size-1;i>-1;i-=1)
-		If(!strlen(DSGroupContents[i][0])) //'All data group'
+		If(!strlen(DSGroupContents[i][%All])) //'All data group'
 			DeletePoints/M=0 i,1,DSGroupContents
 			
 			If(DimSize(DSGroupContents,0) == 0)
@@ -1503,7 +1596,7 @@ Function/WAVE GetWaveSetRefs(listWave,wsn,name)
 				break
 			EndIf
 			
-			If(!strlen(currentDS[DimSize(currentDS,0)-1]))
+			If(!strlen(currentDS[DimSize(currentDS,0)-1][0][0]))
 				DeletePoints/M=0 DimSize(currentDS,0)-1,1,currentDS
 			Else
 				break
@@ -1838,14 +1931,39 @@ Function SetDSGroup([group,dataset])
 	EndIf
 	
 	//refresh the contents wave
-	Variable index = FindDimLabel(DSGroupContents,1,group)
 	
-	If(index < 0)
-		return 0
+	//Check if the 'All' group is set to visible or hidden
+	ControlInfo/W=NTP#Data HideAllGroup
+	If(V_Value == 1)
+		//'All' group is hidden
+		If(!cmpstr(group,"All"))
+			//If we're switching to All anyway
+			Variable index = FindDimLabel(DSGroupContents,1,group)
+		Else
+			index = FindDimLabel(DSGroupContents,1,group) - 1
+		EndIf
+			
+		If(index < 0)
+			return 0
+		EndIf
+		
+		//Change the group list box to the indicated group
+		ListBox DSGroups win=NTP#Data,selRow=index
+		
+		index += 1 //return index to its normal value as if the 'All' group was visible
+	Else
+		//'All' group is visible
+		index = FindDimLabel(DSGroupContents,1,group)
+		
+		If(index < 0)
+			return 0
+		EndIf
+		
+		//Change the group list box to the indicated group
+		ListBox DSGroups win=NTP#Data,selRow=index
 	EndIf
 	
-	//Change the group list box to the indicated group
-	ListBox DSGroups win=NTP#Data,selRow=index
+	
 	
 	
 	Redimension/N=(DimSize(DSGroupContents,0)) DSGroupContentsListWave,DSGroupContentsSelWave
@@ -1886,12 +2004,12 @@ Function SetDSGroup([group,dataset])
 	//check if there is a data set selected and adjust the notes text and change the data set displayed
 	ControlInfo/W=NTP#Data DSGroupContents
 	If(DimSize(DSGroupContentsListWave,0) == 0)
-		OpenDSNotesEntry()
+		OpenDSNotesEntry2()
 		changeDataSet("") //empty data set
 	Else
 		dataset = DSGroupContentsListWave[V_Value]
 		changeDataSet(dataset) //newly selected data set
-		OpenDSNotesEntry(dataset=dataset)
+		OpenDSNotesEntry2(dataset=dataset)
 	EndIf
  	
 End
@@ -1957,7 +2075,7 @@ Function DeleteDSGroup([group])
 		
 			RemoveEmptyCells(DSGroupContentsListWave,0)
 		EndIf		
-		Redimension/N=(DimSize(DSGroupContents,0)),DSGroupContentsSelWave
+		Redimension/N=(DimSize(DSGroupContentsListWave,0)),DSGroupContentsSelWave
 	Else
 		Redimension/N=0 DSGroupContentsListWave,DSGroupContentsSelWave
 	EndIf
@@ -2171,18 +2289,27 @@ Function openArchive(dataset)
 	DFREF NPD = $DSF
 	Wave/Z/T archive = NPD:$("DS_" + dataset + "_archive")
 	
+	String dataSetTempName = ReplaceString(" ",dataset,"_")
+	
 	//Check if the archive is already open
 	
 	Variable i
-	String list = WinList("archive*",";","WIN:2")
+	String list = WinList("*archive*",";","WIN:64") //look for panels
 	For(i=0;i<ItemsInList(list,";");i+=1)
 		String table = StringFromList(i,list,";")
-		String name = NameOfWave(WaveRefIndexed(table,i,3))
+//		String name = NameOfWave(WaveRefIndexed(table,i,3))
+//		String name = ReplaceString(" Archive",table,"")
 		
-		If(!cmpstr(name,"DS_" + dataset + "_archive"))
+		If(!cmpstr(table,"archivePanel_" + dataSetTempName))
 			DoWindow/F $table
 			return 0
 		EndIf
+//		
+//		If(!cmpstr(name,"DS_" + dataset + "_archive"))
+//			DoWindow/F $table
+//			return 0
+//		EndIf
+		
 	EndFor
 	
 	GetMouse
@@ -2191,25 +2318,30 @@ Function openArchive(dataset)
 	If(IgorVersion() < 9)
 		Variable w = 800
 		Variable h = 300
-		NewPanel/K=1/W=(V_left - w/2,V_top - h,V_left + w/2,V_top)/N=archivePanel as dataset + " Archive"
+		
+		
+		String panelName = "archivePanel_" +  dataSetTempName
+		NewPanel/K=1/W=(V_left - w/2,V_top - h,V_left + w/2,V_top)/N=$panelName as dataset + " Archive"
 	
-		Edit/HOST=archivePanel/W=(160,0,w + 2000,h + 2000)/N=archive archive.ld as dataset + " Archive"
+		Edit/HOST=$panelName/W=(160,0,w + 2000,h + 2000)/N=archive archive as dataset + " Archive"
+		ModifyTable/W=$panelName#archive horizontalIndex=2,alignment=1
 		
 		//Control buttons
 		Variable top = 5
 		
 		String buttonList ="Browse File;Get Wave Names;Insert Row;Fill Selection With Top;Increment From Top;"
-		buttonList += "Mark By Folder;Add To Igor Path;Remove Last SubPath;Load Selection;Collapse By Folder;New DS With Selection;"
+		buttonList += "Mark By Folder;Add To Igor Path;Remove Last SubPath;Load Selection;Collapse By Folder;New DS With Selection;Add Rows;First Item Only;"
 		For(i=0;i<ItemsInList(buttonList,";");i+=1)
-			name = StringFromList(i,buttonList,";")
+			String name = StringFromList(i,buttonList,";")
 			String buttonName = StringFromList(0,name,",")
 			
 			String ctrlName = "archive_" + ReplaceString(" ",buttonName,"")
-			Button $ctrlName win=archivePanel,pos={5,top},size={150,20},title=buttonName,proc=archiveButtonProc; top += 25
+			Button $ctrlName win=$panelName,pos={5,top},size={150,20},title=buttonName,proc=archiveButtonProc; top += 25
 		EndFor
 		
 	Else
-		Edit/W=(V_left - w/2,V_top - h,V_left + w/2,V_top)/N=archive archive.ld as dataset + " Archive"
+		Edit/W=(V_left - w/2,V_top - h,V_left + w/2,V_top)/N=archive archive as dataset + " Archive"
+		ModifyTable/W=$panelName#archive horizontalIndex=2,alignment=1
 	EndIf
 	
 End
@@ -2222,7 +2354,10 @@ Function archiveButtonProc(ba) : ButtonControl
 			// click code here
 			strswitch(ba.ctrlName)
 				case "archive_BrowseFile":
-					InsertFilePath()
+					Variable nFiles = InsertFilePath()
+					
+					InsertWaveNames(nFiles = nFiles)
+					
 					break
 				case "archive_GetWaveNames":
 					InsertWaveNames()
@@ -2253,6 +2388,12 @@ Function archiveButtonProc(ba) : ButtonControl
 					break
 				case "archive_NewDSWithSelection":
 					NewDataSetWithSelection()
+					break
+				case "archive_AddRows":
+					AddRowsToDataTable()
+					break
+				case "archive_FirstItemOnly":
+					CollapseToFirstItem()
 					break
 			endswitch
 			break
@@ -2385,7 +2526,89 @@ Function RemoveFromDSGroup([dataset,group])
 	SendNotification()
 End
 
-Function OpenDSNotesEntry([dataset])
+Function OpenDSNotesEntry2([dataset])
+	String dataset
+	
+	DFREF NPD = $DSF
+	DFREF NPC = $CW
+	
+	
+	If(numtype(strlen(dataset)) == 2)
+		dataset = ""
+	EndIf
+	
+	
+	//Draw the function name or data set name above the note
+	ControlInfo/W=NTP#Func DSNotesBox
+	Variable topPos = V_top + 8
+	
+	//Delete the existing title and refresh
+	SetDrawLayer/W=NTP#Func Overlay
+	DrawAction/W=NTP#Func getgroup=dsNotesText,delete
+	
+	SetDrawLayer/W=NTP#Func Overlay
+	SetDrawEnv/W=NTP#Func gstart,gname=dsNotesText,xcoord= abs,ycoord= abs, fsize=16, textxjust= 0,textyjust= 2,fname="Helvetica Light"
+	DrawText/W=NTP#Func 15,topPos,"Data Set:    \f01" + dataset
+	
+	SetDrawEnv/W=NTP#Func gstop
+	
+	//Positions are relative to the DSNotesBox ControlInfo call a few lines up.
+	Button SaveNotes win=NTP#Func,pos={V_right - 75,V_top},size={70,20},font=$LIGHT,fsize=12,title="Save Notes",disable=0,proc=NTPButtonProc
+	
+	
+	Wave/T DSGroupContentsListWave = NPD:DSGroupContentsListWave
+	NVAR funcPanelWidth = NPC:funcPanelWidth
+	
+	If(ParamIsDefault(dataset))
+		ControlInfo/W=NTP#Data DSGroupContents
+		If(V_Value > DimSize(DSGroupContentsListWave,0) - 1)
+			dataset = ""
+		Else
+			dataset = DSGroupContentsListWave[V_Value]
+		EndIf
+	Else
+		If(!strlen(dataset))
+			dataset = ""
+		EndIf
+	EndIf
+	
+	String notesName = ReplaceString(" ",dataset,"_")
+	SVAR DSNotes = NPD:$("DS_" + notesName + "_notes")
+	
+	If(SVAR_Exists(DSNotes))
+		Notebook NTP#Func#DSNotebook,selection={startOfFile,endOfFile},writeProtect=0,setData=DSNotes
+	Else
+		Notebook NTP#Func#DSNotebook,selection={startOfFile,endOfFile},writeProtect=0,setData=""
+	EndIf
+	
+End
+
+Function SaveDataSetNotes(dataset)
+	String dataset
+	
+	DFREF NPD = $DSF
+	DFREF NPC = $CW
+	
+	If(!strlen(dataset))
+		return 0
+	EndIf
+	
+	Notebook NTP#Func#DSNotebook,getData=1
+	
+	String notesName = ReplaceString(" ",dataset,"_")
+	SVAR DSNotes = NPD:$("DS_" + notesName + "_notes")
+	
+	If(SVAR_Exists(DSNotes))
+		DSNotes = S_Value
+	Else
+		//notes don't exist, make a new one
+		String/G NPD:$("DS_" + notesName + "_notes")
+		SVAR DSNotes = NPD:$("DS_" + notesName + "_notes")
+		DSNotes = S_Value
+	EndIf
+End
+
+//Function OpenDSNotesEntry([dataset])
 	String dataset
 	
 	DFREF NPD = $DSF
@@ -2409,13 +2632,14 @@ Function OpenDSNotesEntry([dataset])
 	
 	String notesName = ReplaceString(" ",dataset,"_")
 	SVAR DSNotes = NPD:$("DS_" + notesName + "_notes")
-		
+	
+	
 	//Find position of previously built panels
 	ControlInfo/W=NTP#Data dataSetPanel
 	Variable topPos = V_top
 	Variable height = V_height
 	
-	GroupBox DSNotesBox win=NTP#Func,pos={0,topPos},size={funcPanelWidth - 5,height},disable=0
+//	GroupBox DSNotesBox win=NTP#Func,pos={0,topPos},size={funcPanelWidth - 5,height},disable=0
 	
 	topPos += 8
 	
@@ -2433,7 +2657,6 @@ Function OpenDSNotesEntry([dataset])
 	
 	SetDrawEnv/W=NTP#Func gstop
 
-	
 End
 
 Function notesHook(s)
@@ -2505,8 +2728,8 @@ Function AddKeystrokeToNote(keyText,keyCode,specialKeyCode,dsName)
 		DSNotes = DSNotes[0,strlen(DSNotes)-2] + keyText + "_"
 	EndIf
 	
-	ControlInfo/W=NTP#Func DSNotesBox
-	Variable topPos = V_top + 3
+	ControlInfo/W=NTP#Data dataSetPanel
+	Variable topPos = V_top + 8
 	
 	SetDrawLayer/W=NTP#Func Overlay
 	DrawAction/W=NTP#Func getgroup=dsNotesText,delete
@@ -2516,7 +2739,7 @@ Function AddKeystrokeToNote(keyText,keyCode,specialKeyCode,dsName)
 	DrawText/W=NTP#Func 15,topPos,"Notes:    \f01" + dsName
 	
 	SetDrawEnv/W=NTP#Func gstart,gname=dsNotesText,xcoord= abs,ycoord= abs, fsize=12, textxjust= 0,textyjust= 2,fname=$LIGHT
-	DrawText/W=NTP#Func 15,topPos + 20,DSNotes
+	DrawText/W=NTP#Func 15,topPos + 35,DSNotes
 	
 	SetDrawEnv/W=NTP#Func gstop
 End
