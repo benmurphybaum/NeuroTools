@@ -103,12 +103,17 @@ Function/WAVE GetDataSummary(DataSummary,DataSummarySelWave,dataFile)
 	Wave DataSummarySelWave //selection wave for the summary list box
 	String dataFile
 	
+	DFREF NPC = $CW
+	
 	PathInfo SystemFolderPath
 	If(V_flag)
 		String dataPath = S_path + dataFile
+		String dataFolder = S_path
 	Else
 		return $""
 	EndIf
+	
+	Variable fileID
 	
 	//What is the file type?
 	String extension = ParseFilePath(0,dataFile,".",1,0)
@@ -116,18 +121,62 @@ Function/WAVE GetDataSummary(DataSummary,DataSummarySelWave,dataFile)
 		case "abf":
 		case "abf2":
 			print "PClamp"
+			
+			Wave SystemFilesSelWave = NPC:SystemFilesSelWave
+			Wave/T SystemFilesListWave = NPC:SystemFilesListWave
+
+			//How many files are selected?
+			String seriesList = ""
+			String fileNameList = ""
+			Variable i
+			For(i=0;i<DimSize(SystemFilesSelWave,0);i+=1)
+				If(SystemFilesSelWave[i] > 0)
+					fileNameList += SystemFilesListWave[i] + ";"
+					seriesList += num2str(str2num(ParseFilePath(0,RemoveEnding(SystemFilesListWave[i],".abf"),"_",1,0))) + ";"
+				EndIf
+			EndFor
+			
+			Variable nSeries = ItemsInList(seriesList,";")
+			
+			//Redimension the data summary wave
+			Redimension/N=(nSeries,5) DataSummary
+			Redimension/N=(nSeries) DataSummarySelWave
+			
+			//Add in the series list to the data summary
+			DataSummary[][0] = StringFromList(p,seriesList,";")
+			
+			For(i=0;i<nSeries;i+=1)
+				Variable index = str2num(StringFromList(i,seriesList,";"))
+				String abfPath = dataFolder + SystemFilesListWave[index]
+				String sweepStr = "1-" + num2str(pClamp_GetNumSweeps(abfPath))
+				
+				//Add in the protocol name to the data summary
+				String protocol = pClamp_GetProtocolName(abfPath)
+				DataSummary[i][1] = protocol
+				
+				//Add in the series list to the data summary
+				DataSummary[i][2] = sweepStr
+				
+				String chUnits = pClamp_GetChannelUnits(abfPath)
+				DataSummary[i][3] = StringFromList(0,chUnits,";")
+				
+				//Add in pClamp indicator
+				DataSummary[i][4] = "pClamp"
+			EndFor
+			
+			
+			
 			break
 		case "h5":
 		case "hdf5":
 			
 			//Open the file
-			Variable fileID
 			HDF5OpenFile/R fileID as dataPath
 			
 			//Series list
-			String seriesList = TT_GetSeriesList(fileID,";")
+			seriesList = TT_GetSeriesList(fileID,";")
 			
-			Variable nSeries = ItemsInList(seriesList,";")
+			nSeries = ItemsInList(seriesList,";")
 			Redimension/N=(nSeries,5) DataSummary
 			Redimension/N=(nSeries) DataSummarySelWave
 			
@@ -142,7 +191,6 @@ Function/WAVE GetDataSummary(DataSummary,DataSummarySelWave,dataFile)
 			HDF5OpenGroup/Z fileID,"/Data",DataGroup_ID
 			
 			//How many sweeps are in each series number?
-			Variable i
 			For(i=0;i<nSeries;i+=1)
 				String sweepList = TT_GetSweepList(fileID,DataSummary[i][0],";")
 				String firstNum = StringFromList(0,sweepList,";")
@@ -272,8 +320,21 @@ Function SystemFilesListProc(lba) : ListBoxControl
 			EndFor
 			
 			If(count > 1)
-				Redimension/N=1 DataContentsListWave,DataContentsSelWave
-				DataContentsListWave = "Multiple data files are selected..."
+				If(stringmatch(listWave[row],"*.abf") || stringmatch(listWave[row],"*.abf2"))
+					Redimension/N=(1,5) DataContentsListWave
+					Redimension/N=1 DataContentsSelWave
+					DataContentsListWave = ""
+					DataContentsSelWave = 0
+					
+					//pass .abf string if you want the function to resolve multiple item list of files
+					GetDataSummary(DataContentsListWave,DataContentsSelWave,".abf")
+					
+					ListBox DataContents win=DLI,special={0,0,1}
+					
+				Else
+					Redimension/N=1 DataContentsListWave,DataContentsSelWave
+					DataContentsListWave = "Multiple data files are selected..."
+				EndIf
 			ElseIf(count == 0)
 				Redimension/N=0 DataContentsListWave,DataContentsSelWave
 			ElseIf(count == 1)
@@ -391,13 +452,19 @@ Function AddDataButtonProc(ba) : ButtonControl
 					
 					For(i=0;i<DimSize(DataContentsListWave,0);i+=1)
 						If(DataContentsSelWave[i] > 0)
+							
 							Variable newSize = DimSize(AddDataList,0) + 1
 							Redimension/N=(newSize,6) AddDataList
 							Redimension/N=(newSize) AddDataSelWave
 							
 							Variable whichRow = DimSize(AddDataList,0)-1
 							
-							AddDataList[whichRow][0] = S_path + DataFile
+							//Check if it's a pClamp file, in which case we must take the corresponding file path for each individual file
+							If(stringmatch(DataContentsListWave[i][4],"*pClamp*"))
+								AddDataList[whichRow][0] = S_path + DataListWave[i]
+							Else
+								AddDataList[whichRow][0] = S_path + DataFile
+							EndIf
 							AddDataList[whichRow][1,*] = DataContentsListWave[i][q-1]
 						EndIf	
 					EndFor
@@ -507,58 +574,70 @@ Function CustomizeButtonProc(ba) : ButtonControl
 				archive[i][%Comment] = protocol
 				archive[i][%Type] = fileType
 				
+				Variable skipCollapse = 0
+				If(!cmpstr(archive[i][%Type],"pClamp"))
+					skipCollapse = 1
+					
+					String channels = pClamp_GetChannelIndices(path)
+					archive[i][%Channels] = channels
+					
+					archive[i][%Pos_4] = channels
+				EndIf
+				
 				ModifyTable showParts=2^0 + 2^2 + 2^3 + 2^4 + 2^5 + 2^6 + 2^7 
 			EndFor
 			
-			//Check for any possible rows that can be collapsed into a range in a single row
-			String commonList = ""
-			String commonListIndex = ""
-			String doneList = ""
-			String refIndexList = ""
 			
-			For(i=0;i<nRows;i+=1)
-				If(WhichListItem(num2str(i),doneList,";") != -1)
-					continue
-				EndIf
+			//Check for any possible rows that can be collapsed into a range in a single row
+			If(!skipCollapse)
+				String commonList = ""
+				String commonListIndex = ""
+				String doneList = ""
+				String refIndexList = ""
 				
-				String refPath = archive[i][%Path]
-				String refTraces = archive[i][%Traces]
-				String refComment = archive[i][%Comment]
-				
-				commonList += archive[i][%Trials] + ","
-				commonListIndex += num2str(i) + ","
-				
-				For(j=i+1;j<nRows;j+=1)
-					If(!cmpstr(refPath,archive[j][%Path]) && !cmpstr(refTraces,archive[j][%Traces]) && !cmpstr(refComment,archive[j][%Comment]))
-						commonList += archive[j][%Trials] + ","
-						commonListIndex += num2str(j) + ","
-						doneList += num2str(j) + ";"
+				For(i=0;i<nRows;i+=1)
+					If(WhichListItem(num2str(i),doneList,";") != -1)
+						continue
 					EndIf
+					
+					String refPath = archive[i][%Path]
+					String refTraces = archive[i][%Traces]
+					String refComment = archive[i][%Comment]
+					
+					commonList += archive[i][%Trials] + ","
+					commonListIndex += num2str(i) + ","
+					
+					For(j=i+1;j<nRows;j+=1)
+						If(!cmpstr(refPath,archive[j][%Path]) && !cmpstr(refTraces,archive[j][%Traces]) && !cmpstr(refComment,archive[j][%Comment]))
+							commonList += archive[j][%Trials] + ","
+							commonListIndex += num2str(j) + ","
+							doneList += num2str(j) + ";"
+						EndIf
+					EndFor
+					
+					commonList = RemoveEnding(commonList,",") + ";"
+					commonListIndex += RemoveEnding(commonListIndex,",") + ";"
 				EndFor
 				
-				commonList = RemoveEnding(commonList,",") + ";"
-				commonListIndex += RemoveEnding(commonListIndex,",") + ";"
-			EndFor
-			
-			nRows = ItemsInList(commonList,";")
-			For(i=0;i<nRows;i+=1)
-				String list = StringFromList(i,commonList,";")
-				String listIndex = StringFromList(i,commonListIndex,";")
+				nRows = ItemsInList(commonList,";")
+				For(i=0;i<nRows;i+=1)
+					String list = StringFromList(i,commonList,";")
+					String listIndex = StringFromList(i,commonListIndex,";")
+					
+					refIndexList += StringFromList(0,listIndex,",") + ";"
+					
+					Variable refIndex = str2num(StringFromList(0,listIndex,","))
+					archive[refIndex][%Trials] = ListToRange(list,",")
+					archive[refIndex][%Pos_2] = archive[refIndex][%Trials]
+				EndFor
 				
-				refIndexList += StringFromList(0,listIndex,",") + ";"
-				
-				Variable refIndex = str2num(StringFromList(0,listIndex,","))
-				archive[refIndex][%Trials] = ListToRange(list,",")
-				archive[refIndex][%Pos_2] = archive[refIndex][%Trials]
-			EndFor
-			
-			//delete all rows not included in the ranges
-			For(i=DimSize(archive,0)-1;i>-1;i-=1)
-				If(WhichListItem(num2str(i),refIndexList,";") == -1)
-					DeletePoints/M=0 i,1,archive
-				EndIf
-			EndFor
-			
+				//delete all rows not included in the ranges
+				For(i=DimSize(archive,0)-1;i>-1;i-=1)
+					If(WhichListItem(num2str(i),refIndexList,";") == -1)
+						DeletePoints/M=0 i,1,archive
+					EndIf
+				EndFor
+			EndIf			
 			break
 		case -1: // control being killed
 			break

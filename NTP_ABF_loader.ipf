@@ -375,6 +375,199 @@ Function pClamp_GetNumSweeps(file)
 	return nSweeps
 End
 
+Function/S pClamp_GetChannelUnits(file)
+	String file //this needs to be a full path to the file
+	
+	file = RemoveEnding(file,".abf") + ".abf"
+	
+	Variable refnum,nSweeps
+	
+	Open/R/Z=2 refnum as file
+		
+	If(V_flag == -1 || V_flag > 0)
+		return ""
+	EndIf
+		
+	Variable i
+		
+	//Number sweeps
+	Wave StringsSection = GetStringsSection(refnum)
+
+	FSetPos refnum,StringsSection[0]*512
+	String bigString = ""
+	bigString = PadString(bigString,StringsSection[1],0)
+	FBInRead refnum,bigString
+	String progStr = "clampex;clampfit;axoscope;patchexpress"
+	Variable goodStart
+	For(i=0;i<4;i+=1)
+		goodStart = strsearch(bigString,StringFromList(i,progStr,";"),0,2)
+		If(goodStart)
+			break
+		EndIf
+	EndFor
+	
+	Variable lastSpace = 0
+	Variable nextSpace
+
+	bigString = bigString[goodStart,strlen(bigString)]
+	Make/FREE/T/N=1 Strings
+	Strings[0] = ""
+
+	For(i=0;i<30;i+=1)
+		Redimension/N=(i+1) Strings
+		nextSpace = strsearch(bigString,"\u0000",lastSpace)
+		If(nextSpace == -1)
+			Redimension/N=(i) Strings
+			break
+		EndIf
+		Strings[i] = bigString[lastSpace,nextSpace]
+		lastSpace = nextSpace + 1
+	EndFor
+	
+	String chUnits = ""
+	For(i=3;i<9;i+=2)
+		String unit = TrimString(Strings[i])
+		strswitch(unit)
+			case "pA":
+				chUnits += "VC;"
+				break
+			case "mV":
+				chUnits += "CC;"
+				break
+		endswitch
+	EndFor
+	
+	return chUnits
+End
+
+Function/S pClamp_GetChannelIndices(file)
+	String file //this needs to be a full path to the file
+	
+	file = RemoveEnding(file,".abf") + ".abf"
+	
+	Variable refnum,nSweeps
+	
+	Open/R/Z=2 refnum as file
+		
+	If(V_flag == -1 || V_flag > 0)
+		return ""
+	EndIf
+		
+	Variable i,j
+	
+	String adcStr = "ADCNum;telegraphEnable;telegraphInstrument;telegraphAdditGain;telegraphFilter;telegraphMembraneCap;telegraphMode;"
+	adcStr += "telegraphAccessResistance;ADCPtoLChannelMap;ADCSamplingSeq;ADCProgrammableGain;ADCDisplayAmplification;ADCDisplayOffset;"
+	adcStr += "instrumentScaleFactor;instrumentOffset;signalGain;signalOffset;signalLowpassFilter;signalHighpassFilter;lowpassFilterType;"
+	adcStr += "highpassFilterType;postProcessLowpassFilter;postProcessLowpassFilterType;enabledDuringPN;StatsChannelPolarity;ADCChannelNameIndex;ADCUnitsIndex"
+	
+	Wave ADCSection = GetADCSection(refnum)
+	Make/FREE/N=(ItemsInList(adcStr,";"),ADCSection[2]) ADCsec
+	
+	Make/FREE/N=(ADCSection[2])ADCSamplingSeq	
+	
+	Variable bitFormat,unitsIndex
+	String theStr
+	For(i=0;i<ADCSection[2];i+=1)
+		Variable offset = ADCSection[0]*512 + ADCSection[1]*i
+		fSetPos refnum,offset
+		
+		For(j=0;j<ItemsInList(adcStr,";");j+=1)
+			theStr = StringFromList(j,adcStr,";")
+			If(stringMatch(theStr,"ADCNum") || stringMatch(theStr,"telegraphEnable") || stringMatch(theStr,"telegraphInstrument") || stringMatch(theStr,"telegraphMode"))
+				bitFormat = 2
+			ElseIf(stringMatch(theStr,"ADCPtoLChannelMap") || stringMatch(theStr,"ADCSamplingSeq") || stringMatch(theStr,"statsChannelPolarity"))
+				bitFormat = 2					
+			ElseIf(stringMatch(theStr,"lowpassFilterType") || stringMatch(theStr,"highpassFilterType") || stringMatch(theStr,"postProcessLowpassFilterType") || stringMatch(theStr,"enabledDuringPN"))
+				bitFormat = 1
+			ElseIf(stringMatch(theStr,"ADCChannelNameIndex") || stringMatch(theStr,"ADCUnitsIndex"))
+				bitFormat = 3
+			Else
+				bitFormat = 4
+			EndIf
+			
+			Variable tempVar
+			FBInRead/B=3/F=(bitFormat) refnum,tempVar
+			ADCSec[j][i] = tempVar
+			
+//				FGetPos refnum
+//				print theStr,V_filePos
+			If(stringMatch(theStr,"ADCNum"))
+				ADCSamplingSeq[i] = tempVar
+			EndIf
+		EndFor
+	EndFor
+	
+	Close/A
+	
+	String channels = ""
+	For(i=0;i<DimSize(ADCSamplingSeq,0);i+=1)
+		channels += num2str(ADCSamplingSeq[i]) + ","
+	EndFor
+	channels =	RemoveEnding(channels,",")
+	
+	return channels
+End
+
+Function/S pClamp_GetProtocolName(file)
+	String file //this needs to be a full path to the file
+	
+	file = RemoveEnding(file,".abf") + ".abf"
+	
+	Variable refnum,nSweeps
+	
+	Open/R/Z=2 refnum as file
+		
+	If(V_flag == -1 || V_flag > 0)
+		return ""
+	EndIf
+		
+	Variable i
+		
+	//Number sweeps
+	Wave StringsSection = GetStringsSection(refnum)
+
+	FSetPos refnum,StringsSection[0]*512
+	String bigString = ""
+	bigString = PadString(bigString,StringsSection[1],0)
+	FBInRead refnum,bigString
+	String progStr = "clampex;clampfit;axoscope;patchexpress"
+	Variable goodStart
+	For(i=0;i<4;i+=1)
+		goodStart = strsearch(bigString,StringFromList(i,progStr,";"),0,2)
+		If(goodStart)
+			break
+		EndIf
+	EndFor
+	
+	Variable lastSpace = 0
+	Variable nextSpace
+
+	bigString = bigString[goodStart,strlen(bigString)]
+	Make/FREE/T/N=1 Strings
+	Strings[0] = ""
+
+	For(i=0;i<30;i+=1)
+		Redimension/N=(i+1) Strings
+		nextSpace = strsearch(bigString,"\u0000",lastSpace)
+		If(nextSpace == -1)
+			Redimension/N=(i) Strings
+			break
+		EndIf
+		Strings[i] = bigString[lastSpace,nextSpace]
+		lastSpace = nextSpace + 1
+	EndFor
+	
+	String protocol = Strings[1]
+	protocol = ParseFilePath(0,protocol,"\\",1,0)
+	protocol = RemoveEnding(protocol,".pro")
+			
+	Close/A
+	
+	return protocol
+	
+
+End
+
 //returns the number of channels in a pclamp file
 Function pClamp_nChannels(file)
 	String file //this needs to be a full path to the file
@@ -636,14 +829,17 @@ Function NT_LoadPClamp(fileList[,channels,table])
 			If(strlen(table))
 				String ChannelList = dataTable[dti][%Channels]
 				ChannelList = ResolveListItems(ChannelList,",",noEnding=1)
-			
+				
+				If(!strlen(ChannelList))
+					dataTable[dti][%Channels] = "1"
+				EndIf
 			//Compare channel names with the actually loaded channels
-//			String ChannelNameList = dataTable[dti][%Pos_4]
-//			ChannelNameList = ResolveListItems(ChannelNameList,",",noEnding=1)
+			String ChannelNameList = dataTable[dti][%Pos_4]
+			ChannelNameList = ResolveListItems(ChannelNameList,",",noEnding=1)
 //			
-//			If(ItemsInList(ChannelList,",") != ItemsInList(ChannelNameList,","))
+			If(ItemsInList(ChannelList,",") != ItemsInList(ChannelNameList,","))
 				dataTable[dti][%Pos_4] = ChannelList
-//			EndIf
+			EndIf
 
 			EndIf
 			
@@ -656,6 +852,7 @@ Function NT_LoadPClamp(fileList[,channels,table])
 				String unitBase = StringFromList(c,a.channelBase,";")
 				
 				String trace = num2str(a.ChannelIndex[c])
+//				String trace = StringFromList(c,ChannelList,",")
 				
 				If(strlen(table))
 					String prefix = dataTable[dti][%Pos_0]

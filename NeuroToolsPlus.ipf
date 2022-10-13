@@ -169,7 +169,11 @@ Function LoadDataTableSelection()
 				//trace numbers. All traces will be loaded unless indicated in one of the Pos_ columns
 				String theFile = archive[dti][%Path]
 				
-				theFile = GetABFTrialList(theFile,archive,dti)
+				If(!stringmatch(theFile,"*.abf"))
+					//only do this if it is a truncated file name
+					theFile = GetABFTrialList(theFile,archive,dti)
+				EndIf
+				
 				
 				//For each Trials entry, if multiple trials are defined, they all must have the same number of traces. Check this here
 				Variable numTraces = CheckABFTraceCounts(theFile)
@@ -193,7 +197,10 @@ Function LoadDataTableSelection()
 					channelList = ResolveListItems(channelList,",",noEnding=1)
 				EndIf
 				
-				InsertWaveNames()
+				Variable isDataLoader = 1
+				If(!isDataLoader)
+					InsertWaveNames()
+				EndIf
 				
 				NT_LoadPClamp(theFile,channels=channelList,table=dataset)
 				
@@ -1417,7 +1424,8 @@ Function ManagePackages()
 	DoWindow/F PackageManager
 	
 	If(!V_flag)
-		NewPanel/K=1/N=PackageManager/W=(300,100,500,100 + nPackages * 25 + 30) as "Package Manager"
+		GetWindow NTP wsize
+		NewPanel/K=1/N=PackageManager/W=(V_right,V_top,V_right+200,V_top + nPackages * 25 + 30) as "Package Manager"
 	EndIf
 	
 	DFREF NPC = $CW
