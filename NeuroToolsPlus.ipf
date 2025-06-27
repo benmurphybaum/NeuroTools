@@ -1854,6 +1854,9 @@ Function/S GetSubMenuName(index)
 	
 	String/G NPC:submenuList
 	SVAR submenuList = NPC:submenuList
+	if (!SVAR_Exists(submenuList))
+		String/G NPC:submenuList
+	endif
 	submenuList = ""
 	
 	Variable row = FindDimLabel(param,0,"SUBMENU")
@@ -1900,7 +1903,11 @@ Function/S GetSubMenuItems(index)
 	EndIf
 	
 	Wave/T param = NPC:ExtFunc_Parameters
-	SVAR submenuList = NPC:submenuList
+	SVAR/Z submenuList = NPC:submenuList
+	if (!SVAR_Exists(submenuList))
+		String/G NPC:submenuList = ""
+	endif
+	
 	String func="",itemList = "",groupList = ""
 	
 	Variable row = FindDimLabel(param,0,"SUBMENU")
@@ -2019,7 +2026,7 @@ End
 
 Function/S GetDSMenuItems()
 	DFREF NPD = $DSF
-	Wave/T DSGroupListWave = NPD:DSGroupListWave
+	Wave/T/Z DSGroupListWave = NPD:DSGroupListWave
 	
 	If(!WaveExists(DSGroupListWave))
 		return ""
@@ -2144,7 +2151,7 @@ Function LoadNeuroPlus()
 	
 	//Left side panel for navigator
 	NewPanel/HOST=NTP/FG=(FL,FT,navPanel_R,FB)/N=Nav
-	ModifyPanel/W=NTP#Nav,fixedSize=1,frameStyle=0
+//	ModifyPanel/W=NTP#Nav,fixedSize=1,frameStyle=0
 	GroupBox navPanel win=NTP#Nav,align=0,pos={2,5},size={navPanelWidth-2,bottom-300}
 	
 	//Left side panel for viewer
@@ -2166,14 +2173,14 @@ Function LoadNeuroPlus()
 	
 	//Data Set Definition panel
 	NewPanel/HOST=NTP/FG=(dataPanel_L,FT,funcPanel_L,FB)/N=Data
-	ModifyPanel/W=NTP#Data,fixedSize=1,frameStyle=0
+//	ModifyPanel/W=NTP#Data,fixedSize=1,frameStyle=0
 	GroupBox dataPanel win=NTP#Data,align=0,pos={0,5},size={dataPanelWidth,bottom-300}
 	GroupBox dataSetPanel win=NTP#Data,align=0,pos={0,bottom-290},size={dataPanelWidth,280}
 	
 	
 	//Right side panel
 	NewPanel/HOST=NTP/FG=(funcPanel_L,FT,FR,FB)/N=Func
-	ModifyPanel/W=NTP#Func,fixedSize=1,frameStyle=0
+//	ModifyPanel/W=NTP#Func,fixedSize=1,frameStyle=0
 	GroupBox funcPanel win=NTP#Func,align=0,pos={0,5},size={funcPanelWidth - 5,bottom - 300}
 	
 	//Find position of previously built panels
@@ -2531,7 +2538,7 @@ Function CreatePackageWaves()
 	
 	//Data Set Groups
 	//Don't overwrite existing data set groups
-	Wave/T DSGroupListWave = NPD:DSGroupListWave
+	Wave/T/Z DSGroupListWave = NPD:DSGroupListWave
 	If(!WaveExists(DSGroupListWave))
 		Make/O/T/N=1 NPD:DSGroupListWave/Wave=DSGroupListWave
 		DSGroupListWave[0] = "All" //Base data group that always exists
@@ -2541,7 +2548,7 @@ Function CreatePackageWaves()
 	DSGroupSelWave = 0
 	
 	//Don't overwrite existing data set groups
-	Wave/T DSGroupContents = NPD:DSGroupContents
+	Wave/T/Z DSGroupContents = NPD:DSGroupContents
 	If(!WaveExists(DSGroupContents))
 		Make/O/T/N=(0,1) NPD:DSGroupContents/Wave=DSGroupContents //3d contents wave
 		SetDimLabel 1,0,All,DSGroupContents //Base data group that always exists
@@ -2577,6 +2584,8 @@ Function CreatePackageWaves()
 	NVAR EditingNotes = NPD:EditingNotes
 	EditingNotes = 0
 	
+	NewDataFolder/O root:Packages:NeuroToolsPlus:ScanImage
+	DFREF NTSI = root:Packages:NeuroToolsPlus:ScanImage
 	Variable/G NTSI:isInverted
 	NVAR isInverted = NTSI:isInverted
 	isInverted = 0
@@ -3513,7 +3522,7 @@ Function NTPButtonProc(ba) : ButtonControl
 				case "deleteDS":
 					//delete selected data set
 //					Wave/T DSGroupListWave = NPD:DSGroupListWave
-					Wave/T DSGroupContentsListWave = NPD:DSGroupContentsListWave
+					Wave/T/Z DSGroupContentsListWave = NPD:DSGroupContentsListWave
 					
 					
 						//Alert to confirm deletion

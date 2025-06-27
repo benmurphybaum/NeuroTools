@@ -1249,7 +1249,7 @@ Function/WAVE getWaveMatchList()
 	//If focus is on DataSet, update the data set ORG wave
 	If(!cmpstr(listFocus,"DataSet"))
 		dsName = GetDSName()
-		Wave/T DS_ORG = GetDataSetWave(dsName,"ORG")
+		Wave/T/Z DS_ORG = GetDataSetWave(dsName,"ORG")
 		
 		If(!WaveExists(DS_ORG))
 			print "Couldn't find data set wave"
@@ -2832,7 +2832,7 @@ Function/S recallFilterSettings(selection)
 	ElseIf(!cmpstr(selection,"DataSet"))
 		//Get the selected data set ORGANIZED wave
 		String dataset = GetDSName()
-		Wave/T DS_ORG = GetDataSetWave(dataset,"ORG")
+		Wave/T/Z DS_ORG = GetDataSetWave(dataset,"ORG")
 		Variable index = GetDSIndex(dataset=dataset)
 		
 		//Fill out the structure with the saved settings
@@ -2840,7 +2840,7 @@ Function/S recallFilterSettings(selection)
 		Wave/T listWave = NPD:DataSetLB_ListWave
 		Wave selWave = NPD:DataSetLB_SelWave
 		
-		Wave/T DSNamesLB_ListWave = NPD:DSNamesLB_ListWave
+		Wave/T/Z DSNamesLB_ListWave = NPD:DSNamesLB_ListWave
 		
 		//For data sets with no waves in them, set filters to empty
 		If(index == -1 || !WaveExists(DS_ORG) || index > DimSize(DSNamesLB_ListWave,0))
@@ -3038,6 +3038,12 @@ Function drawFullPathText()
 	DFREF NPD = $DSF
 	DFREF NTS = root:Packages:NeuroToolsPlus:Settings
 	
+	if (!DataFolderRefStatus(NTS))
+		NewDataFolder/O root:Packages:NeuroToolsPlus:Settings
+		DFREF NTS = root:Packages:NeuroToolsPlus:Settings
+		Variable/G NTS:hf
+	endif
+	
 	NVAR hf =  NTS:hf
 	SVAR listFocus = NPC:listFocus
 	Variable i = 0,row = -1
@@ -3125,7 +3131,7 @@ Function/S GetWaveList(ds)
 				break
 		endswitch
 		
-		Wave/T ws = GetWaveSet(listWave,ds.wsn)
+		Wave/T/Z ws = GetWaveSet(listWave,ds.wsn)
 		If(!WaveExists(ws))
 			return ""
 		EndIf
@@ -3694,7 +3700,7 @@ End
 
 //Kills wave even if it is a part of a graph or window
 Function ReallyKillWaves(w)
-  Wave w
+  Wave/Z w
 	
   If(!WaveExists(w))
   	return 0
@@ -3806,11 +3812,11 @@ Function/S GetDataSetDims(dsName,[WM,Nav])
 	EndIf
 	
 	If(WM)
-		Wave/T ds = root:Packages:NeuroToolsPlus:ControlWaves:MatchLB_ListWave
+		Wave/T/Z ds = root:Packages:NeuroToolsPlus:ControlWaves:MatchLB_ListWave
 	ElseIf(Nav)
-		Wave/T ds = root:Packages:NeuroToolsPlus:ControlWaves:NavigatorSelection_ListWave
+		Wave/T/Z ds = root:Packages:NeuroToolsPlus:ControlWaves:NavigatorSelection_ListWave
 	Else
-		Wave/T ds = GetDataSetWave(dsName,"ORG")
+		Wave/T/Z ds = GetDataSetWave(dsName,"ORG")
 	EndIf
 	
 	If(!WaveExists(ds))
@@ -4773,7 +4779,7 @@ End
 
 //Pairs with saveWaveRef to recall that reference
 Function/WAVE recallSavedWaveRef()
-	Wave/Wave savedRefs = root:Packages:NeuroToolsPlus:savedRefs
+	Wave/Wave/Z savedRefs = root:Packages:NeuroToolsPlus:savedRefs
 	
 	If(!WaveExists(savedRefs))
 		Abort "Must save a wave reference before recalling one"
@@ -6250,7 +6256,7 @@ Function/S NT_GetListBoxWaves(ctrlStr,key,functionStr)
 	theWaveStr = RemoveEnding(theWaveStr," ") //white space check
 	
 	//Make sure the wave exists
-	Wave theWave = $theWaveStr
+	Wave/Z theWave = $theWaveStr
 	If(!WaveExists(theWave))
 	
 		//Make sure the path to the wave exists

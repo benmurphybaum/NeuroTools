@@ -852,9 +852,9 @@ Function deleteDataSet(dsName)
 //	EndIf
 	
 	//Remove the data set from any groups it is defined in
-	Wave/T DSGroupContents = NPD:DSGroupContents
-	Wave/T DSGroupContentsListWave = NPD:DSGroupContentsListWave
-	Wave/T DSGroupListWave = NPD:DSGroupListWave
+	Wave/T/Z DSGroupContents = NPD:DSGroupContents
+	Wave/T/Z DSGroupContentsListWave = NPD:DSGroupContentsListWave
+	Wave/T/Z DSGroupListWave = NPD:DSGroupListWave
 	
 	
 	
@@ -2314,14 +2314,13 @@ Function openArchive(dataset)
 	
 	GetMouse
 	
+	Variable w = 800
+	Variable h = 300
+	String panelName = "archivePanel_" +  dataSetTempName
+	NewPanel/K=1/W=(V_left - w/2,V_top - h,V_left + w/2,V_top)/N=$panelName as dataset + " Archive"
+	
 	//If < Igor 9, open the archive with a panel surrounding it to allow for button controls. Igor 9 uses table hooks instead.
 	If(IgorVersion() < 9)
-		Variable w = 800
-		Variable h = 300
-		
-		
-		String panelName = "archivePanel_" +  dataSetTempName
-		NewPanel/K=1/W=(V_left - w/2,V_top - h,V_left + w/2,V_top)/N=$panelName as dataset + " Archive"
 	
 		Edit/HOST=$panelName/W=(160,0,w + 2000,h + 2000)/N=archive archive as dataset + " Archive"
 		ModifyTable/W=$panelName#archive horizontalIndex=2,alignment=1
@@ -2340,7 +2339,7 @@ Function openArchive(dataset)
 		EndFor
 		
 	Else
-		Edit/W=(V_left - w/2,V_top - h,V_left + w/2,V_top)/N=archive archive as dataset + " Archive"
+		Edit/HOST=$panelName/W=(V_left - w/2,V_top - h,V_left + w/2,V_top)/N=archive archive as dataset + " Archive"
 		ModifyTable/W=$panelName#archive horizontalIndex=2,alignment=1
 	EndIf
 	
