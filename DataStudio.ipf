@@ -28,6 +28,7 @@ function loadDataStudio()
 	
 	// Guides
 	DefineGuide/W=DataStudio HMiddle = {FL, 0.5, FR}
+	DefineGuide/W=DataStudio ListSplit = {FL, 0.3, FR}
 	DefineGuide/W=DataStudio TabTop = {FT, 5}
 	DefineGuide/W=DataStudio TabBottom = {TabTop, 20}
 	DefineGuide/W=DataStudio NavigatorControlPanelTop = {TabBottom, 10}
@@ -61,13 +62,18 @@ static function updateNavigatorLists(DFREF dfr)
 	String folderList = StringByKey("FOLDERS", DataFolderDir(1, dfr) , ":", ";")
 	Wave/T temp = ListToTextWave(folderList, ",")
 	Redimension/N=(DimSize(temp, 0), -1, -1) navigatorFolderList, navigatorFolderSelection
-	navigatorFolderList = temp
+	if (DimSize(temp, 0) > 0)
+		navigatorFolderList = temp
+	endif
 	
 	// Objects
 	String objectList = StringByKey("WAVES", DataFolderDir(2, dfr) , ":", ";")
 	Wave/T temp = ListToTextWave(objectList, ",")
 	Redimension/N=(DimSize(temp, 0), -1, -1) navigatorObjectList, navigatorObjectSelection
-	navigatorObjectList = temp
+	
+	if (DimSize(temp, 0) > 0)
+		navigatorObjectList = temp
+	endif
 	
 	updatePathControl()
 end
@@ -89,7 +95,7 @@ function buildNavigator()
 	
 	String/G navigatorControlList = ""
 	
-	Button nav_back, win = DataStudio, title = "<",	size = {20, 20}, focusRing = 0, \
+	Button nav_back, win = DataStudio, title = "<",	size = {20, 20}, focusRing = 0, proc = NavigatorButtonCallback, \
 													guides = {kwNone, NavigatorBackH, kwNone, NavigatorControlPanelTop, kwNone, NavigatorControlPanelBottom}
 	navigatorControlList += "nav_back;"									
 
@@ -101,11 +107,11 @@ function buildNavigator()
 											guides = {NavigatorPathH, kwNone , FR, NavigatorControlPanelTop, kwNone, NavigatorControlPanelBottom}
 	navigatorControlList += "nav_path;"	
 																						
-	ListBox nav_folderList, win = DataStudio,	guides = {FL, kwNone, HMiddle, NavigatorListTop, kwNone, FB}, focusRing = 0, mode=10, \
+	ListBox nav_folderList, win = DataStudio,	guides = {FL, kwNone, ListSplit, NavigatorListTop, kwNone, FB}, focusRing = 0, mode=10, \
 												listWave = navigatorFolderList, selWave = navigatorFolderSelection, proc = NavigatorFolderListCallback
 	navigatorControlList += "nav_folderList;"									
 	
-	ListBox nav_objectList, win = DataStudio,	guides = {HMiddle, kwNone, FR, NavigatorListTop, kwNone, FB}, focusRing = 0, mode=10, \
+	ListBox nav_objectList, win = DataStudio,	guides = {ListSplit, kwNone, FR, NavigatorListTop, kwNone, FB}, focusRing = 0, mode=10, \
 												listWave = navigatorObjectList, selWave = navigatorObjectSelection, proc = NavigatorObjectListCallback
 	navigatorControlList += "nav_objectList;"
 end
@@ -214,6 +220,29 @@ Function NavigatorObjectListCallback(lba) : ListBoxControl
 		case 7: // finish edit
 			break
 		case 13: // checkbox clicked (Igor 6.2 or later)
+			break
+	endswitch
+
+	return 0
+End
+
+Function NavigatorButtonCallback(ba) : ButtonControl
+	STRUCT WMButtonAction &ba
+
+	switch( ba.eventCode )
+		case 2: // mouse up
+			// click code here
+			strswitch (ba.ctrlName)
+				case "nav_back":
+					DFREF folder = $ParseFilePath(1, GetDataFolder(1), ":", 1, 0)
+					SetDataFolder folder
+					updateNavigatorLists(folder)
+					break
+				case "nav_forward":
+					break
+			endswitch
+			break
+		case -1: // control being killed
 			break
 	endswitch
 
