@@ -45,6 +45,7 @@ function loadDataStudio()
 	DefineGuide/W=DataStudio NavigatorPathH = {NavigatorForwardH, 20}
 	
 	DefineGuide/W=DataStudio NavigatorListTop = {NavigatorControlPanelBottom, 5}
+	DefineGuide/W=DataStudio NavigatorListBottom = {FB, -25}
 	
 	TabControl mainTab, win = DataStudio,	tabLabel(0) = "Navigator",\
 											tabLabel(1) = "Data Sets", \
@@ -114,13 +115,16 @@ function buildNavigator()
 											guides = {NavigatorPathH, kwNone , FR, NavigatorControlPanelTop, kwNone, NavigatorControlPanelBottom}
 	navigatorControlList += "nav_path;"	
 																						
-	ListBox nav_folderList, win = DataStudio,	guides = {FL, kwNone, ListSplitLeft, NavigatorListTop, kwNone, FB}, focusRing = 0, mode=10, frame = 0, \
+	ListBox nav_folderList, win = DataStudio,	guides = {FL, kwNone, ListSplitLeft, NavigatorListTop, kwNone, NavigatorListBottom}, focusRing = 0, mode=10, frame = 0, \
 												listWave = navigatorFolderList, selWave = navigatorFolderSelection, proc = NavigatorFolderListCallback
 	navigatorControlList += "nav_folderList;"									
 	
-	ListBox nav_objectList, win = DataStudio,	guides = {ListSplitRight, kwNone, FR, NavigatorListTop, kwNone, FB}, focusRing = 0, mode=10, frame = 0, \
+	ListBox nav_objectList, win = DataStudio,	guides = {ListSplitRight, kwNone, FR, NavigatorListTop, kwNone, NavigatorListBottom}, focusRing = 0, mode=10, frame = 0, \
 												listWave = navigatorObjectList, selWave = navigatorObjectSelection, proc = NavigatorObjectListCallback
 	navigatorControlList += "nav_objectList;"
+		
+	SetVariable nav_regexMatch, win = DataStudio, value = _STR:"", focusRing = 0, guides = {FL, kwNone, FR, kwNone, kwNone, FB}, anchor = LC, proc = matchCallback
+	navigatorControlList += "nav_regexMatch;"
 	
 	SetWindow DataStudio, hook(NavigatorMouseHook) = NavigatorMouseHook
 end
@@ -260,8 +264,10 @@ Function NavigatorFolderListCallback(lba) : ListBoxControl
 		case 1: // mouse down
 			break
 		case 3: // double click
-			SetDataFolder listWave[row][0][0]
-			updateNavigatorLists(GetDataFolderDFR())
+			if (DimSize(listWave,0) > row)
+				SetDataFolder listWave[row][0][0]
+				updateNavigatorLists(GetDataFolderDFR())
+			endif
 			break
 		case 4: // cell selection
 		case 5: // cell selection plus shift key
@@ -328,3 +334,30 @@ Function NavigatorButtonCallback(ba) : ButtonControl
 
 	return 0
 End
+
+Function matchCallback(sva) : SetVariableControl
+	STRUCT WMSetVariableAction &sva
+	
+	switch( sva.eventCode )
+		case 1: // mouse up
+		case 2: // Enter key
+			String argumentStr = ""
+			sprintf argumentStr, "\"%s\" %s", sva.sval, GetDataFolder(1)
+			PythonFile/Z file = "DataStudio/regexMatch.py", args = argumentStr
+			
+			DFREF folder = packageDF()
+			SVAR matchResults = folder:regexMatches
+			print matchResults
+			
+			break
+		case 3: // Live update
+			Variable dval = sva.dval
+			String sval = sva.sval
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
