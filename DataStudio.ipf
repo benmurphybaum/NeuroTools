@@ -20,15 +20,22 @@ function loadDataStudio()
 	// Create the package folder
 	NewDataFolder/S/O root:Packages
 	NewDataFolder/S/O DataStudio
-	
+
 	String/G saveDFPath = GetDataFolder(1, saveDF)
+	
+	Variable/G mouseDown = 0
+	
 	
 	NewPanel/K=1/W=(0, 0, panelWidth, panelHeight)/N=DataStudio as "Data Studio"
 	SetWindow DataStudio, sizeLimit = {mainTabWidth, 100, inf, inf} , activeChildFrame = 0
 	
 	// Guides
 	DefineGuide/W=DataStudio HMiddle = {FL, 0.5, FR}
-	DefineGuide/W=DataStudio ListSplit = {FL, 0.3, FR}
+	
+	// Splitter between the two list boxes
+	DefineGuide/W=DataStudio ListSplitLeft = {FL, 0.3, FR}
+	DefineGuide/W=DataStudio ListSplitRight = {ListSplitLeft, 10}
+	
 	DefineGuide/W=DataStudio TabTop = {FT, 5}
 	DefineGuide/W=DataStudio TabBottom = {TabTop, 20}
 	DefineGuide/W=DataStudio NavigatorControlPanelTop = {TabBottom, 10}
@@ -87,7 +94,7 @@ function buildNavigator()
 
 	Make/O/T/N=(0,1,2) navigatorObjectList
 	Make/O/N=0 navigatorObjectSelection
-	
+
 	SVAR saveDFPath = packageDF():saveDFPath
 	DFREF currentFolder = $saveDFPath
 	
@@ -107,13 +114,15 @@ function buildNavigator()
 											guides = {NavigatorPathH, kwNone , FR, NavigatorControlPanelTop, kwNone, NavigatorControlPanelBottom}
 	navigatorControlList += "nav_path;"	
 																						
-	ListBox nav_folderList, win = DataStudio,	guides = {FL, kwNone, ListSplit, NavigatorListTop, kwNone, FB}, focusRing = 0, mode=10, \
+	ListBox nav_folderList, win = DataStudio,	guides = {FL, kwNone, ListSplitLeft, NavigatorListTop, kwNone, FB}, focusRing = 0, mode=10, frame = 0, \
 												listWave = navigatorFolderList, selWave = navigatorFolderSelection, proc = NavigatorFolderListCallback
 	navigatorControlList += "nav_folderList;"									
 	
-	ListBox nav_objectList, win = DataStudio,	guides = {ListSplit, kwNone, FR, NavigatorListTop, kwNone, FB}, focusRing = 0, mode=10, \
+	ListBox nav_objectList, win = DataStudio,	guides = {ListSplitRight, kwNone, FR, NavigatorListTop, kwNone, FB}, focusRing = 0, mode=10, frame = 0, \
 												listWave = navigatorObjectList, selWave = navigatorObjectSelection, proc = NavigatorObjectListCallback
 	navigatorControlList += "nav_objectList;"
+	
+	SetWindow DataStudio, hook(NavigatorMouseHook) = NavigatorMouseHook
 end
 
 static function updatePathControl()
@@ -151,10 +160,12 @@ function mainTabCallback(tca) : TabControl
 			switch (tab)
 				case 0: // Navigator
 					ModifyControlList controlList("Navigator"), disable = 0
+					SetWindow DataStudio, hook(NavigatorMouseHook) = NavigatorMouseHook
 					break
 				case 1: // Data Sets
 				case 2: // Functions
 					ModifyControlList controlList("Navigator"), disable = 1
+					SetWindow DataStudio, hook(NavigatorMouseHook) = $""
 					break
 			endswitch
 			break
@@ -164,6 +175,75 @@ function mainTabCallback(tca) : TabControl
 
 	return 0
 end
+
+static function guidePosition(String guideName)
+	return NumberByKey("POSITION", GuideInfo("DataStudio", guideName), ":", ";")
+end
+
+Function NavigatorMouseHook(s)
+	STRUCT WMWinHookStruct &s
+
+	Variable hookResult = 0
+
+	switch(s.eventCode)
+		case 0:				// Activate
+			// Handle activate
+			break
+
+		case 1:				// Deactivate
+			// Handle deactivate
+			break
+		case 3:
+			// mouse down
+			if (s.mouseLoc.h > guidePosition("ListSplitLeft") && \
+				s.mouseLoc.h < guidePosition("ListSplitRight") && \
+				s.mouseLoc.v > guidePosition("NavigatorListTop"))
+				NVAR mouseDown = packageDF():mouseDown
+				mouseDown = 1
+				s.doSetCursor = 1
+				s.cursorCode = 5
+			else
+				mouseDown = 0
+			endif
+			break
+		case 4:
+			// mouse moved
+			NVAR mouseDown = packageDF():mouseDown
+			if (mouseDown)
+				s.doSetCursor = 1
+				s.cursorCode = 5
+				
+				Variable leftPos = guidePosition("FL")
+				Variable rightPos = guidePosition("FR")
+				
+				Variable currentLeftGuide = guidePosition("ListSplitLeft")
+				Variable diff = s.mouseLoc.h - currentLeftGuide
+				
+				Variable newFraction = (currentLeftGuide + diff) / (rightPos - leftPos)
+				if (newFraction > 0.2 && newFraction < 0.8)
+					DefineGuide/W=DataStudio ListSplitLeft = {FL, newFraction, FR}
+				endif
+			else
+				if (s.mouseLoc.h > guidePosition("ListSplitLeft") && \
+					s.mouseLoc.h < guidePosition("ListSplitRight") && \
+					s.mouseLoc.v > guidePosition("NavigatorListTop"))
+					s.doSetCursor = 1
+					s.cursorCode = 5
+				else
+					s.doSetCursor = 0
+				endif
+			endif
+			break
+		case 5:
+			// mouse up
+			NVAR mouseDown = packageDF():mouseDown
+			mouseDown = 0
+			s.doSetCursor = 0
+			break
+	endswitch
+
+	return hookResult		// 0 if nothing done, else 1
+End
 
 
 Function NavigatorFolderListCallback(lba) : ListBoxControl
