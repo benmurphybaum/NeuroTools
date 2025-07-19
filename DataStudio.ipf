@@ -1,6 +1,7 @@
 ﻿#pragma TextEncoding = "UTF-8"
 #pragma rtGlobals=3				// Use modern global access method and strict wave access
 #pragma DefaultTab={3,20,4}		// Set default tab width in Igor Pro 9 and later
+#pragma IgorVersion = 10.0
 
 Constant panelWidth = 500
 Constant panelHeight = 500
@@ -29,7 +30,13 @@ function loadDataStudio()
 	DefineGuide/W=DataStudio HMiddle = {FL, 0.5, FR}
 	DefineGuide/W=DataStudio TabTop = {FT, 5}
 	DefineGuide/W=DataStudio TabBottom = {TabTop, 20}
-	DefineGuide/W=DataStudio NavigatorListTop = {TabBottom, 10}
+	DefineGuide/W=DataStudio NavigatorControlPanelTop = {TabBottom, 10}
+	DefineGuide/W=DataStudio NavigatorControlPanelBottom = {NavigatorControlPanelTop, 20}
+	DefineGuide/W=DataStudio NavigatorBackH = {FL, 20}
+	DefineGuide/W=DataStudio NavigatorForwardH = {NavigatorBackH, 20}
+	DefineGuide/W=DataStudio NavigatorPathH = {NavigatorForwardH, 20}
+	
+	DefineGuide/W=DataStudio NavigatorListTop = {NavigatorControlPanelBottom, 5}
 	
 	TabControl mainTab, win = DataStudio,	tabLabel(0) = "Navigator",\
 											tabLabel(1) = "Data Sets", \
@@ -40,6 +47,29 @@ function loadDataStudio()
 	buildNavigator()
 	
 	SetDataFolder saveDF
+	updatePathControl()
+end
+
+static function updateNavigatorLists(DFREF dfr)
+	DFREF nav = packageDF():Navigator
+	Wave/T navigatorFolderList = nav:navigatorFolderList
+	Wave navigatorFolderSelection = nav:navigatorFolderSelection
+	Wave/T navigatorObjectList = nav:navigatorObjectList
+	Wave navigatorObjectSelection = nav:navigatorObjectSelection
+	
+	// Folders
+	String folderList = StringByKey("FOLDERS", DataFolderDir(1, dfr) , ":", ";")
+	Wave/T temp = ListToTextWave(folderList, ",")
+	Redimension/N=(DimSize(temp, 0), -1, -1) navigatorFolderList, navigatorFolderSelection
+	navigatorFolderList = temp
+	
+	// Objects
+	String objectList = StringByKey("WAVES", DataFolderDir(2, dfr) , ":", ";")
+	Wave/T temp = ListToTextWave(objectList, ",")
+	Redimension/N=(DimSize(temp, 0), -1, -1) navigatorObjectList, navigatorObjectSelection
+	navigatorObjectList = temp
+	
+	updatePathControl()
 end
 
 function buildNavigator()
@@ -47,31 +77,45 @@ function buildNavigator()
 	NewDataFolder/O/S packageDF():Navigator
 	
 	Make/O/T/N=(0,1,2) navigatorFolderList
+	Make/O/N=0 navigatorFolderSelection
+
+	Make/O/T/N=(0,1,2) navigatorObjectList
+	Make/O/N=0 navigatorObjectSelection
 	
 	SVAR saveDFPath = packageDF():saveDFPath
 	DFREF currentFolder = $saveDFPath
 	
-	String folderList = StringByKey("FOLDERS", DataFolderDir(1, currentFolder) , ":", ";")
-	
-	Wave/T temp = ListToTextWave(folderList, ";")
-	Redimension/N=(DimSize(temp,0), -1, -1) navigatorFolderList
-	navigatorFolderList = temp
-	
-	Make/O/N=(DimSize(navigatorFolderList,0)) navigatorFolderSelection
-
-	
-	Make/O/T/N=(0,1,2) navigatorObjectList
-	Make/O/N=0 navigatorObjectSelection
+	updateNavigatorLists(currentFolder)
 	
 	String/G navigatorControlList = ""
 	
-	ListBox nav_folderList, win = DataStudio,	guides = {FL, kwNone, HMiddle, NavigatorListTop, kwNone, FB}, focusRing = 0, \
-												listWave = navigatorFolderList, selWave = navigatorFolderSelection
+	Button nav_back, win = DataStudio, title = "<",	size = {20, 20}, focusRing = 0, \
+													guides = {kwNone, NavigatorBackH, kwNone, NavigatorControlPanelTop, kwNone, NavigatorControlPanelBottom}
+	navigatorControlList += "nav_back;"									
+
+	Button nav_forward, win = DataStudio, title = ">",	size = {20, 20}, focusRing = 0, \
+														guides = {kwNone, NavigatorForwardH, kwNone, NavigatorControlPanelTop, kwNone, NavigatorControlPanelBottom}
+	navigatorControlList += "nav_forward;"	
+	
+	TitleBox nav_path, win = DataStudio,	title = currentFolderPath(), disable = 2, fstyle = 2, fixedSize = 1, frame = 0, anchor=LC, \
+											guides = {NavigatorPathH, kwNone , FR, NavigatorControlPanelTop, kwNone, NavigatorControlPanelBottom}
+	navigatorControlList += "nav_path;"	
+																						
+	ListBox nav_folderList, win = DataStudio,	guides = {FL, kwNone, HMiddle, NavigatorListTop, kwNone, FB}, focusRing = 0, mode=10, \
+												listWave = navigatorFolderList, selWave = navigatorFolderSelection, proc = NavigatorFolderListCallback
 	navigatorControlList += "nav_folderList;"									
 	
-	ListBox nav_objectList, win = DataStudio,	guides = {HMiddle, kwNone, FR, NavigatorListTop, kwNone, FB}, focusRing = 0, \
-												listWave = navigatorObjectList, selWave = navigatorObjectSelection
+	ListBox nav_objectList, win = DataStudio,	guides = {HMiddle, kwNone, FR, NavigatorListTop, kwNone, FB}, focusRing = 0, mode=10, \
+												listWave = navigatorObjectList, selWave = navigatorObjectSelection, proc = NavigatorObjectListCallback
 	navigatorControlList += "nav_objectList;"
+end
+
+static function updatePathControl()
+	TitleBox nav_path, win = DataStudio, title = currentFolderPath()
+end
+
+static function/S currentFolderPath()
+	return GetDataFolder(1)
 end
 
 static function/S controlList(String tabGroup)
@@ -114,3 +158,64 @@ function mainTabCallback(tca) : TabControl
 
 	return 0
 end
+
+
+Function NavigatorFolderListCallback(lba) : ListBoxControl
+	STRUCT WMListboxAction &lba
+
+	Variable row = lba.row
+	Variable col = lba.col
+	WAVE/T/Z listWave = lba.listWave
+	WAVE/Z selWave = lba.selWave
+
+	switch( lba.eventCode )
+		case -1: // control being killed
+			break
+		case 1: // mouse down
+			break
+		case 3: // double click
+			SetDataFolder listWave[row][0][0]
+			updateNavigatorLists(GetDataFolderDFR())
+			break
+		case 4: // cell selection
+		case 5: // cell selection plus shift key
+			break
+		case 6: // begin edit
+			break
+		case 7: // finish edit
+			break
+		case 13: // checkbox clicked (Igor 6.2 or later)
+			break
+	endswitch
+
+	return 0
+End
+
+Function NavigatorObjectListCallback(lba) : ListBoxControl
+	STRUCT WMListboxAction &lba
+
+	Variable row = lba.row
+	Variable col = lba.col
+	WAVE/T/Z listWave = lba.listWave
+	WAVE/Z selWave = lba.selWave
+
+	switch( lba.eventCode )
+		case -1: // control being killed
+			break
+		case 1: // mouse down
+			break
+		case 3: // double click
+			break
+		case 4: // cell selection
+		case 5: // cell selection plus shift key
+			break
+		case 6: // begin edit
+			break
+		case 7: // finish edit
+			break
+		case 13: // checkbox clicked (Igor 6.2 or later)
+			break
+	endswitch
+
+	return 0
+End
