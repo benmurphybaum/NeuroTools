@@ -3,6 +3,8 @@
 #pragma DefaultTab={3,20,4}		// Set default tab width in Igor Pro 9 and later
 #pragma IgorVersion = 10.0
 
+#include "md2ihf"
+
 Constant panelWidth = 500
 Constant panelHeight = 500
 Constant mainTabWidth = 225
@@ -38,6 +40,7 @@ function loadDataStudio()
 	
 	DefineGuide/W=DataStudio TabTop = {FT, 5}
 	DefineGuide/W=DataStudio TabBottom = {TabTop, 20}
+	
 	DefineGuide/W=DataStudio NavigatorControlPanelTop = {TabBottom, 10}
 	DefineGuide/W=DataStudio NavigatorControlPanelBottom = {NavigatorControlPanelTop, 20}
 	DefineGuide/W=DataStudio NavigatorBackH = {FL, 20}
@@ -47,6 +50,14 @@ function loadDataStudio()
 	DefineGuide/W=DataStudio NavigatorListTop = {NavigatorControlPanelBottom, 5}
 	DefineGuide/W=DataStudio NavigatorListBottom = {FB, -25}
 	
+	DefineGuide/W=DataStudio DatasetsListBottom = {FB, -200}
+	DefineGuide/W=DataStudio DatasetsNotebookTop= {DatasetsListBottom, 25}
+	
+	DefineGuide/W=DataStudio DatasetsSplitLeft = {FL, 0.45, FR}
+	DefineGuide/W=DataStudio DatasetsSplitRight = {DatasetsSplitLeft, 10}
+	
+	DefineGuide/W=DataStudio DatasetsButtonLeft = {HMiddle, -40}
+	
 	TabControl mainTab, win = DataStudio,	tabLabel(0) = "Navigator",\
 											tabLabel(1) = "Data Sets", \
 											tabLabel (2) = "Functions", size = {mainTabWidth, 20}
@@ -55,8 +66,13 @@ function loadDataStudio()
 
 	buildNavigator()
 	
+	buildDataSets()
+	
 	SetDataFolder saveDF
 	updatePathControl()
+	
+	ModifyControlList controlList("DataSets"), disable = 1	
+	ModifyControlList controlList("Navigator"), disable = 0
 end
 
 static function updateNavigatorLists(DFREF dfr)
@@ -129,6 +145,51 @@ function buildNavigator()
 	SetWindow DataStudio, hook(NavigatorMouseHook) = NavigatorMouseHook
 end
 
+static function buildDataSets()
+	// Necessary objects
+	NewDataFolder/O/S packageDF():DataSets
+	
+	Make/O/T/N=(0,1,2) datasetsBaseList
+	Make/O/N=0 datasetsBaseListSelection
+
+	Make/O/T/N=(0,1,2) datasetsViewList
+	Make/O/N=0 datasetsViewListSelection
+	
+	DFREF datasets = packageDF():DataSets
+	Wave/T datasetsBaseList = datasets:datasetsBaseList
+	Wave datasetsBaseListSelection = datasets:datasetsBaseListSelection
+	Wave/T datasetsViewList = datasets:datasetsViewList
+	Wave datasetsViewListSelection = datasets:datasetsViewListSelection
+		
+	SVAR saveDFPath = packageDF():saveDFPath
+	DFREF currentFolder = $saveDFPath
+	
+	String/G datasetsControlList = ""
+	
+	ListBox datasets_base, win = DataStudio,	guides = {FL, kwNone, DatasetsSplitLeft, NavigatorListTop, kwNone, DatasetsListBottom}, focusRing = 0, mode=10, frame = 0, \
+												listWave = datasetsBaseList, selWave = datasetsBaseListSelection, proc = datasetsBaseListCallback
+	datasetsControlList += "datasets_base;"									
+	
+	ListBox datasets_view, win = DataStudio,	guides = {DatasetsSplitRight, kwNone, FR, NavigatorListTop, kwNone, DatasetsListBottom}, focusRing = 0, mode=10, frame = 0, \
+												listWave = datasetsViewList, selWave = datasetsViewListSelection, proc = datasetsViewListCallback
+	datasetsControlList += "datasets_view;"
+	
+	KillWindow/Z datasetNotebook_edit
+	KillWindow/Z datasetNotebook_view
+	NewNotebook/HOST=DataStudio/N=datasetNotebook_edit/FG=(FL, DatasetsNotebookTop, FR, FB)/F=0/K=2/V=0
+	NewNotebook/HOST=DataStudio/N=datasetNotebook_view/FG=(FL, DatasetsNotebookTop, FR, FB)/F=1/K=2/OPTS=4/V=0
+	Notebook DataStudio#datasetNotebook_view showRuler = 0
+	
+	Button datasets_editNotebook, win = DataStudio,	guides = {kwNone, DatasetsButtonLeft, kwNone, kwNone , kwNone, DatasetsNotebookTop}, size = {40, 20}, title = "Edit"
+	Button datasets_editNotebook, proc = DataSetsNotebookButtonCallback
+	datasetsControlList += "datasets_editNotebook;"
+	
+	Button datasets_viewNotebook, win = DataStudio,	guides = {kwNone, HMiddle, kwNone, kwNone , kwNone, DatasetsNotebookTop}, size = {40, 20}, title = "View"
+	Button datasets_viewNotebook, proc = DataSetsNotebookButtonCallback
+	datasetsControlList += "datasets_viewNotebook;"
+
+end
+
 static function updatePathControl()
 	TitleBox nav_path, win = DataStudio, title = currentFolderPath()
 end
@@ -144,8 +205,10 @@ static function/S controlList(String tabGroup)
 			SVAR ctrlList = navFolder:navigatorControlList
 			return ctrlList
 			break
-		case "Data Sets":
-		
+		case "DataSets":
+			DFREF datasetsFolder = packageDF():DataSets
+			SVAR ctrlList = datasetsFolder:datasetsControlList
+			return ctrlList
 			break
 		case "Functions":
 			break
@@ -163,10 +226,21 @@ function mainTabCallback(tca) : TabControl
 			
 			switch (tab)
 				case 0: // Navigator
+					ModifyControlList controlList("DataSets"), disable = 1	
+					Notebook DataStudio#datasetNotebook_edit visible = 0
+					Notebook DataStudio#datasetNotebook_view visible = 0	
+					
 					ModifyControlList controlList("Navigator"), disable = 0
 					SetWindow DataStudio, hook(NavigatorMouseHook) = NavigatorMouseHook
 					break
 				case 1: // Data Sets
+					ModifyControlList controlList("Navigator"), disable = 1
+					ModifyControlList controlList("DataSets"), disable = 0
+					Notebook DataStudio#datasetNotebook_edit visible = 1
+					Notebook DataStudio#datasetNotebook_view visible = 1
+					
+					SetWindow DataStudio, hook(NavigatorMouseHook) = $""
+					break
 				case 2: // Functions
 					ModifyControlList controlList("Navigator"), disable = 1
 					SetWindow DataStudio, hook(NavigatorMouseHook) = $""
@@ -325,6 +399,38 @@ Function NavigatorButtonCallback(ba) : ButtonControl
 					updateNavigatorLists(folder)
 					break
 				case "nav_forward":
+					break
+			endswitch
+			break
+		case -1: // control being killed
+			break
+	endswitch
+
+	return 0
+End
+
+Function DataSetsNotebookButtonCallback(ba) : ButtonControl
+	STRUCT WMButtonAction &ba
+
+	switch( ba.eventCode )
+		case 2: // mouse up
+			// click code here
+			strswitch (ba.ctrlName)
+				case "datasets_editNotebook":
+					Notebook DataStudio#datasetNotebook_edit visible = 1
+					Notebook DataStudio#datasetNotebook_view visible = 0
+					break
+				case "datasets_viewNotebook":
+					Notebook DataStudio#datasetNotebook_edit visible = 0
+					Notebook DataStudio#datasetNotebook_view visible = 1
+					
+					String/G root:Packages:DataStudio:DataSets:notebookText/N=notebookText
+					
+					Notebook DataStudio#datasetNotebook_edit getData = 2
+					notebookText = ReplaceString("\r", S_Value, "\n")
+					
+					struct LineContext context
+					md2ihf("root:Packages:DataStudio:DataSets:notebookText", "DataStudio#datasetNotebook_view", "", context)
 					break
 			endswitch
 			break
