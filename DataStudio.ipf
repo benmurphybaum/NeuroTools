@@ -57,7 +57,7 @@ function loadDataStudio()
 	DefineGuide/W=DataStudio DatasetsSplitRight = {DatasetsSplitLeft, 10}
 	
 	DefineGuide/W=DataStudio DatasetsButtonLeft = {HMiddle, -40}
-	
+
 	TabControl mainTab, win = DataStudio,	tabLabel(0) = "Navigator",\
 											tabLabel(1) = "Data Sets", \
 											tabLabel (2) = "Functions", size = {mainTabWidth, 20}
@@ -141,6 +141,8 @@ function buildNavigator()
 		
 	SetVariable nav_regexMatch, win = DataStudio, value = _STR:"", focusRing = 0, guides = {FL, kwNone, FR, kwNone, kwNone, FB}, anchor = LC, proc = matchCallback
 	navigatorControlList += "nav_regexMatch;"
+	
+	SetVariable regexMatch, win = DataStudio, value = _STR:"", fixedSize = 0, guides = {FL, kwNone, FR, kwNone, kwNone, FB}, anchor = LC, proc = matchCallback
 	
 	SetWindow DataStudio, hook(NavigatorMouseHook) = NavigatorMouseHook
 end
@@ -441,6 +443,7 @@ Function DataSetsNotebookButtonCallback(ba) : ButtonControl
 	return 0
 End
 
+
 Function matchCallback(sva) : SetVariableControl
 	STRUCT WMSetVariableAction &sva
 	
@@ -453,6 +456,7 @@ Function matchCallback(sva) : SetVariableControl
 			
 			DFREF folder = packageDF()
 			SVAR matchResults = folder:regexMatches
+
 			print matchResults
 			
 			break
