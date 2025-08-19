@@ -697,7 +697,7 @@ Function NTP_RemoveIncludes()
 	//Since this ipf is an independent module, the main control menu will be still available when the rest
 	//of the code breaks. 
 	
-	String fileList = "NeuroToolsPlus;NTP_Common;NTP_Controls;NTP_DataSets;NTP_Functions;NTP_Structures;NTP_ABF_loader;"
+	String fileList = "NeuroToolsPlus;NTP_Common;NTP_Controls;NTP_DataSets;NTP_Functions;NTP_Structures;NTP_ABF_loader;NTP_Presentinator;"
 		
 	//Get use installed package files
 	String userFunctionPath = SpecialDirPath("Igor Pro User Files",0,0,0)	
