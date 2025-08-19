@@ -3182,7 +3182,7 @@ Function NT_LoadEphys(menu_FileType,bt_BrowseFiles,menu_Channels,lb_FileList,lb_
 	String bt_BrowseFiles_Title = "Browse Files"
 //	String menu_NameByStimulus_Title = "Name By Stimulus"
 	
-	String menu_FileType_List = "WaveSurfer;PClamp;TurnTable"//;Presentinator;
+	String menu_FileType_List = "WaveSurfer;PClamp;TurnTable;Presentinator;"
 	String bt_BrowseFiles_Proc = "LoadEphysButtonProc"
 	
 	String menu_Channels_List = "1;2;All;"
@@ -3239,7 +3239,7 @@ Function NT_LoadEphys(menu_FileType,bt_BrowseFiles,menu_Channels,lb_FileList,lb_
 			Load_WaveSurfer(filePathList,channels=menu_Channels)
 			break
 		case "Presentinator":
-//			LoadPresentinator(filePathList)
+			LoadPresentinator(filePathList)
 			break
 		case "TurnTable":
 			//Get the selected series
@@ -4976,3 +4976,101 @@ Function copyTable()
 	
 
 End
+
+function NT_ExtractOscillation(DS_waves, startTime, endTime, frequency)
+	//SUBMENU=Ephys
+	//TITLE=Extract Oscillations
+	
+	String DS_waves
+	Variable startTime
+	Variable endTime
+	Variable frequency
+	
+	String DS_waves_Title = "Waves"
+	String startTime_Title = "Start Time (s)"
+	String endTime_Title = "End Time (s)"
+	String frequency_Title = "Frequency (Hz)"
+
+	//Data set info structure
+	STRUCT ds ds 
+	
+	//Fills the data set structure
+	GetStruct(ds)
+	
+	DFREF saveDF = GetDataFolderDFR()
+	
+	Variable i
+	for (i = 0; i < ds.numWaves[0]; ++i)
+		Wave/Z data = ds.waves[i]
+		if (!WaveExists(data))
+			continue
+		endif
+				
+		Variable nPoints = ceil((endTime - startTime) * frequency)
+		
+		SetDataFolder GetWavesDataFolderDFR(data)
+		
+		Make/O/N=(nPoints) $NameOfWave(data) + "_exc"	/Wave = exc
+		Make/O/N=(nPoints) $NameOfWave(data) + "inh"	/Wave = inh
+		
+		Variable tm = startTime
+		
+		Variable count = 0
+		Variable threshold = 0.8e-9
+		do
+			
+			// inhibition, increasing edge
+			FindLevel/EDGE=1/Q/R= (tm, endTime) data, threshold
+			
+			if (V_flag)
+				break
+			endif
+			
+			Variable timePoint = V_LevelX + 0.9 * (0.5/frequency)
+			
+			if (timePoint > endTime)
+				break
+			endif
+			
+			inh[count++] = data(timePoint)
+			
+			tm = timePoint + 0.001
+		while(timePoint < endTime)
+		
+		tm = startTime
+		count = 0
+		do
+			
+			// excitation, decreasing edge
+			FindLevel/EDGE=2/Q/R= (tm, endTime) data, -threshold
+			
+			if (V_flag)
+				break
+			endif
+			
+			timePoint = V_LevelX + 0.9 * (0.5/frequency)
+			
+			if (timePoint > endTime)
+				break
+			endif
+			
+			exc[count++] = data(timePoint)
+			
+			tm = timePoint + 0.001
+		while(timePoint < endTime)
+		
+//		
+//		Variable j, count = 0
+//		for (j = 0, count = 0; count < nPoints; j+=2, count++)
+//			Variable t1 = startTime + j * delta
+//			Variable t2 = startTime + (j + 1) * delta
+//			inh[count] = data(startTime + j * delta)
+//			exc[count] = data(startTime + (j + 1) * delta)
+//			
+//		endfor
+//		
+		SetScale/P x, startTime, 1/frequency, "s", inh, exc
+	endfor
+	
+	SetDataFolder saveDF
+end

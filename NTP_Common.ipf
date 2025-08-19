@@ -454,37 +454,37 @@ Function BrowseEphys(fileType)
 			
 			break
 		case "Presentinator":
-//			extension = ".phys"
-//			message = "Select the data folder to index"
-//			fileFilters = "All Files:.phys;"
-//			Open/D/R/F=fileFilters/M=message refnum
-//			
-//			wsFilePath = ParseFilePath(1,S_fileName,":",1,0)
-//			wsFileName = ParseFilePath(0,S_fileName,":",1,0)
-//			Close/A
-//			
-//			fullPath = wsFilePath
-//			NewPath/O/Q/Z loadPath,fullpath
-//			fileList = IndexedFile(loadPath,-1,extension)
-//			
-//			If(!strlen(fileList))
-//				return 0
-//			EndIf
-//			
-//			fileList = SortList(fileList,";",16)
-//			
-//			fileList = ReplaceString(extension,fileList,"")
-//			
-//			Wave/T wsFileListWave = NPC:wsFileListWave
-//			Wave wsFileSelWave = NPC:wsFileSelWave
-//			
-//			Wave/T textWave = StringListToTextWave(fileList,";")
-//			Redimension/N=(DimSize(textWave,0) - 1) wsFileListWave,wsFileSelWave
-//			wsFileListWave = textWave
-//			wsFileSelWave[0] = 1
-//			
-//			//What channels are available for the selected file
-//			GetPresentinatorChannels("")
+			extension = ".phys"
+			message = "Select the data folder to index"
+			fileFilters = "All Files:.phys;"
+			Open/D/R/F=fileFilters/M=message refnum
+			
+			wsFilePath = ParseFilePath(1,S_fileName,":",1,0)
+			wsFileName = ParseFilePath(0,S_fileName,":",1,0)
+			Close/A
+			
+			fullPath = wsFilePath
+			NewPath/O/Q/Z loadPath,fullpath
+			fileList = IndexedFile(loadPath,-1,extension)
+			
+			If(!strlen(fileList))
+				return 0
+			EndIf
+			
+			fileList = SortList(fileList,";",16)
+			
+			fileList = ReplaceString(extension,fileList,"")
+			
+			Wave/T wsFileListWave = NPC:wsFileListWave
+			Wave wsFileSelWave = NPC:wsFileSelWave
+			
+			Wave/T textWave = StringListToTextWave(fileList,";")
+			Redimension/N=(DimSize(textWave,0) - 1) wsFileListWave,wsFileSelWave
+			wsFileListWave = textWave
+			wsFileSelWave[0] = 1
+			
+			//What channels are available for the selected file
+			GetPresentinatorChannels("")
 			
 			break
 	endswitch	

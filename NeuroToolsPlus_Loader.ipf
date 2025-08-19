@@ -754,7 +754,7 @@ End
 Function NTP_InsertIncludes()
 	//CheckForUpdates()
 	
-	String fileList = "NeuroToolsPlus;NTP_Common;NTP_Controls;NTP_DataSets;NTP_Functions;NTP_Structures;NTP_ABF_loader;NTP_DataLoader;"
+	String fileList = "NeuroToolsPlus;NTP_Common;NTP_Controls;NTP_DataSets;NTP_Functions;NTP_Structures;NTP_ABF_loader;NTP_DataLoader;NTP_Presentinator;"
 	
 	//Allows user to access the Loader ipf file.
 	Execute "SetIgorOption IndependentModuleDev=1"
